@@ -61,8 +61,10 @@ M0 的 seed 必须含基本执行合同、固定图、确定性选择规则、�
 
 | 事项 | Proposed 默认方案 | 需要验证或决策的时点 |
 | --- | --- | --- |
-| 开发语言与运行时 | TypeScript + Bun，单包模块化、CLI 入口 | M0 建工程前验证团队熟悉度、目标平台与所需进程/数据库能力 |
-| 本地存储 | SQLite 单 writer + 内容文件，不引入远端服务 | M0 验证事务、崩溃恢复与目标文件系统行为 |
+| 开发语言与运行时 | 已决策（2026-09-20），完整清单见 [ADR 0004](./adr/0004-m0-engineering-baseline.md)：TypeScript + Node 24 + node:sqlite + pnpm（@techs/proteus）+ commander / zod v4 / pino + vitest + oxlint/oxfmt + GitHub Actions（Linux 矩阵）+ Apache-2.0 | Node 26 转 LTS（2026-10-28）时复核 node:sqlite API 与 engines 基线 |
+| 本地存储 | 已决策：内置 node:sqlite 单 writer + 按摘要寻址的 blob 文件，不引入远端服务 | 实现中验证事务、崩溃恢复与目标文件系统行为；驱动位于 Persistence port 后，可平移 |
+| M0 预算维度 | Attempt 数上限 + 墙钟秒数，Run 与 Organism 两级；按预留/结算/unknown 语义记账 | M3 出现真实成本数据后再决定是否抽象为统一点数 |
+| CLI 与首次引导 | `proteus init/submit/runs/cancel/inspect`；实例根默认 `~/.proteus`；init 创建 local Principal 与默认 Organism，导入 seed 并安装 G0，幂等可重复 | task.yaml 四要素 schema（goal/inputs/constraints/acceptance，验收走槽位引用）与 G0 三槽位（task-graph / routing-policy / acceptance-evaluator）已确认；实现中细化参数与输出格式 |
 | 首个外部 worker | 选一个现有可用的 ACP 编码执行器 | M1 前确认实际可用程序、认证、协议兼容、费用和部署方式；不预设具体产品 |
 | 执行环境 | M0 只运行可信 fixture；生成代码在满足权限要求的受控环境执行 | M1/M2 前确定容器、独立宿主或其他真实隔离方案；工作区不算安全沙箱 |
 | 晋升权限 | 自动提议/评估，operator 显式晋升；权限内自动化以后再加 | M2 前确定允许自主晋升的类型、scope、预算与证据要求；缺省保持人工模式 |

@@ -53,7 +53,7 @@ Task 的目标不随执行器反馈自动改写。对验收条件的授权修改
 
 ArtifactVersion 不含可变的 `active`、`retired` 或累计 fitness。新证据通过独立记录关联，fitness 是某次 Evaluation 在特定条件下的结论。发现版本有问题时追加撤销/禁用记录，不能修改旧内容；授权撤回可以阻止旧 Run 继续使用已固定的版本。
 
-GenomeSnapshot 的 bindings 例如 `routing-policy`、`task-graph`、`review-skill`、`acceptance-evaluator`。依赖解析在快照创建时结束，不能在 Run 内隐式取 `latest`。缺失版本、循环依赖、schema 不兼容或超出授权范围都使快照不可运行。
+GenomeSnapshot 的 bindings 例如 `routing-policy`、`task-graph`、`acceptance-evaluator`（M0 的 G0 固定使用这三个槽位；执行器属于基质 adapter，不进入快照槽位）。依赖解析在快照创建时结束，不能在 Run 内隐式取 `latest`。缺失版本、循环依赖、schema 不兼容或超出授权范围都使快照不可运行。
 
 Organism 的历史由 Run、Promotion 和所选快照串联；持续身份不等于某个 Artifact Lineage。模型替换、执行器退出或回滚都不创建新的 Organism。
 

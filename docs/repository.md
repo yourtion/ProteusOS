@@ -1,6 +1,6 @@
 # 仓库架构与实现约束
 
-状态：**proposed**。当前仅沉淀文档，以下目录和工程配置尚未创建。首版建议 TypeScript + Bun、本地 CLI、SQLite 事务记录与文件内容存储；先验证持久化和执行边界，再锁定具体依赖版本。
+状态：**proposed**（工程基线已确认，完整技术栈清单见 [ADR 0004](./adr/0004-m0-engineering-baseline.md)）。当前仅沉淀文档，以下目录和工程配置尚未创建。
 
 ## 1. 从单包模块化起步
 
@@ -28,9 +28,9 @@ ProteusOS/
 │   └── fixtures/               # 无凭据、可重复的测试产物与 worker
 ├── evals/                      # 固定评估协议、任务、切分清单
 ├── examples/                   # seed 图、规则、实例配置样例
-├── package.json                # 私有根包、明确脚本
+├── package.json                # @techs/proteus 私有根包、明确脚本
 ├── tsconfig.json               # 严格类型检查
-└── bun.lock                    # 依赖版本固定
+└── pnpm-lock.yaml              # 依赖版本固定
 ```
 
 只在需要时创建目录：M0 不创建空的 evolution/ACP/模型训练包。Skill、Memory、World Model 先作为具体需求下的产物或内部实现，出现稳定消费者后再提取模块。
