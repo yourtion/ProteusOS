@@ -238,12 +238,17 @@ export interface RuntimeStore {
   completeDispatch(dispatchId: string, at: number): void;
 }
 
-/** M0 切片①：start 等待执行完成；handle/事件流/cancel 随切片④扩展（docs/runtime.md §5） */
+/**
+ * 执行请求：prompt 是发送给执行主体（agent/worker）的任务指令（来自 Task.goal）；
+ * 本地 worker 可忽略它，ACP/SDK 型 agent 以此为用户消息。
+ * start 等待执行完成；handle/事件流/cancel 语义随后续切片扩展（docs/runtime.md §5）。
+ */
 export interface ExecutionRequest {
   runId: string;
   processId: string;
   attemptId: string;
   workspaceDir: string;
+  prompt: string;
   timeoutMs: number;
 }
 

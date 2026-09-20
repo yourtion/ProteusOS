@@ -28,10 +28,10 @@ export function bootSeededInstance(root: string = tempInstanceRoot()): AppInstan
   return inst;
 }
 
-/** 以当前快照为基准注册新版本并 CAS 安装为默认（测试用自定义图/策略） */
+/** 以当前快照为基准注册新版本并 CAS 安装为默认（测试用自定义图/策略/验收器） */
 export function installCustomGenome(
   inst: AppInstance,
-  overrides: { graph?: object; policy?: object },
+  overrides: { graph?: object; policy?: object; evaluator?: object },
 ): void {
   const organism = inst.kernel.getOrganism("organism-default")!;
   const { snapshot, versions } = inst.kernel.resolveSnapshot(organism.activeGenomeId!);
@@ -56,6 +56,28 @@ export function installCustomGenome(
         createdBy: "test",
       });
       bindings[slot] = version.id;
+    }
+    if (overrides.evaluator) {
+      // 新验收器 artifact（kind = acceptance-evaluator 槽位）
+      inst.storage.insertArtifact({
+        id: "coding-acceptance",
+        kind: "acceptance-evaluator",
+        lineageId: "lineage-seed",
+        ownerId: "principal-local",
+        createdAt: Date.now(),
+      });
+      const artifact = inst.storage.getArtifact("coding-acceptance")!;
+      const { digest, ref } = inst.blobs.write(canonicalJson(overrides.evaluator));
+      const version = inst.kernel.registerVersion({
+        artifact,
+        schemaVersion: 2,
+        contentDigest: digest,
+        contentRef: ref,
+        parents: [],
+        dependencies: [],
+        createdBy: "test",
+      });
+      bindings["acceptance-evaluator"] = version.id;
     }
     const next = inst.kernel.createSnapshot(bindings, "test");
     const fresh = inst.kernel.getOrganism("organism-default")!;

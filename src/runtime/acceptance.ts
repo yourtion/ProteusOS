@@ -1,5 +1,68 @@
+import { spawnSync } from "node:child_process";
 import type { OutcomeCheck } from "./types.ts";
 import { validateSchema } from "./schema-validator.ts";
+
+/**
+ * 验收器按快照绑定的产物内容分发（M1）：
+ * - stats-acceptance-v1：JSON Schema 校验 + totals 一致性（M0 seed）
+ * - test-runner-v1：在产出工作区运行固定测试命令，退出码即判据
+ *   ——执行器自报完成不构成验收，测试失败不能标为任务成功（roadmap M1）
+ */
+
+export type EvaluatorKind = "stats-acceptance-v1" | "test-runner-v1";
+
+export function readEvaluatorKind(content: unknown): EvaluatorKind {
+  if (typeof content === "object" && content !== null) {
+    const kind = (content as { kind?: unknown }).kind;
+    if (kind === "test-runner-v1" || kind === "stats-acceptance-v1") return kind;
+  }
+  return "stats-acceptance-v1";
+}
+
+export interface TestRunnerContent {
+  kind: "test-runner-v1";
+  /** 在产出工作区执行的测试命令，如 ["node", "--test", "tests/"] */
+  command: string[];
+}
+
+export function evaluateTestRunner(
+  content: unknown,
+  workspace: string,
+): { passed: boolean; checks: OutcomeCheck[] } {
+  const command =
+    typeof content === "object" &&
+    content !== null &&
+    Array.isArray((content as { command?: unknown }).command) &&
+    (content as { command: unknown[] }).command.every((c) => typeof c === "string" && c.length > 0)
+      ? ((content as { command: string[] }).command as string[])
+      : null;
+  if (!command) {
+    return {
+      passed: false,
+      checks: [{ name: "tests", passed: false, detail: "验收器内容缺少合法的 command" }],
+    };
+  }
+  const result = spawnSync(command[0]!, command.slice(1), {
+    cwd: workspace,
+    encoding: "utf8",
+    timeout: 120_000,
+    env: process.env,
+  });
+  const passed = result.status === 0;
+  const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
+  return {
+    passed,
+    checks: [
+      {
+        name: "tests",
+        passed,
+        detail: passed
+          ? undefined
+          : `测试命令退出码 ${String(result.status)}：${output.slice(-400) || "(无输出)"}`,
+      },
+    ],
+  };
+}
 
 /**
  * stats-acceptance-v1 验收器：JSON Schema 校验 + totals 与逐文件求和一致性。

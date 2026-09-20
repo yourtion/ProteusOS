@@ -67,7 +67,7 @@ function runtimeWith(budget: Partial<OrganismBudget>, executorMs = 250): Runtime
     storage: app.storage,
     kernel: app.kernel,
     organismId: "organism-default",
-    executor: slowExecutor(executorMs),
+    executors: new Map([["local-process", slowExecutor(executorMs)]]),
     decision: new RuleDecisionProvider(),
     blobs: app.blobs,
     instanceRoot: app.root,

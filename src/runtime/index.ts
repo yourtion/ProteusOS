@@ -5,7 +5,7 @@ import { validateChoice } from "../decision/index.ts";
 import type { Clock, IdGen, Kernel } from "../kernel/index.ts";
 import { digestOf, type BlobStore } from "../storage/blobs.ts";
 import type { Storage } from "../storage/store.ts";
-import { evaluateStatsOutput } from "./acceptance.ts";
+import { evaluateStatsOutput, evaluateTestRunner, readEvaluatorKind } from "./acceptance.ts";
 import {
   normalizeDag,
   parseGraph,
@@ -67,7 +67,8 @@ export interface RuntimeDeps {
   storage: Storage;
   kernel: Kernel;
   organismId: string;
-  executor: ExecutorProvider;
+  /** 图节点 executor 名 → 执行器实例（local-process / claude-code-acp / codex-acp / pi） */
+  executors: ReadonlyMap<string, ExecutorProvider>;
   decision: DecisionProvider;
   blobs: BlobStore;
   instanceRoot: string;
@@ -264,6 +265,8 @@ export class Runtime {
         });
       }
     }
+    // 裁判的判定逻辑来自快照绑定的产物内容（stats-acceptance-v1 / test-runner-v1）
+    const evaluatorContent = JSON.parse(this.deps.blobs.read(evaluator.contentRef)) as unknown;
 
     // decision 节点需要快照的 routing-policy
     const policyVersion = versions.get("routing-policy");
@@ -342,7 +345,18 @@ export class Runtime {
         } else if (node.type === "execute") {
           outputs.set(node.id, await this.runExecute(runId, run, task, node, decisions));
         } else {
-          verifiedDigest ??= this.runVerify(runId, task, node, outputs, checks);
+          const inputNode = dag.nodes.find((n) => n.id === node.inputFrom);
+          const inputWorkspace = inputNode ? this.nodeWorkspace(runId, inputNode) : "";
+          const evaluation = this.runVerify(
+            runId,
+            task,
+            node,
+            outputs,
+            checks,
+            evaluatorContent,
+            inputWorkspace,
+          );
+          if (evaluation) verifiedDigest ??= evaluation;
         }
         this.markNode(runId, node, "succeeded", null, nodeStates);
       } catch (err) {
@@ -679,10 +693,11 @@ export class Runtime {
     if (!executorName) {
       throw new NodeFailure("unknown_executor", `execute ${node.id} 无法解析执行器`);
     }
-    if (executorName !== this.deps.executor.name) {
+    const executor = this.deps.executors.get(executorName);
+    if (!executor) {
       throw new NodeFailure(
         "unknown_executor",
-        `执行器 ${executorName} 未装配（当前：${this.deps.executor.name}）`,
+        `执行器 ${executorName} 未装配（可用：${[...this.deps.executors.keys()].join(", ")}）`,
       );
     }
 
@@ -760,15 +775,16 @@ export class Runtime {
     const workspace = join(this.instanceWorkspacesRoot(), runId, node.id);
     this.prepareWorkspace(workspace, task.inputs);
 
-    const result = await this.deps.executor.start({
+    const result = await executor.start({
       runId,
       processId,
       attemptId,
       workspaceDir: workspace,
+      prompt: task.goal,
       timeoutMs: run.budget.maxWallClockSeconds * 1000,
     });
 
-    const handle = `${this.deps.executor.name}:${dispatchId}`;
+    const handle = `${executorName}:${dispatchId}`;
     const endedAt = this.deps.clock.now();
     this.deps.storage.tx(() => {
       this.deps.storage.markDispatched(dispatchId, handle, startedAt);
@@ -796,13 +812,15 @@ export class Runtime {
       });
     });
 
-    if (!result.ok || !result.outputRef) {
+    if (!result.ok) {
       throw new NodeFailure(
         result.exitCode === null ? "execution_aborted" : "execution_failed",
         `execute ${node.id} 失败（exit=${String(result.exitCode)}）`,
       );
     }
-    return result.outputRef;
+    // outputRef 对本地 worker 是 output.json；agent 型执行器没有单一输出文件，
+    // 其产物是工作区内的代码，由 verify 节点（如 test-runner）验收
+    return result.outputRef ?? "";
   }
 
   private runVerify(
@@ -811,22 +829,37 @@ export class Runtime {
     node: NormalizedNode,
     outputs: Map<string, string>,
     checks: OutcomeCheck[],
+    evaluatorContent: unknown,
+    inputWorkspace: string,
   ): string {
-    const outputRef = outputs.get(node.inputFrom!);
-    if (!outputRef) {
-      throw new NodeFailure("output_missing", `verify ${node.id} 找不到 ${node.inputFrom} 的输出`);
+    // 裁判按快照绑定的验收器产物内容分发：候选不能替换本轮裁判（docs/evolution.md §6）
+    const kind = readEvaluatorKind(evaluatorContent);
+    let evaluation: { passed: boolean; checks: OutcomeCheck[] };
+    let outputDigest: string | null = null;
+    if (kind === "test-runner-v1") {
+      // 测试命令在产出代码的 execute 节点工作区执行
+      evaluation = evaluateTestRunner(evaluatorContent, inputWorkspace);
+    } else {
+      const outputRef = outputs.get(node.inputFrom!);
+      if (!outputRef) {
+        throw new NodeFailure(
+          "output_missing",
+          `verify ${node.id} 找不到 ${node.inputFrom} 的输出`,
+        );
+      }
+      let outputRaw: string;
+      let output: unknown;
+      let schema: unknown;
+      try {
+        outputRaw = readFileSync(outputRef, "utf8");
+        output = JSON.parse(outputRaw);
+        schema = JSON.parse(readFileSync(task.acceptance.outputSchema, "utf8"));
+      } catch {
+        throw new NodeFailure("invalid_output", `verify ${node.id} 无法读取或解析输出`);
+      }
+      evaluation = evaluateStatsOutput(output, schema);
+      outputDigest = digestOf(outputRaw);
     }
-    let outputRaw: string;
-    let output: unknown;
-    let schema: unknown;
-    try {
-      outputRaw = readFileSync(outputRef, "utf8");
-      output = JSON.parse(outputRaw);
-      schema = JSON.parse(readFileSync(task.acceptance.outputSchema, "utf8"));
-    } catch {
-      throw new NodeFailure("invalid_output", `verify ${node.id} 无法读取或解析输出`);
-    }
-    const evaluation = evaluateStatsOutput(output, schema);
     checks.push(...evaluation.checks);
     this.deps.storage.tx(() => {
       this.deps.storage.appendEvent({
@@ -846,7 +879,11 @@ export class Runtime {
         `verify ${node.id} 未通过：${failed?.detail ?? ""}`,
       );
     }
-    return digestOf(outputRaw);
+    return outputDigest ?? "";
+  }
+
+  private nodeWorkspace(runId: string, node: NormalizedNode): string {
+    return join(this.instanceWorkspacesRoot(), runId, node.id);
   }
 
   private markNode(

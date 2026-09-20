@@ -1,0 +1,6 @@
+goal: "BUGGY 变体：实现一个错误的 countWords（恒返回 0），用于验收失败路径。在工作区实现 src/wordcount.mjs：导出 countWords(text)。"
+inputs:
+  - ../wordcount-tests
+acceptance:
+  outputSchema: ../stats/schemas/stats-summary.schema.json
+  verifier: coding-acceptance

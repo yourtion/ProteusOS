@@ -1,0 +1,10 @@
+goal: "在工作区实现 src/wordcount.mjs：导出 countWords(text)，按空白切分返回词数（空串为 0）。完成后运行 node --test inputs/wordcount-tests/wordcount.test.mjs 自检。不要修改 inputs/ 目录。"
+inputs:
+  - ../wordcount-tests
+constraints:
+  budget:
+    maxAttempts: 2
+    maxWallClockSeconds: 300
+acceptance:
+  outputSchema: ../stats/schemas/stats-summary.schema.json
+  verifier: coding-acceptance
