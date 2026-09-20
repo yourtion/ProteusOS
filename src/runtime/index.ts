@@ -1,11 +1,19 @@
 import { cpSync, mkdirSync, readFileSync, statSync } from "node:fs";
 import { basename, join } from "node:path";
+import type { DecisionProvider } from "../decision/index.ts";
+import { validateChoice } from "../decision/index.ts";
 import type { Clock, IdGen, Kernel } from "../kernel/index.ts";
-import { digestOf } from "../storage/blobs.ts";
-import type { BlobStore } from "../storage/blobs.ts";
+import { digestOf, type BlobStore } from "../storage/blobs.ts";
 import type { Storage } from "../storage/store.ts";
 import { evaluateStatsOutput } from "./acceptance.ts";
-import { parseGraph } from "./graph.ts";
+import {
+  normalizeDag,
+  parseGraph,
+  topoOrder,
+  validateDag,
+  type NormalizedDag,
+  type NormalizedNode,
+} from "./graph.ts";
 import type {
   AttemptRecord,
   ExecutorProvider,
@@ -13,7 +21,10 @@ import type {
   RunRecord,
   RunState,
   RunSummary,
+  RunSummaryDecision,
+  RunSummaryNode,
   TaskBudget,
+  TaskRecord,
 } from "./types.ts";
 
 export interface TaskSubmission {
@@ -55,15 +66,35 @@ export interface RuntimeDeps {
   kernel: Kernel;
   organismId: string;
   executor: ExecutorProvider;
+  decision: DecisionProvider;
   blobs: BlobStore;
   instanceRoot: string;
   clock: Clock;
   ids: IdGen;
 }
 
+type NodeState = "succeeded" | "failed" | "skipped";
+
+/** 节点级失败：reason 进入 Run.failureReason，下游节点跳过 */
+class NodeFailure extends Error {
+  readonly reason: string;
+
+  constructor(reason: string, detail: string) {
+    super(detail);
+    this.reason = reason;
+  }
+}
+
+interface ExecContext {
+  dag: NormalizedDag;
+  nodeStates: Map<string, NodeState>;
+  decisions: RunSummaryDecision[];
+}
+
 /**
- * Runtime：Task/Run/Process/Attempt 状态机与单节点 pipeline 执行。
- * M0 切片①：submit 内联执行完整闭环；恢复/对账语义在切片④ 扩展。
+ * Runtime：Task/Run/Process/Attempt 状态机与 DAG 节点循环。
+ * M0 切片②：decision（规则路由）→ execute（受控进程）→ verify（独立裁判）。
+ * 恢复/对账语义在切片④ 扩展。
  */
 export class Runtime {
   private readonly deps: RuntimeDeps;
@@ -84,8 +115,9 @@ export class Runtime {
 
     this.deps.storage.tx(() => {
       const organism = this.deps.kernel.getOrganism(this.deps.organismId);
-      if (!organism)
+      if (!organism) {
         throw new RuntimeError("unknown_organism", `organism ${this.deps.organismId} 不存在`);
+      }
       if (!organism.activeGenomeId) {
         throw new RuntimeError("no_active_genome", "默认快照未安装，请先运行 proteus init");
       }
@@ -97,7 +129,7 @@ export class Runtime {
 
       const graphContent = this.deps.blobs.read(graphVersion.contentRef);
       try {
-        parseGraph(graphContent);
+        validateDag(normalizeDag(parseGraph(graphContent)));
       } catch (err) {
         throw new RuntimeError("invalid_graph", `task-graph 产物内容无效：${String(err)}`);
       }
@@ -172,25 +204,281 @@ export class Runtime {
 
     const run = this.mustGetRun(runId);
     const { versions } = this.deps.kernel.resolveSnapshot(run.snapshotId);
-    const graphVersion = versions.get("task-graph")!;
-    const graph = parseGraph(this.deps.blobs.read(graphVersion.contentRef));
-    const node = graph.nodes[0]!;
+    const graphVersion = versions.get("task-graph");
+    if (!graphVersion) throw new RuntimeError("missing_binding", "快照缺少 task-graph 槽位");
+    const dag = normalizeDag(parseGraph(this.deps.blobs.read(graphVersion.contentRef)));
+    try {
+      validateDag(dag);
+    } catch (err) {
+      return this.finalize(runId, "failed", "invalid_graph", [], null, {
+        dag,
+        nodeStates: new Map(),
+        decisions: [],
+      });
+    }
     const task = this.deps.storage.getTask(run.taskId);
     if (!task) throw new RuntimeError("unknown_run", `run ${runId} 的 task ${run.taskId} 缺失`);
 
+    // verify 节点的裁判必须等于快照绑定的验收器（候选不能替换本轮裁判）
+    const evaluator = versions.get("acceptance-evaluator")!;
+    const evaluatorArtifactId = this.deps.storage.getArtifact(evaluator.artifactId)!.id;
+    for (const node of dag.nodes) {
+      if (node.type === "verify" && node.verifier !== evaluatorArtifactId) {
+        return this.finalize(runId, "failed", "verifier_mismatch", [], null, {
+          dag,
+          nodeStates: new Map(),
+          decisions: [],
+        });
+      }
+    }
+
+    // decision 节点需要快照的 routing-policy
+    const policyVersion = versions.get("routing-policy");
+    const policy = policyVersion
+      ? {
+          versionId: policyVersion.id,
+          content: JSON.parse(this.deps.blobs.read(policyVersion.contentRef)) as unknown,
+        }
+      : null;
+    if (dag.nodes.some((n) => n.type === "decision") && !policy) {
+      return this.finalize(runId, "failed", "missing_binding", [], null, {
+        dag,
+        nodeStates: new Map(),
+        decisions: [],
+      });
+    }
+
+    const nodeStates = new Map<string, NodeState>();
+    const decisions: RunSummaryDecision[] = [];
+    const outputs = new Map<string, string>(); // execute 节点 id -> outputRef
+    const checks: OutcomeCheck[] = [];
+    let failure: { nodeId: string; reason: string } | null = null;
+    let cancelObserved = false;
+    let verifiedDigest: string | null = null;
+
+    for (const nodeId of topoOrder(dag)) {
+      const node = dag.nodes.find((n) => n.id === nodeId)!;
+
+      if (this.deps.storage.hasCancelIntent(runId)) {
+        cancelObserved = true;
+        this.markNode(runId, node, "skipped", "cancel_requested", nodeStates);
+        continue;
+      }
+      if (!node.dependsOn.every((d) => nodeStates.get(d) === "succeeded")) {
+        this.markNode(runId, node, "skipped", "dependency_not_succeeded", nodeStates);
+        continue;
+      }
+
+      try {
+        if (node.type === "decision") {
+          decisions.push(await this.runDecision(runId, run, node, policy!));
+        } else if (node.type === "execute") {
+          outputs.set(node.id, await this.runExecute(runId, run, task, node, decisions));
+        } else {
+          verifiedDigest ??= this.runVerify(runId, task, node, outputs, checks);
+        }
+        this.markNode(runId, node, "succeeded", null, nodeStates);
+      } catch (err) {
+        if (!(err instanceof NodeFailure)) throw err;
+        this.markNode(runId, node, "failed", err.reason, nodeStates);
+        failure ??= { nodeId, reason: err.reason };
+      }
+    }
+
+    // pipeline-v1 兼容：无 verify 节点时在 run 级做验收（切片①语义）
+    if (!failure && !dag.nodes.some((n) => n.type === "verify")) {
+      const firstExecute = dag.nodes.find((n) => n.type === "execute")!;
+      const outputRef = outputs.get(firstExecute.id);
+      try {
+        const outputRaw = readFileSync(outputRef!, "utf8");
+        const evaluation = evaluateStatsOutput(
+          JSON.parse(outputRaw),
+          JSON.parse(readFileSync(task.acceptance.outputSchema, "utf8")),
+        );
+        checks.push(...evaluation.checks);
+        if (!evaluation.passed) {
+          failure = { nodeId: firstExecute.id, reason: "acceptance_failed" };
+          this.markNode(runId, firstExecute, "failed", "acceptance_failed", nodeStates);
+        } else {
+          verifiedDigest ??= digestOf(outputRaw);
+        }
+      } catch {
+        failure = { nodeId: firstExecute.id, reason: "invalid_output" };
+      }
+    }
+
+    const allSucceeded = !failure && dag.nodes.every((n) => nodeStates.get(n.id) === "succeeded");
+    const state: "succeeded" | "failed" | "cancelled" = allSucceeded
+      ? "succeeded"
+      : cancelObserved
+        ? "cancelled"
+        : "failed";
+    const reason =
+      state === "cancelled"
+        ? "cancelled_during_execution"
+        : (failure?.reason ?? (state === "succeeded" ? null : "node_skipped"));
+    return this.finalize(runId, state, reason, checks, verifiedDigest, {
+      dag,
+      nodeStates,
+      decisions,
+    });
+  }
+
+  /** 记录停止意图；pending 状态直接取消，执行中的 Run 在节点派发边界生效 */
+  async cancel(runId: string): Promise<{ runId: string; state: RunState; note: string }> {
+    const run = this.mustGetRun(runId);
+    if (isTerminal(run.state)) {
+      return { runId, state: run.state, note: "run 已处于终态，取消无效果" };
+    }
+    this.deps.storage.tx(() => {
+      this.deps.storage.appendEvent({
+        streamId: `run-${runId}`,
+        type: "run.cancel_requested",
+        payload: { requestedAt: this.deps.clock.now() },
+        correlationId: runId,
+        runId,
+        organismId: this.deps.organismId,
+        occurredAt: this.deps.clock.now(),
+      });
+    });
+    if (run.state === "pending") {
+      this.finalize(runId, "cancelled", "cancelled_before_start", []);
+      return { runId, state: "cancelled", note: "run 尚未开始，已直接取消" };
+    }
+    return {
+      runId,
+      state: run.state,
+      note: "已持久化停止意图；已跨过派发边界的执行需对账确认（切片④实现完整语义）",
+    };
+  }
+
+  /** 事后汇总（CLI/inspect 用）：节点与决策从事件投影重建 */
+  getRunSummary(runId: string): RunSummary {
+    const run = this.mustGetRun(runId);
+    const attempts = this.listRunAttempts(runId);
+    const experience = this.deps.storage.getExperienceByRun(runId);
+    const events = this.deps.storage.listEvents({ runId }, 500);
+
+    const nodes: RunSummaryNode[] = events
+      .filter((e) => e.type === "node.completed")
+      .map((e) => ({
+        id: String(e.payload["nodeId"]),
+        type: e.payload["type"] as RunSummaryNode["type"],
+        state: e.payload["state"] as NodeState,
+      }));
+    const decisions: RunSummaryDecision[] = events
+      .filter((e) => e.type === "decision.recorded")
+      .map((e) => ({
+        nodeId: String(e.payload["nodeId"]),
+        value: String(e.payload["value"]),
+        provider: String(e.payload["provider"]),
+        policyVersion: String(e.payload["policyVersion"]),
+      }));
+
+    return {
+      runId: run.id,
+      taskId: run.taskId,
+      state: run.state,
+      failureReason: run.failureReason,
+      snapshotId: run.snapshotId,
+      graphSource: events.some((e) => e.payload["graphKind"] === "dag-v1")
+        ? "dag-v1"
+        : "pipeline-v1",
+      nodes,
+      decisions,
+      attempts: attempts.map((a) => ({
+        id: a.id,
+        ordinal: a.ordinal,
+        state: a.state,
+        exitCode: a.exitCode,
+      })),
+      checks: experience?.outcome.checks ?? [],
+      experienceId: experience?.id ?? null,
+    };
+  }
+
+  // ---- 节点执行 ----
+
+  private async runDecision(
+    runId: string,
+    run: RunRecord,
+    node: NormalizedNode,
+    policy: { versionId: string; content: unknown },
+  ): Promise<RunSummaryDecision> {
+    const provider = this.deps.decision;
+    if (node.provider !== provider.name) {
+      throw new NodeFailure(
+        "unknown_decision_provider",
+        `图声明的决策 provider ${node.provider} 未装配（当前：${provider.name}）`,
+      );
+    }
+    if (!provider.capabilities().problems.includes(node.problem!)) {
+      throw new NodeFailure("decision_unsupported", `provider 不支持问题类型 ${node.problem}`);
+    }
+    const result = await provider.decide({
+      problem: node.problem!,
+      options: node.options!,
+      context: node.context ?? {},
+      policy,
+      deadlineMs: run.budget.maxWallClockSeconds * 1000,
+      remainingAttempts: Math.max(0, run.budget.maxAttempts - this.listRunAttempts(runId).length),
+    });
+    // Runtime 独立校验：选项成员关系不依赖 provider 自述（docs/runtime.md §3）
+    const validation = validateChoice(result, node.options!);
+    if (!validation.ok) {
+      throw new NodeFailure(
+        validation.reason === "abstain" ? "decision_abstained" : "decision_invalid_output",
+        `decision ${node.id} ${validation.reason}: ${validation.detail}`,
+      );
+    }
+    const entry: RunSummaryDecision = {
+      nodeId: node.id,
+      value: validation.value,
+      provider: result.provenance.provider,
+      policyVersion: result.provenance.policyVersion,
+    };
+    this.deps.storage.tx(() => {
+      this.deps.storage.appendEvent({
+        streamId: `run-${runId}`,
+        type: "decision.recorded",
+        payload: { ...entry, problem: node.problem },
+        correlationId: runId,
+        runId,
+        organismId: this.deps.organismId,
+        occurredAt: this.deps.clock.now(),
+      });
+    });
+    return entry;
+  }
+
+  private async runExecute(
+    runId: string,
+    run: RunRecord,
+    task: TaskRecord,
+    node: NormalizedNode,
+    decisions: RunSummaryDecision[],
+  ): Promise<string> {
+    const executorName =
+      node.executor ?? decisions.find((d) => d.nodeId === node.executorFrom)?.value ?? undefined;
+    if (!executorName) {
+      throw new NodeFailure("unknown_executor", `execute ${node.id} 无法解析执行器`);
+    }
+    if (executorName !== this.deps.executor.name) {
+      throw new NodeFailure(
+        "unknown_executor",
+        `执行器 ${executorName} 未装配（当前：${this.deps.executor.name}）`,
+      );
+    }
+
     const previousAttempts = this.listRunAttempts(runId);
     if (previousAttempts.length >= run.budget.maxAttempts) {
-      return this.finalize(runId, "failed", "budget_exhausted", []);
-    }
-    // 派发边界检查取消意图（完整对账在切片④）
-    if (this.deps.storage.hasCancelIntent(runId)) {
-      return this.finalize(runId, "cancelled", "cancelled_before_dispatch", []);
+      throw new NodeFailure("budget_exhausted", `Attempt 数已达上限 ${run.budget.maxAttempts}`);
     }
 
     const processId = this.deps.ids.next();
     const attemptId = this.deps.ids.next();
     const dispatchId = this.deps.ids.next();
-    let startedAt = this.deps.clock.now();
+    const startedAt = this.deps.clock.now();
 
     this.deps.storage.tx(() => {
       this.deps.storage.insertProcess({
@@ -218,7 +506,7 @@ export class Runtime {
         processId,
         attemptId,
         kind: "executor.start",
-        payload: { executor: node.executor, node: node.id },
+        payload: { executor: executorName, node: node.id },
         state: "pending",
         handle: null,
         createdAt: startedAt,
@@ -237,7 +525,7 @@ export class Runtime {
       this.deps.storage.appendEvent({
         streamId: `attempt-${attemptId}`,
         type: "attempt.dispatching",
-        payload: { dispatchId, executor: node.executor, ordinal: previousAttempts.length + 1 },
+        payload: { dispatchId, executor: executorName, ordinal: previousAttempts.length + 1 },
         correlationId: runId,
         runId,
         processId,
@@ -287,79 +575,77 @@ export class Runtime {
     });
 
     if (!result.ok || !result.outputRef) {
-      const reason = result.exitCode === null ? "execution_aborted" : "execution_failed";
-      return this.finalize(runId, "failed", reason, []);
+      throw new NodeFailure(
+        result.exitCode === null ? "execution_aborted" : "execution_failed",
+        `execute ${node.id} 失败（exit=${String(result.exitCode)}）`,
+      );
     }
+    return result.outputRef;
+  }
 
-    // 验收：裁判来自快照槽位，schema 来自 Task；执行器自报成功不构成验收
-    let outputRaw: string;
-    try {
-      outputRaw = readFileSync(result.outputRef, "utf8");
-    } catch {
-      return this.finalize(runId, "failed", "output_missing", []);
+  private runVerify(
+    runId: string,
+    task: TaskRecord,
+    node: NormalizedNode,
+    outputs: Map<string, string>,
+    checks: OutcomeCheck[],
+  ): string {
+    const outputRef = outputs.get(node.inputFrom!);
+    if (!outputRef) {
+      throw new NodeFailure("output_missing", `verify ${node.id} 找不到 ${node.inputFrom} 的输出`);
     }
+    let outputRaw: string;
     let output: unknown;
     let schema: unknown;
     try {
+      outputRaw = readFileSync(outputRef, "utf8");
       output = JSON.parse(outputRaw);
       schema = JSON.parse(readFileSync(task.acceptance.outputSchema, "utf8"));
     } catch {
-      return this.finalize(runId, "failed", "invalid_output", []);
+      throw new NodeFailure("invalid_output", `verify ${node.id} 无法读取或解析输出`);
     }
     const evaluation = evaluateStatsOutput(output, schema);
-    if (!evaluation.passed) {
-      return this.finalize(runId, "failed", "acceptance_failed", evaluation.checks);
-    }
-    return this.finalize(runId, "succeeded", null, evaluation.checks, digestOf(outputRaw));
-  }
-
-  /** 记录停止意图；pending 状态直接取消，执行中的 Run 在派发边界生效 */
-  async cancel(runId: string): Promise<{ runId: string; state: RunState; note: string }> {
-    const run = this.mustGetRun(runId);
-    if (isTerminal(run.state)) {
-      return { runId, state: run.state, note: "run 已处于终态，取消无效果" };
-    }
+    checks.push(...evaluation.checks);
     this.deps.storage.tx(() => {
       this.deps.storage.appendEvent({
         streamId: `run-${runId}`,
-        type: "run.cancel_requested",
-        payload: { requestedAt: this.deps.clock.now() },
+        type: "verify.completed",
+        payload: { nodeId: node.id, passed: evaluation.passed, checks: evaluation.checks },
         correlationId: runId,
         runId,
         organismId: this.deps.organismId,
         occurredAt: this.deps.clock.now(),
       });
     });
-    if (run.state === "pending") {
-      this.finalize(runId, "cancelled", "cancelled_before_start", []);
-      return { runId, state: "cancelled", note: "run 尚未开始，已直接取消" };
+    if (!evaluation.passed) {
+      const failed = evaluation.checks.find((c) => !c.passed);
+      throw new NodeFailure(
+        "acceptance_failed",
+        `verify ${node.id} 未通过：${failed?.detail ?? ""}`,
+      );
     }
-    return {
-      runId,
-      state: run.state,
-      note: "已持久化停止意图；已跨过派发边界的执行需对账确认（切片④实现完整语义）",
-    };
+    return digestOf(outputRaw);
   }
 
-  getRunSummary(runId: string): RunSummary {
-    const run = this.mustGetRun(runId);
-    const attempts = this.listRunAttempts(runId);
-    const experience = this.deps.storage.getExperienceByRun(runId);
-    return {
-      runId: run.id,
-      taskId: run.taskId,
-      state: run.state,
-      failureReason: run.failureReason,
-      snapshotId: run.snapshotId,
-      attempts: attempts.map((a) => ({
-        id: a.id,
-        ordinal: a.ordinal,
-        state: a.state,
-        exitCode: a.exitCode,
-      })),
-      checks: experience?.outcome.checks ?? [],
-      experienceId: experience?.id ?? null,
-    };
+  private markNode(
+    runId: string,
+    node: NormalizedNode,
+    state: NodeState,
+    reason: string | null,
+    nodeStates: Map<string, NodeState>,
+  ): void {
+    nodeStates.set(node.id, state);
+    this.deps.storage.tx(() => {
+      this.deps.storage.appendEvent({
+        streamId: `run-${runId}`,
+        type: "node.completed",
+        payload: { nodeId: node.id, type: node.type, state, reason },
+        correlationId: runId,
+        runId,
+        organismId: this.deps.organismId,
+        occurredAt: this.deps.clock.now(),
+      });
+    });
   }
 
   // ---- 内部 ----
@@ -408,6 +694,7 @@ export class Runtime {
     reason: string | null,
     checks: OutcomeCheck[],
     outputDigest: string | null = null,
+    ctx?: ExecContext,
   ): RunSummary {
     const run = this.mustGetRun(runId);
     const attempts = this.listRunAttempts(runId);
@@ -440,7 +727,12 @@ export class Runtime {
       this.deps.storage.appendEvent({
         streamId: `run-${runId}`,
         type: "run.state.changed",
-        payload: { from: run.state, to: state, reason },
+        payload: {
+          from: run.state,
+          to: state,
+          reason,
+          graphKind: ctx?.dag.source,
+        },
         correlationId: runId,
         runId,
         organismId: this.deps.organismId,
@@ -463,6 +755,14 @@ export class Runtime {
       state,
       failureReason: reason,
       snapshotId: run.snapshotId,
+      graphSource: ctx?.dag.source ?? "pipeline-v1",
+      nodes: ctx
+        ? [...ctx.nodeStates.entries()].map(([id, nodeState]) => {
+            const node = ctx.dag.nodes.find((n) => n.id === id)!;
+            return { id, type: node.type, state: nodeState };
+          })
+        : [],
+      decisions: ctx?.decisions ?? [],
       attempts: attempts.map((a) => ({
         id: a.id,
         ordinal: a.ordinal,

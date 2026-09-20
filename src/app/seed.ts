@@ -10,16 +10,38 @@ export const ORGANISM_ID = "organism-default";
 export const LINEAGE_ID = "lineage-seed";
 
 const GRAPH_CONTENT = {
-  schemaVersion: 1,
-  kind: "pipeline-v1",
-  nodes: [{ id: "stats", type: "execute", executor: "local-process" }],
+  schemaVersion: 2,
+  kind: "dag-v1",
+  nodes: [
+    {
+      id: "route",
+      type: "decision",
+      provider: "decision-rule",
+      problem: "choice",
+      options: ["local-process"],
+      context: { nodeType: "execute" },
+    },
+    {
+      id: "stats",
+      type: "execute",
+      executorFrom: "route",
+      dependsOn: ["route"],
+    },
+    {
+      id: "check",
+      type: "verify",
+      verifier: "stats-acceptance",
+      inputFrom: "stats",
+      dependsOn: ["stats"],
+    },
+  ],
 } as const;
 
 const POLICY_CONTENT = {
-  schemaVersion: 1,
+  schemaVersion: 2,
   kind: "rule-v1",
-  // 切片② 由 DecisionProvider 消费；M0 中仅作为 G0 槽位占位安装
-  routes: [{ when: "node.type == 'execute'", executor: "local-process" }],
+  // 决策节点消费：route.when 的全部键值匹配决策上下文时命中
+  routes: [{ when: { nodeType: "execute" }, choose: "local-process" }],
 } as const;
 
 const EVALUATOR_CONTENT = {

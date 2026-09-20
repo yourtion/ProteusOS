@@ -79,6 +79,9 @@ describe("切片① 验收：CLI 闭环", () => {
     expect(detail.run.state).toBe("succeeded");
     expect(detail.attempts[0]!.state).toBe("succeeded");
     expect(detail.events.map((e) => e.type)).toContain("experience.recorded");
+    // 切片②：DAG 的决策与节点完成事件进入账本
+    expect(detail.events.map((e) => e.type)).toContain("decision.recorded");
+    expect(detail.events.filter((e) => e.type === "node.completed")).toHaveLength(3);
     expect(detail.experience!.outcome.result).toBe("succeeded");
 
     // seq 唯一性与单调性在每个事件流内成立（docs/runtime.md §7）

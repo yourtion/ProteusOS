@@ -140,12 +140,28 @@ export interface DispatchRecord {
   completedAt: number | null;
 }
 
+export interface RunSummaryNode {
+  id: string;
+  type: "decision" | "execute" | "verify";
+  state: "succeeded" | "failed" | "skipped";
+}
+
+export interface RunSummaryDecision {
+  nodeId: string;
+  value: string;
+  provider: string;
+  policyVersion: string;
+}
+
 export interface RunSummary {
   runId: string;
   taskId: string;
   state: RunState;
   failureReason: string | null;
   snapshotId: string;
+  graphSource: "pipeline-v1" | "dag-v1";
+  nodes: RunSummaryNode[];
+  decisions: RunSummaryDecision[];
   attempts: Array<{ id: string; ordinal: number; state: AttemptState; exitCode: number | null }>;
   checks: OutcomeCheck[];
   experienceId: string | null;

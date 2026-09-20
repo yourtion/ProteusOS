@@ -57,7 +57,15 @@ export async function submitCommand(taskPath: string, opts: CommonOpts): Promise
     const icon = summary.state === "succeeded" ? "✓" : summary.state === "failed" ? "✗" : "·";
     console.log(`${icon} run ${summary.runId} → ${summary.state}`);
     console.log(`  task       ${summary.taskId}`);
-    console.log(`  snapshot   ${summary.snapshotId}`);
+    console.log(`  snapshot   ${summary.snapshotId} (${summary.graphSource})`);
+    for (const n of summary.nodes) {
+      console.log(`  node       ${n.id.padEnd(10)} ${n.type.padEnd(8)} ${n.state}`);
+    }
+    for (const d of summary.decisions) {
+      console.log(
+        `  decision   ${d.nodeId} → ${d.value} (${d.provider}, policy ${d.policyVersion})`,
+      );
+    }
     for (const a of summary.attempts) {
       console.log(`  attempt#${a.ordinal}  ${a.state} (exit=${a.exitCode})`);
     }

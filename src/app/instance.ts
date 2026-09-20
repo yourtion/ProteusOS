@@ -3,6 +3,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { v7 as uuidv7 } from "uuid";
+import { RuleDecisionProvider } from "../adapters/decision-rule/index.ts";
 import { LocalProcessExecutor } from "../adapters/executor-process/index.ts";
 import { Kernel } from "../kernel/index.ts";
 import { Runtime } from "../runtime/index.ts";
@@ -50,6 +51,7 @@ export function openInstance(root: string, logger?: Logger): AppInstance {
     kernel,
     organismId: ORGANISM_ID,
     executor: new LocalProcessExecutor(workerPath),
+    decision: new RuleDecisionProvider(),
     blobs,
     instanceRoot: root,
     clock,
