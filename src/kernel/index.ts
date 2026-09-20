@@ -250,17 +250,21 @@ export class Kernel {
   }
 }
 
-/** 快照摘要：对排序后的 slot -> {versionId, contentDigest} 闭包做 sha256 */
+/**
+ * 快照摘要：对排序后的 slot -> contentDigest 闭包做 sha256。
+ * 纯内容寻址、不含实例特定的 versionId——同一 seed 内容在任何实例
+ * 产生同一摘要，这是"人工安装 seed 快照可重复"的实质保证。
+ */
 export function snapshotDigest(
-  resolved: Array<{ slot: string; version: ArtifactVersion }>,
+  resolved: Array<{ slot: string; version: Pick<ArtifactVersion, "contentDigest"> }>,
 ): string {
-  const canonical: Record<string, { versionId: string; contentDigest: string }> = {};
+  const canonical: Record<string, string> = {};
   for (const { slot, version } of resolved) {
-    canonical[slot] = { versionId: version.id, contentDigest: version.contentDigest };
+    canonical[slot] = version.contentDigest;
   }
   const sorted = Object.keys(canonical)
     .sort()
-    .map((slot) => [slot, canonical[slot]!.versionId, canonical[slot]!.contentDigest].join("\n"))
+    .map((slot) => `${slot}\n${canonical[slot]}`)
     .join("\n---\n");
   return createHash("sha256").update(sorted).digest("hex");
 }

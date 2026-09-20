@@ -129,7 +129,7 @@ export function installSeed(deps: SeedDeps): SeedResult {
       versions.push({ artifactId: def.id, versionId: version.id, digest });
     }
 
-    const digest = snapshotDigest(resolved as never);
+    const digest = snapshotDigest(resolved);
     const snapshotExisted = Boolean(storage.findSnapshotByDigest(digest));
     const snapshot = kernel.createSnapshot(bindings, PRINCIPAL_ID);
     if (!snapshotExisted) {
