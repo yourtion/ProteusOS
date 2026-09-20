@@ -279,6 +279,17 @@ export class Storage implements KernelStore, RuntimeStore {
     return rows.map((row) => ({ ...mapRun(row), goal: row.goal }));
   }
 
+  listRunsByStates(states: RunState[], limit: number): RunRecord[] {
+    const placeholders = states.map(() => "?").join(", ");
+    return this.db
+      .all<RunRow>(
+        `SELECT * FROM runs WHERE state IN (${placeholders}) ORDER BY created_at LIMIT ?`,
+        ...states,
+        limit,
+      )
+      .map(mapRun);
+  }
+
   updateRunState(
     id: string,
     state: RunState,
@@ -316,6 +327,23 @@ export class Storage implements KernelStore, RuntimeStore {
         role: row.role,
         createdAt: row.created_at,
       }));
+  }
+
+  findProcessByNode(runId: string, nodeId: string): ProcessRecord | undefined {
+    const row = this.db.get<ProcessRow>(
+      "SELECT * FROM processes WHERE run_id = ? AND node_id = ? ORDER BY created_at LIMIT 1",
+      runId,
+      nodeId,
+    );
+    return row
+      ? {
+          id: row.id,
+          runId: row.run_id,
+          nodeId: row.node_id,
+          role: row.role,
+          createdAt: row.created_at,
+        }
+      : undefined;
   }
 
   insertAttempt(a: AttemptRecord): void {

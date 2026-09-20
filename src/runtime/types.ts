@@ -193,6 +193,7 @@ export interface RuntimeStore {
   insertRun(r: RunRecord): void;
   getRun(id: string): RunRecord | undefined;
   listRuns(limit: number): Array<RunRecord & { goal: string }>;
+  listRunsByStates(states: RunState[], limit: number): RunRecord[];
   updateRunState(
     id: string,
     state: RunState,
@@ -201,6 +202,8 @@ export interface RuntimeStore {
 
   insertProcess(p: ProcessRecord): void;
   listProcesses(runId: string): ProcessRecord[];
+  /** 重试沿用 Process 身份（docs/runtime.md §1）：按节点查找既有 Process */
+  findProcessByNode(runId: string, nodeId: string): ProcessRecord | undefined;
 
   insertAttempt(a: AttemptRecord): void;
   updateAttempt(

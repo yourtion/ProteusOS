@@ -172,6 +172,54 @@ export async function inspectCommand(id: string, opts: CommonOpts): Promise<void
   }
 }
 
+export async function recoverCommand(id: string | undefined, opts: CommonOpts): Promise<void> {
+  const inst = openInstance(resolveInstanceRoot(opts.home));
+  try {
+    const actions = await inst.runtime.recoverRun(id);
+    if (opts.json) {
+      console.log(JSON.stringify({ actions }, null, 2));
+      return;
+    }
+    if (actions.length === 0) {
+      console.log("没有需要恢复的 Run");
+      return;
+    }
+    for (const a of actions) {
+      const label =
+        a.action === "resumed"
+          ? `已续跑 → ${a.summary?.state ?? "?"}${a.summary?.failureReason ? ` (${a.summary.failureReason})` : ""}`
+          : a.action === "needs_reconciliation"
+            ? `存在 unknown Attempt（${a.unknownAttempts.length} 个），等待 proteus reconcile <runId>`
+            : "已终态，跳过";
+      console.log(`run ${a.runId}  ${label}`);
+    }
+  } finally {
+    inst.close();
+  }
+}
+
+export async function reconcileCommand(id: string, opts: CommonOpts): Promise<void> {
+  const inst = openInstance(resolveInstanceRoot(opts.home));
+  try {
+    const report = await inst.runtime.reconcileRun(id);
+    if (opts.json) {
+      console.log(JSON.stringify(report, null, 2));
+      return;
+    }
+    console.log(`run ${report.runId}  ${report.note}`);
+    for (const r of report.resolved) {
+      console.log(`  attempt ${r.attemptId} (${r.nodeId}) → ${r.verdict}：${r.evidence}`);
+    }
+    if (report.summary) {
+      console.log(
+        `  续跑结果 → ${report.summary.state}${report.summary.failureReason ? ` (${report.summary.failureReason})` : ""}`,
+      );
+    }
+  } finally {
+    inst.close();
+  }
+}
+
 function withKind<T>(kind: string, value: T | undefined): { kind: string; value: T } | undefined {
   return value === undefined ? undefined : { kind, value };
 }

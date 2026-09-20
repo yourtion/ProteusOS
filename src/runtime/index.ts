@@ -1,4 +1,4 @@
-import { cpSync, mkdirSync, readFileSync, statSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readFileSync, statSync } from "node:fs";
 import { basename, join } from "node:path";
 import type { DecisionProvider } from "../decision/index.ts";
 import { validateChoice } from "../decision/index.ts";
@@ -86,6 +86,25 @@ class NodeFailure extends Error {
     super(detail);
     this.reason = reason;
   }
+}
+
+export interface RecoveryAction {
+  runId: string;
+  action: "resumed" | "needs_reconciliation" | "already_terminal";
+  unknownAttempts: Array<{ attemptId: string; ordinal: number }>;
+  summary: RunSummary | null;
+}
+
+export interface ReconcileReport {
+  runId: string;
+  resolved: Array<{
+    attemptId: string;
+    nodeId: string;
+    verdict: "succeeded" | "failed";
+    evidence: string;
+  }>;
+  summary: RunSummary | null;
+  note: string;
 }
 
 interface ExecContext {
@@ -197,17 +216,24 @@ export class Runtime {
     return this.executeRun(runId);
   }
 
-  /** 执行一个 pending 状态的 Run 到终态 */
+  /**
+   * 执行 Run 到终态。支持断点续跑：running/waiting 状态的 Run 从
+   * node.completed 事件投影恢复已成功节点（跳过重派，避免重复副作用），
+   * 其余节点按拓扑顺序继续。
+   */
   async executeRun(runId: string): Promise<RunSummary> {
     const initial = this.mustGetRun(runId);
-    if (initial.state !== "pending") {
+    const resumable: RunState[] = ["pending", "running", "waiting"];
+    if (!resumable.includes(initial.state)) {
       throw new RuntimeError("run_not_pending", `run ${runId} 状态为 ${initial.state}，不能执行`);
     }
-    if (this.deps.storage.hasCancelIntent(runId)) {
+    if (initial.state === "pending" && this.deps.storage.hasCancelIntent(runId)) {
       return this.finalize(runId, "cancelled", "cancelled_before_start", []);
     }
 
-    this.transition(runId, "pending", "running", null);
+    if (initial.state !== "running") {
+      this.transition(runId, initial.state, "running", null);
+    }
 
     const run = this.mustGetRun(runId);
     const { versions } = this.deps.kernel.resolveSnapshot(run.snapshotId);
@@ -263,8 +289,42 @@ export class Runtime {
     let cancelObserved = false;
     let verifiedDigest: string | null = null;
 
+    // 断点恢复：从事件投影重建已成功节点与决策；执行节点需工作区产物仍在
+    if (initial.state !== "pending") {
+      const history = this.deps.storage.listEvents({ runId }, 1000);
+      for (const event of history) {
+        if (event.type === "node.completed" && event.payload["state"] === "succeeded") {
+          nodeStates.set(String(event.payload["nodeId"]), "succeeded");
+        }
+        if (event.type === "decision.recorded") {
+          const nodeId = String(event.payload["nodeId"]);
+          if (!decisions.some((d) => d.nodeId === nodeId)) {
+            decisions.push({
+              nodeId,
+              value: String(event.payload["value"]),
+              provider: String(event.payload["provider"]),
+              policyVersion: String(event.payload["policyVersion"]),
+            });
+          }
+        }
+      }
+      for (const node of dag.nodes) {
+        if (node.type !== "execute" || nodeStates.get(node.id) !== "succeeded") continue;
+        const outputRef = join(this.instanceWorkspacesRoot(), runId, node.id, "output.json");
+        if (existsSync(outputRef)) {
+          outputs.set(node.id, outputRef);
+        } else {
+          // 已成功节点的产物丢失：不能静默重跑（副作用已发生），如实失败
+          this.markNode(runId, node, "failed", "output_missing", nodeStates);
+          failure ??= { nodeId: node.id, reason: "output_missing" };
+        }
+      }
+    }
+
     for (const nodeId of topoOrder(dag)) {
       const node = dag.nodes.find((n) => n.id === nodeId)!;
+
+      if (nodeStates.get(nodeId) === "succeeded") continue; // 断点续跑：跳过已成功节点
 
       if (this.deps.storage.hasCancelIntent(runId)) {
         cancelObserved = true;
@@ -355,32 +415,181 @@ export class Runtime {
     return {
       runId,
       state: run.state,
-      note: "已持久化停止意图；已跨过派发边界的执行需对账确认（切片④实现完整语义）",
+      note: "已持久化停止意图；将在下一个节点派发边界生效，执行中 Attempt 的结果仍会如实记录",
     };
   }
 
-  /** 事后汇总（CLI/inspect 用）：节点与决策从事件投影重建 */
+  /**
+   * 崩溃恢复（operator 显式调用，M0 单操作者假设下无其他活动执行）：
+   * - 遗留 dispatching/running 的 Attempt 无法确认派发是否已到达 → 标记 unknown、
+   *   Run 置 waiting，等待 reconcile（docs/runtime.md §8：不能假定未执行并重发写操作）
+   * - 无遗留执行的非终态 Run：从断点续跑
+   */
+  async recoverRun(runId?: string): Promise<RecoveryAction[]> {
+    const runs = runId
+      ? [this.mustGetRun(runId)]
+      : this.deps.storage.listRunsByStates(["pending", "running", "waiting"], 100);
+    const actions: RecoveryAction[] = [];
+    for (const run of runs) {
+      if (isTerminal(run.state)) {
+        actions.push({
+          runId: run.id,
+          action: "already_terminal",
+          unknownAttempts: [],
+          summary: null,
+        });
+        continue;
+      }
+      const dangling = this.listRunAttempts(run.id).filter(
+        (a) => a.state === "dispatching" || a.state === "running",
+      );
+      if (dangling.length > 0) {
+        const at = this.deps.clock.now();
+        this.deps.storage.tx(() => {
+          for (const a of dangling) {
+            this.deps.storage.updateAttempt(a.id, { state: "unknown" });
+            this.deps.storage.appendEvent({
+              streamId: `attempt-${a.id}`,
+              type: "attempt.unknown",
+              payload: { reason: "recovered_after_crash" },
+              correlationId: run.id,
+              runId: run.id,
+              processId: a.processId,
+              attemptId: a.id,
+              occurredAt: at,
+            });
+          }
+          this.deps.storage.updateRunState(run.id, "waiting", { updatedAt: at });
+          this.deps.storage.appendEvent({
+            streamId: `run-${run.id}`,
+            type: "run.state.changed",
+            payload: {
+              from: run.state,
+              to: "waiting",
+              reason: "unknown_attempts_pending_reconciliation",
+            },
+            correlationId: run.id,
+            runId: run.id,
+            organismId: this.deps.organismId,
+            occurredAt: at,
+          });
+        });
+        actions.push({
+          runId: run.id,
+          action: "needs_reconciliation",
+          unknownAttempts: dangling.map((a) => ({ attemptId: a.id, ordinal: a.ordinal })),
+          summary: null,
+        });
+        continue;
+      }
+      const summary = await this.executeRun(run.id);
+      actions.push({ runId: run.id, action: "resumed", unknownAttempts: [], summary });
+    }
+    return actions;
+  }
+
+  /**
+   * 对账 unknown Attempt（operator 显式调用）。
+   * 完成证据 = 工作区 output.json 完整落盘（本地受信 worker 的产物合同：
+   * 只写自己的工作区，output.json 最后写入）。
+   * - 证据成立 → 判定 succeeded 并补记 node.completed，续跑时跳过该节点
+   * - 证据不成立 → 判定 failed（执行未完成、无外泄副作用）→ 有界重试新建 Attempt
+   */
+  async reconcileRun(runId: string): Promise<ReconcileReport> {
+    const run = this.mustGetRun(runId);
+    const unknowns = this.listRunAttempts(runId).filter((a) => a.state === "unknown");
+    if (unknowns.length === 0) {
+      return { runId, resolved: [], summary: null, note: "没有待对账的 unknown Attempt" };
+    }
+    const processNode = new Map(
+      this.deps.storage.listProcesses(runId).map((p) => [p.id, p.nodeId]),
+    );
+    const resolved: Array<{
+      attemptId: string;
+      nodeId: string;
+      verdict: "succeeded" | "failed";
+      evidence: string;
+    }> = [];
+    this.deps.storage.tx(() => {
+      for (const a of unknowns) {
+        const nodeId = processNode.get(a.processId) ?? "unknown-node";
+        const outputRef = join(this.instanceWorkspacesRoot(), runId, nodeId, "output.json");
+        let verdict: "succeeded" | "failed" = "failed";
+        let evidence = "工作区无完整产物";
+        if (existsSync(outputRef)) {
+          try {
+            JSON.parse(readFileSync(outputRef, "utf8"));
+            verdict = "succeeded";
+            evidence = "工作区产物完整（output.json 可解析）";
+          } catch {
+            evidence = "工作区产物损坏（output.json 不可解析）";
+          }
+        }
+        this.deps.storage.updateAttempt(a.id, {
+          state: verdict,
+          endedAt: this.deps.clock.now(),
+          outputRef: verdict === "succeeded" ? outputRef : a.outputRef,
+        });
+        this.deps.storage.appendEvent({
+          streamId: `attempt-${a.id}`,
+          type: "attempt.reconciled",
+          payload: { verdict, evidence, nodeId },
+          correlationId: runId,
+          runId,
+          processId: a.processId,
+          attemptId: a.id,
+          occurredAt: this.deps.clock.now(),
+        });
+        if (verdict === "succeeded") {
+          // 续跑投影需要 node.completed 才会跳过该节点（副作用已发生，不能重派）
+          this.deps.storage.appendEvent({
+            streamId: `run-${runId}`,
+            type: "node.completed",
+            payload: { nodeId, type: "execute", state: "succeeded", reason: "reconciled" },
+            correlationId: runId,
+            runId,
+            organismId: this.deps.organismId,
+            occurredAt: this.deps.clock.now(),
+          });
+        }
+        resolved.push({ attemptId: a.id, nodeId, verdict, evidence });
+      }
+    });
+    const current = this.mustGetRun(runId);
+    if (isTerminal(current.state)) {
+      return { runId, resolved, summary: null, note: "run 已处于终态，仅记录对账结论" };
+    }
+    const summary = await this.executeRun(runId);
+    return { runId, resolved, summary, note: "对账完成并已续跑" };
+  }
+
+  /** 事后汇总（CLI/inspect 用）：节点与决策从事件投影重建（同 ID 取最新事件） */
   getRunSummary(runId: string): RunSummary {
     const run = this.mustGetRun(runId);
     const attempts = this.listRunAttempts(runId);
     const experience = this.deps.storage.getExperienceByRun(runId);
-    const events = this.deps.storage.listEvents({ runId }, 500);
+    const events = this.deps.storage.listEvents({ runId }, 1000);
 
-    const nodes: RunSummaryNode[] = events
-      .filter((e) => e.type === "node.completed")
-      .map((e) => ({
+    const nodeMap = new Map<string, RunSummaryNode>();
+    for (const e of events) {
+      if (e.type !== "node.completed") continue;
+      nodeMap.set(String(e.payload["nodeId"]), {
         id: String(e.payload["nodeId"]),
         type: e.payload["type"] as RunSummaryNode["type"],
         state: e.payload["state"] as NodeState,
-      }));
-    const decisions: RunSummaryDecision[] = events
-      .filter((e) => e.type === "decision.recorded")
-      .map((e) => ({
-        nodeId: String(e.payload["nodeId"]),
+      });
+    }
+    const decisionMap = new Map<string, RunSummaryDecision>();
+    for (const e of events) {
+      if (e.type !== "decision.recorded") continue;
+      const nodeId = String(e.payload["nodeId"]);
+      decisionMap.set(nodeId, {
+        nodeId,
         value: String(e.payload["value"]),
         provider: String(e.payload["provider"]),
         policyVersion: String(e.payload["policyVersion"]),
-      }));
+      });
+    }
 
     return {
       runId: run.id,
@@ -391,8 +600,8 @@ export class Runtime {
       graphSource: events.some((e) => e.payload["graphKind"] === "dag-v1")
         ? "dag-v1"
         : "pipeline-v1",
-      nodes,
-      decisions,
+      nodes: [...nodeMap.values()],
+      decisions: [...decisionMap.values()],
       attempts: attempts.map((a) => ({
         id: a.id,
         ordinal: a.ordinal,
@@ -477,25 +686,29 @@ export class Runtime {
       );
     }
 
-    const processId = this.deps.ids.next();
     const attemptId = this.deps.ids.next();
     const dispatchId = this.deps.ids.next();
     const startedAt = this.deps.clock.now();
 
-    // Attempt 配额检查与创建必须在同一事务内：并发派发不会重复花费同一余额
-    this.deps.storage.tx(() => {
+    // Attempt 配额检查与创建必须在同一事务内：并发派发不会重复花费同一余额。
+    // 重试沿用 Process 身份并创建新 Attempt（docs/runtime.md §1）。
+    const processId = this.deps.storage.tx((): string => {
       const previousAttempts = this.listRunAttempts(runId);
       if (previousAttempts.length >= run.budget.maxAttempts) {
         throw new NodeFailure("budget_exhausted", `Attempt 数已达上限 ${run.budget.maxAttempts}`);
       }
-      const ordinal = previousAttempts.length + 1;
-      this.deps.storage.insertProcess({
-        id: processId,
-        runId,
-        nodeId: node.id,
-        role: "execute",
-        createdAt: startedAt,
-      });
+      const existing = this.deps.storage.findProcessByNode(runId, node.id);
+      const processId = existing?.id ?? this.deps.ids.next();
+      if (!existing) {
+        this.deps.storage.insertProcess({
+          id: processId,
+          runId,
+          nodeId: node.id,
+          role: "execute",
+          createdAt: startedAt,
+        });
+      }
+      const ordinal = this.deps.storage.listAttempts(processId).length + 1;
       this.deps.storage.insertAttempt({
         id: attemptId,
         processId,
@@ -540,6 +753,7 @@ export class Runtime {
         attemptId,
         occurredAt: startedAt,
       });
+      return processId;
     });
 
     // 工作区准备与外部执行都在事务之外（docs/runtime.md §7）

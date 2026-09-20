@@ -3,6 +3,8 @@ import {
   cancelCommand,
   initCommand,
   inspectCommand,
+  recoverCommand,
+  reconcileCommand,
   runsCommand,
   submitCommand,
 } from "./commands.ts";
@@ -10,7 +12,7 @@ import {
 const program = new Command();
 program
   .name("proteus")
-  .description("ProteusOS 运行基质 CLI（M0 切片①：单节点闭环）")
+  .description("ProteusOS 运行基质 CLI（M0：单 Organism 本地闭环）")
   .version("0.1.0");
 
 function withCommon(cmd: Command): Command {
@@ -45,6 +47,24 @@ withCommon(program.command("cancel").description("请求取消 Run").argument("<
     await cancelCommand(id, opts);
   },
 );
+
+withCommon(
+  program
+    .command("recover")
+    .description("崩溃恢复：处置非终态 Run（遗留执行标记 unknown 等待对账，其余断点续跑）")
+    .argument("[id]", "Run ID（缺省扫描全部）"),
+).action(async (id: string | undefined, opts) => {
+  await recoverCommand(id, opts);
+});
+
+withCommon(
+  program
+    .command("reconcile")
+    .description("对账 unknown Attempt：以工作区产物完整性为完成证据，判定后续跑或重试")
+    .argument("<id>", "Run ID"),
+).action(async (id: string, opts) => {
+  await reconcileCommand(id, opts);
+});
 
 withCommon(
   program
