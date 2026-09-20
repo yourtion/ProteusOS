@@ -1,0 +1,6 @@
+goal: 验收失败路径——schema 要求 worker 不产出的 summary 字段
+inputs:
+  - ../input-a
+acceptance:
+  outputSchema: ../schemas/strict-extra-field.schema.json
+  verifier: stats-acceptance

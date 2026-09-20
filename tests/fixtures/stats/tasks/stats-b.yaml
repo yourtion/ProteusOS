@@ -1,0 +1,10 @@
+goal: 对 fixtures/stats/input-b 下的文本文件生成统计摘要
+inputs:
+  - ../input-b
+constraints:
+  budget:
+    maxAttempts: 2
+    maxWallClockSeconds: 60
+acceptance:
+  outputSchema: ../schemas/stats-summary.schema.json
+  verifier: stats-acceptance

@@ -1,0 +1,6 @@
+goal: 验证 verifier 槽位校验——task 声明的验收器与快照绑定不一致时拒绝准入
+inputs:
+  - ../input-a
+acceptance:
+  outputSchema: ../schemas/stats-summary.schema.json
+  verifier: wrong-verifier

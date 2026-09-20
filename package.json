@@ -1,0 +1,38 @@
+{
+  "name": "@techs/proteus",
+  "version": "0.1.0",
+  "private": true,
+  "description": "ProteusOS 运行基质：长期个体、可继承产物与受控行为变化",
+  "license": "Apache-2.0",
+  "bin": {
+    "proteus": "bin/proteus.mjs"
+  },
+  "type": "module",
+  "scripts": {
+    "proteus": "tsx src/app/cli.ts",
+    "check": "oxlint . && oxfmt --check src tests bin && tsc --noEmit && vitest run",
+    "lint": "oxlint .",
+    "format": "oxfmt src tests bin",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "commander": "^15.0.0",
+    "pino": "^10.3.1",
+    "uuid": "^14.0.2",
+    "yaml": "^2.9.1",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.2",
+    "oxfmt": "^0.68.0",
+    "oxlint": "^1.83.0",
+    "tsx": "^4.23.13",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.1"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "packageManager": "pnpm@11.22.0"
+}

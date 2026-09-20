@@ -1,0 +1,223 @@
+/**
+ * Runtime 领域类型与持久化 port。
+ * 状态机语义见 docs/runtime.md；M0 切片① 只覆盖单节点 pipeline。
+ */
+
+export type RunState = "pending" | "running" | "waiting" | "succeeded" | "failed" | "cancelled";
+export type AttemptState =
+  | "dispatching"
+  | "running"
+  | "cancel_requested"
+  | "unknown"
+  | "succeeded"
+  | "failed"
+  | "cancelled";
+export type RunPurpose = "normal" | "evaluation";
+
+export interface TaskBudget {
+  maxAttempts: number;
+  maxWallClockSeconds: number;
+}
+
+export interface TaskAcceptance {
+  /** JSON Schema 文件路径（相对 task 文件所在目录） */
+  outputSchema: string;
+  /** 指向 GenomeSnapshot acceptance-evaluator 槽位绑定的 artifact id */
+  verifier: string;
+}
+
+export interface TaskRecord {
+  id: string;
+  revision: number;
+  requestedBy: string;
+  goal: string;
+  /** 输入路径（相对 task 文件所在目录；admission 时解析为绝对路径再写入记录） */
+  inputs: string[];
+  budget: TaskBudget;
+  acceptance: TaskAcceptance;
+  createdAt: number;
+}
+
+export interface RunRecord {
+  id: string;
+  taskId: string;
+  taskRevision: number;
+  organismId: string;
+  purpose: RunPurpose;
+  snapshotId: string;
+  graphDigest: string;
+  state: RunState;
+  supersedesRunId: string | null;
+  budget: TaskBudget;
+  failureReason: string | null;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface ProcessRecord {
+  id: string;
+  runId: string;
+  nodeId: string;
+  role: string;
+  createdAt: number;
+}
+
+export interface AttemptRecord {
+  id: string;
+  processId: string;
+  ordinal: number;
+  dispatchId: string;
+  state: AttemptState;
+  handle: string | null;
+  startedAt: number | null;
+  endedAt: number | null;
+  exitCode: number | null;
+  outputRef: string | null;
+}
+
+export interface OutcomeCheck {
+  name: string;
+  passed: boolean;
+  detail?: string;
+}
+
+export interface ExperienceOutcome {
+  result: "succeeded" | "failed" | "cancelled";
+  checks: OutcomeCheck[];
+  outputDigest: string | null;
+  attemptCount: number;
+  durationMs: number;
+}
+
+export interface ExperienceRecord {
+  id: string;
+  runId: string;
+  outcome: ExperienceOutcome;
+  createdAt: number;
+}
+
+export interface EventAppend {
+  streamId: string;
+  type: string;
+  payload: Record<string, unknown>;
+  correlationId?: string;
+  causationId?: string;
+  organismId?: string;
+  runId?: string;
+  processId?: string;
+  attemptId?: string;
+  occurredAt: number;
+}
+
+export interface EventRecord {
+  eventId: string;
+  streamId: string;
+  seq: number;
+  type: string;
+  schemaVersion: number;
+  correlationId: string | null;
+  causationId: string | null;
+  organismId: string | null;
+  runId: string | null;
+  processId: string | null;
+  attemptId: string | null;
+  payload: Record<string, unknown>;
+  occurredAt: number;
+  recordedAt: number;
+}
+
+export interface DispatchRecord {
+  dispatchId: string;
+  runId: string;
+  processId: string;
+  attemptId: string;
+  kind: string;
+  payload: Record<string, unknown>;
+  state: "pending" | "dispatched" | "completed";
+  handle: string | null;
+  createdAt: number;
+  dispatchedAt: number | null;
+  completedAt: number | null;
+}
+
+export interface RunSummary {
+  runId: string;
+  taskId: string;
+  state: RunState;
+  failureReason: string | null;
+  snapshotId: string;
+  attempts: Array<{ id: string; ordinal: number; state: AttemptState; exitCode: number | null }>;
+  checks: OutcomeCheck[];
+  experienceId: string | null;
+}
+
+export type BudgetEntryKind = "reserve" | "settle";
+
+/** Runtime 持久化 port；由 storage 实现。 */
+export interface RuntimeStore {
+  insertTask(t: TaskRecord): void;
+  getTask(id: string): TaskRecord | undefined;
+
+  insertRun(r: RunRecord): void;
+  getRun(id: string): RunRecord | undefined;
+  listRuns(limit: number): Array<RunRecord & { goal: string }>;
+  updateRunState(
+    id: string,
+    state: RunState,
+    patch: { failureReason?: string | null; updatedAt: number },
+  ): void;
+
+  insertProcess(p: ProcessRecord): void;
+  listProcesses(runId: string): ProcessRecord[];
+
+  insertAttempt(a: AttemptRecord): void;
+  updateAttempt(
+    id: string,
+    patch: Partial<Pick<AttemptRecord, "state" | "handle" | "endedAt" | "exitCode" | "outputRef">>,
+  ): void;
+  listAttempts(processId: string): AttemptRecord[];
+
+  insertExperience(e: ExperienceRecord): void;
+  getExperienceByRun(runId: string): ExperienceRecord | undefined;
+
+  appendBudget(
+    id: string,
+    runId: string,
+    kind: BudgetEntryKind,
+    attempts: number,
+    seconds: number,
+    at: number,
+  ): void;
+
+  appendEvent(e: EventAppend): { eventId: string; seq: number };
+  listEvents(filter: { runId?: string; streamId?: string }, limit: number): EventRecord[];
+  hasCancelIntent(runId: string): boolean;
+
+  insertDispatch(d: DispatchRecord): void;
+  markDispatched(dispatchId: string, handle: string, at: number): void;
+  completeDispatch(dispatchId: string, at: number): void;
+}
+
+/** M0 切片①：start 等待执行完成；handle/事件流/cancel 随切片④扩展（docs/runtime.md §5） */
+export interface ExecutionRequest {
+  runId: string;
+  processId: string;
+  attemptId: string;
+  workspaceDir: string;
+  timeoutMs: number;
+}
+
+export interface ExecutionResult {
+  ok: boolean;
+  exitCode: number | null;
+  stdout: string;
+  stderr: string;
+  durationMs: number;
+  /** 工作区内 output.json 的绝对路径；不存在为 null */
+  outputRef: string | null;
+}
+
+export interface ExecutorProvider {
+  readonly name: string;
+  start(req: ExecutionRequest): Promise<ExecutionResult>;
+}
