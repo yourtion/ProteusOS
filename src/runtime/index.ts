@@ -17,6 +17,7 @@ import {
 import type {
   AttemptRecord,
   ExecutorProvider,
+  OrganismBudget,
   OutcomeCheck,
   RunRecord,
   RunState,
@@ -50,7 +51,8 @@ export type RuntimeErrorCode =
   | "verifier_mismatch"
   | "missing_binding"
   | "run_not_pending"
-  | "budget_exhausted";
+  | "budget_exhausted"
+  | "organism_budget_exceeded";
 
 export class RuntimeError extends Error {
   readonly code: RuntimeErrorCode;
@@ -71,6 +73,7 @@ export interface RuntimeDeps {
   instanceRoot: string;
   clock: Clock;
   ids: IdGen;
+  organismBudget: OrganismBudget;
 }
 
 type NodeState = "succeeded" | "failed" | "skipped";
@@ -121,6 +124,9 @@ export class Runtime {
       if (!organism.activeGenomeId) {
         throw new RuntimeError("no_active_genome", "默认快照未安装，请先运行 proteus init");
       }
+      // Organism 级预算在准入事务内原子检查：单 writer + BEGIN IMMEDIATE
+      // 保证并发（含跨进程）提交不会各自读取同一余额后重复花费
+      this.assertOrganismBudget(input.budget);
       // 原子读取 active 指针并固定解析后的快照（docs/runtime.md §1）
       const { snapshot, versions } = this.deps.kernel.resolveSnapshot(organism.activeGenomeId);
       this.assertVerifierBinding(versions, input.acceptance.verifier);
@@ -163,6 +169,7 @@ export class Runtime {
       this.deps.storage.appendBudget(
         this.deps.ids.next(),
         runId,
+        this.deps.organismId,
         "reserve",
         input.budget.maxAttempts,
         input.budget.maxWallClockSeconds,
@@ -470,17 +477,18 @@ export class Runtime {
       );
     }
 
-    const previousAttempts = this.listRunAttempts(runId);
-    if (previousAttempts.length >= run.budget.maxAttempts) {
-      throw new NodeFailure("budget_exhausted", `Attempt 数已达上限 ${run.budget.maxAttempts}`);
-    }
-
     const processId = this.deps.ids.next();
     const attemptId = this.deps.ids.next();
     const dispatchId = this.deps.ids.next();
     const startedAt = this.deps.clock.now();
 
+    // Attempt 配额检查与创建必须在同一事务内：并发派发不会重复花费同一余额
     this.deps.storage.tx(() => {
+      const previousAttempts = this.listRunAttempts(runId);
+      if (previousAttempts.length >= run.budget.maxAttempts) {
+        throw new NodeFailure("budget_exhausted", `Attempt 数已达上限 ${run.budget.maxAttempts}`);
+      }
+      const ordinal = previousAttempts.length + 1;
       this.deps.storage.insertProcess({
         id: processId,
         runId,
@@ -491,7 +499,7 @@ export class Runtime {
       this.deps.storage.insertAttempt({
         id: attemptId,
         processId,
-        ordinal: previousAttempts.length + 1,
+        ordinal,
         dispatchId,
         state: "dispatching",
         handle: null,
@@ -525,7 +533,7 @@ export class Runtime {
       this.deps.storage.appendEvent({
         streamId: `attempt-${attemptId}`,
         type: "attempt.dispatching",
-        payload: { dispatchId, executor: executorName, ordinal: previousAttempts.length + 1 },
+        payload: { dispatchId, executor: executorName, ordinal },
         correlationId: runId,
         runId,
         processId,
@@ -650,6 +658,34 @@ export class Runtime {
 
   // ---- 内部 ----
 
+  /**
+   * Organism 级预算准入检查（必须在准入事务内调用）。
+   * 无法施加约束时拒绝准入，而不是放行后超支（docs/runtime.md §2）。
+   */
+  private assertOrganismBudget(budget: TaskBudget): void {
+    const cap = this.deps.organismBudget;
+    const activeRuns = this.deps.storage.countActiveRuns(this.deps.organismId);
+    if (activeRuns >= cap.maxConcurrentRuns) {
+      throw new RuntimeError(
+        "organism_budget_exceeded",
+        `并发 Run 数已达上限 ${cap.maxConcurrentRuns}（当前活跃 ${activeRuns}），拒绝准入`,
+      );
+    }
+    const inFlight = this.deps.storage.inFlightBudget(this.deps.organismId);
+    if (inFlight.attempts + budget.maxAttempts > cap.maxInFlightAttempts) {
+      throw new RuntimeError(
+        "organism_budget_exceeded",
+        `在途 Attempt 预留 ${inFlight.attempts} + 本次 ${budget.maxAttempts} 超过上限 ${cap.maxInFlightAttempts}`,
+      );
+    }
+    if (inFlight.seconds + budget.maxWallClockSeconds > cap.maxInFlightWallClockSeconds) {
+      throw new RuntimeError(
+        "organism_budget_exceeded",
+        `在途墙钟预留 ${inFlight.seconds}s + 本次 ${budget.maxWallClockSeconds}s 超过上限 ${cap.maxInFlightWallClockSeconds}s`,
+      );
+    }
+  }
+
   private assertVerifierBinding(
     versions: Map<string, { artifactId: string }>,
     verifier: string,
@@ -707,6 +743,7 @@ export class Runtime {
       this.deps.storage.appendBudget(
         this.deps.ids.next(),
         runId,
+        run.organismId,
         "settle",
         attempts.length,
         durationMs / 1000,

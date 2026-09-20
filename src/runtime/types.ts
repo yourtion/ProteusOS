@@ -169,6 +169,22 @@ export interface RunSummary {
 
 export type BudgetEntryKind = "reserve" | "settle";
 
+/**
+ * Organism 级预算（Q5 决策：Attempt 数 + 墙钟秒数，Run 与 Organism 两级）。
+ * 在途额度 = 活跃 Run 的 reserve 记录之和；准入时原子检查，结算后释放。
+ */
+export interface OrganismBudget {
+  maxConcurrentRuns: number;
+  maxInFlightAttempts: number;
+  maxInFlightWallClockSeconds: number;
+}
+
+export const DEFAULT_ORGANISM_BUDGET: OrganismBudget = {
+  maxConcurrentRuns: 4,
+  maxInFlightAttempts: 16,
+  maxInFlightWallClockSeconds: 86_400,
+};
+
 /** Runtime 持久化 port；由 storage 实现。 */
 export interface RuntimeStore {
   insertTask(t: TaskRecord): void;
@@ -199,11 +215,16 @@ export interface RuntimeStore {
   appendBudget(
     id: string,
     runId: string,
+    organismId: string,
     kind: BudgetEntryKind,
     attempts: number,
     seconds: number,
     at: number,
   ): void;
+  /** organism 当前活跃（pending/running/waiting）Run 的数量 */
+  countActiveRuns(organismId: string): number;
+  /** organism 在途预算：活跃 Run 的 reserve 之和（settle 后的 Run 不再计入） */
+  inFlightBudget(organismId: string): { attempts: number; seconds: number };
 
   appendEvent(e: EventAppend): { eventId: string; seq: number };
   listEvents(filter: { runId?: string; streamId?: string }, limit: number): EventRecord[];

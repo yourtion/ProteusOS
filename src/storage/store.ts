@@ -391,20 +391,43 @@ export class Storage implements KernelStore, RuntimeStore {
   appendBudget(
     id: string,
     runId: string,
+    organismId: string,
     kind: BudgetEntryKind,
     attempts: number,
     seconds: number,
     at: number,
   ): void {
     this.db.run(
-      "INSERT INTO budget_ledger (id, run_id, kind, attempts, seconds, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+      "INSERT INTO budget_ledger (id, run_id, organism_id, kind, attempts, seconds, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
       id,
       runId,
+      organismId,
       kind,
       attempts,
       seconds,
       at,
     );
+  }
+
+  countActiveRuns(organismId: string): number {
+    const row = this.db.get<{ n: number }>(
+      "SELECT COUNT(*) AS n FROM runs WHERE organism_id = ? AND state IN ('pending', 'running', 'waiting')",
+      organismId,
+    )!;
+    return row.n;
+  }
+
+  inFlightBudget(organismId: string): { attempts: number; seconds: number } {
+    const row = this.db.get<{ attempts: number; seconds: number }>(
+      `SELECT COALESCE(SUM(attempts), 0) AS attempts, COALESCE(SUM(seconds), 0) AS seconds
+       FROM budget_ledger
+       WHERE kind = 'reserve'
+         AND run_id IN (
+           SELECT id FROM runs WHERE organism_id = ? AND state IN ('pending', 'running', 'waiting')
+         )`,
+      organismId,
+    )!;
+    return { attempts: row.attempts, seconds: row.seconds };
   }
 
   appendEvent(e: EventAppend): { eventId: string; seq: number } {

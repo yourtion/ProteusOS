@@ -1,7 +1,6 @@
 import { afterAll, describe, expect, it } from "vitest";
 import type { AppInstance } from "../../src/app/instance.ts";
-import { canonicalJson } from "../../src/app/seed.ts";
-import { bootSeededInstance, fixturePath } from "../helpers.ts";
+import { bootSeededInstance, fixturePath, installCustomGenome } from "../helpers.ts";
 
 let inst: AppInstance | undefined;
 afterAll(() => {
@@ -27,40 +26,6 @@ function submit() {
       outputSchema: fixturePath("schemas", "stats-summary.schema.json"),
       verifier: "stats-acceptance",
     },
-  });
-}
-
-/** 以当前快照为基准注册新版本并 CAS 安装为默认（测试用自定义图/策略） */
-function installCustomGenome(overrides: { graph?: object; policy?: object }): void {
-  const app = instance();
-  const organism = app.kernel.getOrganism("organism-default")!;
-  const { snapshot, versions } = app.kernel.resolveSnapshot(organism.activeGenomeId!);
-  app.storage.tx(() => {
-    const bindings = { ...snapshot.bindings };
-    const slots: Array<["task-graph" | "routing-policy", object | undefined]> = [
-      ["task-graph", overrides.graph],
-      ["routing-policy", overrides.policy],
-    ];
-    for (const [slot, content] of slots) {
-      if (!content) continue;
-      const current = versions.get(slot)!;
-      const artifact = app.storage.getArtifact(current.artifactId)!;
-      const { digest, ref } = app.blobs.write(canonicalJson(content));
-      const version = app.kernel.registerVersion({
-        artifact,
-        schemaVersion: 2,
-        contentDigest: digest,
-        contentRef: ref,
-        parents: [current.id],
-        dependencies: [],
-        createdBy: "test",
-      });
-      bindings[slot] = version.id;
-    }
-    const next = app.kernel.createSnapshot(bindings, "test");
-    const fresh = app.kernel.getOrganism("organism-default")!;
-    const result = app.kernel.installAsActive("organism-default", next.id, fresh.revision);
-    if (!result.ok) throw new Error("测试装配 CAS 冲突");
   });
 }
 
@@ -98,7 +63,7 @@ describe("M0 切片②：DAG（decision → execute → verify）", () => {
   });
 
   it("策略无命中 route：abstain → run 失败，下游节点跳过且不产生执行", async () => {
-    installCustomGenome({
+    installCustomGenome(instance(), {
       policy: {
         schemaVersion: 2,
         kind: "rule-v1",
@@ -119,7 +84,7 @@ describe("M0 切片②：DAG（decision → execute → verify）", () => {
   });
 
   it("决策选出未装配的执行器：unknown_executor，证据保留", async () => {
-    installCustomGenome({
+    installCustomGenome(instance(), {
       graph: {
         schemaVersion: 2,
         kind: "dag-v1",
@@ -157,7 +122,7 @@ describe("M0 切片②：DAG（decision → execute → verify）", () => {
   });
 
   it("verify 节点声明与快照验收器不一致：拒绝执行", async () => {
-    installCustomGenome({
+    installCustomGenome(instance(), {
       graph: {
         schemaVersion: 2,
         kind: "dag-v1",
@@ -181,7 +146,7 @@ describe("M0 切片②：DAG（decision → execute → verify）", () => {
 
   it("事后汇总（getRunSummary）从事件投影重建节点与决策", async () => {
     // 装回一张可运行的简单图（前一用例的图会在节点前失败）
-    installCustomGenome({
+    installCustomGenome(instance(), {
       graph: {
         schemaVersion: 2,
         kind: "dag-v1",

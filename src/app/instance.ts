@@ -7,6 +7,7 @@ import { RuleDecisionProvider } from "../adapters/decision-rule/index.ts";
 import { LocalProcessExecutor } from "../adapters/executor-process/index.ts";
 import { Kernel } from "../kernel/index.ts";
 import { Runtime } from "../runtime/index.ts";
+import { DEFAULT_ORGANISM_BUDGET, type OrganismBudget } from "../runtime/types.ts";
 import { BlobStore } from "../storage/blobs.ts";
 import { MIGRATIONS } from "../storage/migrations.ts";
 import { SqliteDb } from "../storage/sqlite.ts";
@@ -31,7 +32,10 @@ export interface AppInstance {
 }
 
 /** 组装依赖：领域模块不自行创建外部客户端（docs/architecture.md §Persistence） */
-export function openInstance(root: string, logger?: Logger): AppInstance {
+export function openInstance(
+  root: string,
+  options: { logger?: Logger; organismBudget?: OrganismBudget } = {},
+): AppInstance {
   for (const dir of [root, join(root, "blobs"), join(root, "workspaces"), join(root, "tmp")]) {
     mkdirSync(dir, { recursive: true });
   }
@@ -56,6 +60,7 @@ export function openInstance(root: string, logger?: Logger): AppInstance {
     instanceRoot: root,
     clock,
     ids,
+    organismBudget: options.organismBudget ?? DEFAULT_ORGANISM_BUDGET,
   });
   return {
     root,
@@ -63,7 +68,7 @@ export function openInstance(root: string, logger?: Logger): AppInstance {
     kernel,
     runtime,
     blobs,
-    logger: logger ?? createLogger(),
+    logger: options.logger ?? createLogger(),
     close: () => db.close(),
   };
 }

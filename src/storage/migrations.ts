@@ -164,4 +164,15 @@ CREATE TABLE outbox (
 CREATE INDEX idx_outbox_state ON outbox(state);
 `,
   },
+  {
+    version: 2,
+    name: "organism-budget-ledger",
+    sql: `
+ALTER TABLE budget_ledger ADD COLUMN organism_id TEXT NOT NULL DEFAULT '';
+UPDATE budget_ledger SET organism_id = (
+  SELECT runs.organism_id FROM runs WHERE runs.id = budget_ledger.run_id
+) WHERE organism_id = '';
+CREATE INDEX idx_budget_organism ON budget_ledger(organism_id);
+`,
+  },
 ];

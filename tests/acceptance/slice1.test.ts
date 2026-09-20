@@ -135,3 +135,32 @@ describe("切片① 验收：CLI 闭环", () => {
     expect(JSON.parse(r.stdout).state).toBe("succeeded");
   });
 });
+
+describe("切片③ 验收：跨进程并发提交", () => {
+  it("两个 CLI 进程同时提交，各自执行成功且可追溯", async () => {
+    const { execFile } = await import("node:child_process");
+    const { promisify } = await import("node:util");
+    const execFileAsync = promisify(execFile);
+
+    const submitAsync = (task: string) =>
+      execFileAsync(
+        process.execPath,
+        ["--import", "tsx/esm", cliPath, "submit", task, "--json", "--home", home],
+        { cwd: REPO_ROOT },
+      );
+
+    const [a, b] = await Promise.all([
+      submitAsync(fixturePath("tasks", "stats-a.yaml")),
+      submitAsync(fixturePath("tasks", "stats-b.yaml")),
+    ]);
+    const summaryA = JSON.parse(a.stdout) as { runId: string; state: string };
+    const summaryB = JSON.parse(b.stdout) as { runId: string; state: string };
+    expect(summaryA.state).toBe("succeeded");
+    expect(summaryB.state).toBe("succeeded");
+    expect(summaryA.runId).not.toBe(summaryB.runId);
+
+    const runs = proteusJson<Array<{ id: string; state: string }>>(["runs", "--json"]);
+    const succeededIds = runs.filter((r) => r.state === "succeeded").map((r) => r.id);
+    expect(succeededIds).toEqual(expect.arrayContaining([summaryA.runId, summaryB.runId]));
+  });
+});
