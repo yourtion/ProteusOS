@@ -2,10 +2,30 @@
 
 承载长期、可适应智能的运行基质：让具有持续身份的个体执行任务、积累经验，并通过可验证、可继承、可回滚的产物变化改进行为。
 
-当前状态：设计文档已沉淀，实现尚未开始（M0）。技术栈已确认为 TypeScript + Node。
+## 当前状态（2026-09-20）
+
+- **M0 已完成**：单 Organism 本地闭环——身份、不可变版本、GenomeSnapshot、有限 DAG（decision / execute / verify）、预算原子预留、崩溃恢复与对账、可重复 seed 安装。73+ 项测试全绿。
+- **M1 已完成**：外部委托——Claude Code 与 Codex 经 ACP（官方 agent 适配器）接入、pi 经官方 SDK 直连；委托编码 → 独立测试验收的完整闭环，真实 agent E2E 已验证。
+- 下一步 M2：最小自举（Candidate / Evaluation / Promotion，复用既有 CAS 与快照机制）。
+
+## 快速开始
+
+```bash
+pnpm install
+pnpm check                          # lint + format + typecheck + 全量测试
+pnpm proteus init                   # 初始化实例（默认 ~/.proteus），安装 seed 并装载 G0
+pnpm proteus submit <task.yaml>     # 提交任务并内联执行到终态
+pnpm proteus runs [id]              # 列出 / 查看 Run
+pnpm proteus recover / reconcile    # 崩溃恢复 / unknown Attempt 对账
+pnpm proteus inspect <id>           # 按 ID 查看任意对象
+```
+
+真实外部 agent 的 E2E 测试默认跳过（消耗凭据）：`PROTEUS_E2E=claude|codex|pi|all pnpm test -- tests/e2e`。
+
+## 文档
 
 - 设计文档入口：[docs/README.md](./docs/README.md)
 - 领域词汇：[docs/CONTEXT.md](./docs/CONTEXT.md)
-- 自举路线与已决策事项：[docs/roadmap.md](./docs/roadmap.md)
+- 自举路线、已决策事项与实现进度：[docs/roadmap.md](./docs/roadmap.md)
 
 License：Apache-2.0

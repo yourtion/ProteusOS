@@ -155,4 +155,30 @@ describe("M1：外部委托闭环（fake agent 版）", () => {
     expect(summary.failureReason).toBe("unknown_executor");
     expect(summary.nodes.find((n) => n.id === "dev")!.state).toBe("failed");
   });
+
+  it("agent 执行中取消：attempt 结果如实记录，Run 取消", async () => {
+    // 上一用例把激活图换掉了，装回 fake-acp 图
+    installCustomGenome(instance(), { graph: M1_GRAPH, evaluator: TEST_RUNNER });
+    const runtime = runtimeWithExecutors([["fake-acp", fakeAcpExecutor()]]);
+    const submitted = runtime.submitTask({
+      requestedBy: "principal-local",
+      goal: "SLOW-MODE 长任务（会被取消）",
+      inputs: [fixturePath("..", "m1", "wordcount-tests")],
+      budget: { maxAttempts: 1, maxWallClockSeconds: 60 },
+      acceptance: {
+        outputSchema: fixturePath("schemas", "stats-summary.schema.json"),
+        verifier: "coding-acceptance",
+      },
+    });
+    await new Promise((resolve) => setTimeout(resolve, 300)); // agent 执行中
+    const running = instance().storage.listRunsByStates(["running"], 10).at(-1);
+    if (!running) throw new Error("测试装配失败：找不到进行中的 Run");
+    await instance().runtime.cancel(running.id);
+
+    const summary = await submitted;
+    expect(summary.state).toBe("cancelled");
+    expect(summary.failureReason).toBe("cancelled_during_execution");
+    expect(summary.nodes.find((n) => n.id === "dev")!.state).toBe("succeeded"); // SLOW-MODE 完成本轮
+    expect(summary.nodes.find((n) => n.id === "check")!.state).toBe("skipped");
+  });
 });

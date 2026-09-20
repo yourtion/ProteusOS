@@ -1,6 +1,6 @@
 # 运行时、决策与执行合同
 
-状态：设计基线；接口与存储方案均未实现。本文约束 M0/M1 的行为，不发布可编译 SDK。
+状态：设计基线。M0/M1 已实现并通过验收测试与真实 agent E2E 验证（2026-09-20），实现位于 `src/`，与本文的差异及落地选择见文末[实现注记](#9-实现注记m0m1)。
 术语以 [领域词汇](CONTEXT.md) 为准，记录关系见 [领域模型](domain-model.md)，模块边界见 [总体架构](architecture.md)。
 
 ## 1. 执行单位与版本绑定
@@ -173,8 +173,7 @@ Permission request 是授权交互，不是 sandbox；agent 自身及其工具�
 协议允许客户端按用户配置作出权限决定，但配置不能扩大 Task 已授予的权限。
 参见 [Tool Calls](https://agentclientprotocol.com/protocol/v1/tool-calls#requesting-permission)。
 
-M1 选择一个真实 coding worker 打通该合同，并用同一验收集验证替换能力。
-具体 worker、启动命令、认证方式及受控环境在实现前选择，不假定任何产品天然支持 ACP。
+M1 已选择并落地两个 ACP worker 与一条 SDK 直连路径（[ADR 0005](./adr/0005-external-executors.md)）：Claude Code 经 `@agentclientprotocol/claude-agent-acp`、Codex 经 `@agentclientprotocol/codex-acp`，client 端统一基于官方 `@agentclientprotocol/sdk`；pi 无原生 ACP，经其官方 SDK `@earendil-works/pi-coding-agent` 直连。能力协商、权限请求、产物验收与断连/取消合同已由验收测试覆盖（CI 用真实协议的 fake agent；真实凭据 E2E 显式启用，Claude Code 与 Codex 已通过）。受控执行环境（真隔离）仍是独立待决策项（见[路线图待验证项](./roadmap.md#待验证项)）。
 未来采用其他协议只增加 adapter，不改变内部领域对象。
 
 ## 7. 持久化、派发与事件合同
@@ -236,3 +235,21 @@ Attempt 另有 `dispatching / running / cancel_requested / unknown / succeeded /
 M0 验收覆盖断点恢复、重复事件、未知执行、取消竞态、预算耗尽及 Snapshot 固定。
 M1 增加真实 ACP 的能力协商、权限请求、产物验收、断连与取消测试。
 实现顺序见 [路线图](roadmap.md)，代码边界见 [仓库设计](repository.md)，入口见 [文档索引](README.md)。
+
+## 9. 实现注记（M0/M1）
+
+实现（`src/`）与本文设计基线的对应关系及已落地的具体选择：
+
+| 主题 | 实现选择 |
+| --- | --- |
+| 执行器装配 | 注册表：图中 executor 名 → 实现（`local-process` / `claude-code-acp` / `codex-acp` / `pi`）；未装配名得到明确 `unknown_executor`，不做隐式回退 |
+| 任务指令 | `ExecutionRequest.prompt` 携带 Task.goal；本地 worker 可忽略，agent 型执行器以此为用户消息 |
+| ACP client | 官方 `@agentclientprotocol/sdk`：initialize → session/new（cwd 钉在工作区）→ prompt → update 收集；`end_turn` 只表示本轮结束，成功与否由 verify 裁定 |
+| 权限策略 | 可注入；默认选首个 allow 类选项（工作区一次性目录），无人值守可换 deny-all；全部请求与决定记入 trace |
+| 超时取消 | 先发 `session/cancel` 通知并等待尾部更新，5s 宽限后仍无终态才 SIGKILL（断连只证明进程终止，不证明副作用停止） |
+| trace | update 流与权限决定落盘工作区 `.proteus/acp-trace.json`（产出可定位 trace） |
+| pi 直连 | 进程内 SDK（`createAgentSession`），非子进程隔离；对一次性工作区按操作者决定显式授信（`projectTrusted`） |
+| 验收裁判 | 按快照 `acceptance-evaluator` 产物内容分发：`stats-acceptance-v1`（JSON Schema + totals 一致性）与 `test-runner-v1`（工作区内跑测试命令，退出码即判据） |
+| 重试身份 | 重试沿用 Process、仅新建 Attempt（§1 的模型）；Attempt 配额检查与创建同事务 |
+| 恢复命令 | `proteus recover`（遗留派发标记 unknown、Run 置 waiting；其余断点续跑，跳过已成功节点）与 `proteus reconcile`（完成证据 = 工作区产物完整性；agent 型节点无原子终产物时判 failed 走有界重试） |
+| M0 未实现项 | §5 的 handle/事件流/cancel 完整执行器合同、多 Attempt 重试的自动触发（当前重试经对账或人工触发）、`inspect` 的恢复能力声明——按需在后续里程碑补齐 |

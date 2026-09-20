@@ -74,4 +74,32 @@ describe("AcpExecutor 合同（fake ACP agent）", () => {
     await executor().start(request("实现 wordcount", ws));
     // 无法直接断言子进程死亡；以连接正常关闭（无未处理拒绝）为隐含验证
   });
+
+  it("断连：agent 崩溃退出 → 失败并保留已有 update 证据", async () => {
+    const ws = workspace();
+    const result = await executor().start(request("EXIT-MODE 崩溃", ws));
+    expect(result.ok).toBe(false);
+    // 连接关闭被如实报告，不伪装成成功或超时
+    expect(result.stderr.length).toBeGreaterThan(0);
+    const trace = JSON.parse(readFileSync(join(ws, ".proteus", "acp-trace.json"), "utf8")) as {
+      updates: Array<{ sessionUpdate: string }>;
+    };
+    expect(trace.updates.length).toBeGreaterThan(0); // 崩溃前的 update 已入 trace
+  });
+
+  it("超时：先请求 session/cancel，agent 响应 cancelled 后不强杀", async () => {
+    const ws = workspace();
+    const slow = new AcpExecutor({ name: "fake-acp", agentEntry: FAKE_AGENT });
+    const result = await slow.start({
+      runId: "r",
+      processId: "p",
+      attemptId: "a",
+      workspaceDir: ws,
+      prompt: "SLOW-MODE 长任务",
+      timeoutMs: 1_500, // 先于 SLOW-MODE 完成时限触发 cancel，留出会话建立余量
+    });
+    expect(result.ok).toBe(false);
+    expect(result.stderr).toContain("session/cancel");
+    expect(result.stderr).toContain("stopReason=cancelled");
+  });
 });

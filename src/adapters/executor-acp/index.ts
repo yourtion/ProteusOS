@@ -101,21 +101,43 @@ export class AcpExecutor implements ExecutorProvider {
       });
 
     let timedOut = false;
+    let cancelNotified = false;
+    let liveContext: { notify(method: string, params: unknown): Promise<void> } | null = null;
+    let liveSessionId: string | null = null;
+    let cancelPending = false;
+    // 超时处置按 docs/runtime.md §8：先请求 session/cancel 并等待尾部更新，
+    // 宽限期后仍无终态才硬杀（断连只证明进程终止，不证明副作用停止）。
+    // 会话尚未建立时挂起补发——cancel 不因竞态丢失。
+    const sendCancel = () => {
+      if (liveContext && liveSessionId) {
+        cancelPending = false;
+        cancelNotified = true;
+        liveContext
+          .notify(methods.agent.session.cancel, { sessionId: liveSessionId })
+          .catch(() => undefined);
+      } else {
+        cancelPending = true;
+      }
+    };
     const timer = setTimeout(() => {
       timedOut = true;
-      child.kill("SIGKILL");
+      sendCancel();
+      setTimeout(() => child.kill("SIGKILL"), 5_000);
     }, req.timeoutMs);
 
     let stopReason: string | null = null;
     let failure: string | null = null;
     try {
       const response = await app.connectWith(stream, async (ctx) => {
+        liveContext = ctx;
         await ctx.request(methods.agent.initialize, {
           protocolVersion: PROTOCOL_VERSION,
           capabilities: {},
           info: this.clientInfo,
         });
         return ctx.buildSession(req.workspaceDir).withSession(async (session) => {
+          liveSessionId = session.sessionId;
+          if (cancelPending) sendCancel();
           const done = session.prompt(req.prompt);
           done.catch(() => undefined); // 协议错误经超时/连接关闭体现，避免未处理拒绝
           const response = await done;
@@ -149,7 +171,11 @@ export class AcpExecutor implements ExecutorProvider {
       exitCode: ok ? 0 : null,
       stdout: stdoutText,
       stderr: [
-        timedOut ? "[acp] 执行超时被终止" : "",
+        timedOut
+          ? cancelNotified
+            ? "[acp] 执行超时：已请求 session/cancel，宽限期后终止"
+            : "[acp] 执行超时被终止"
+          : "",
         stopReason && stopReason !== "end_turn" ? `[acp] stopReason=${stopReason}` : "",
         failure ?? "",
         stderr,

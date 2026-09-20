@@ -1,6 +1,6 @@
 # 仓库架构与实现约束
 
-状态：**proposed**（工程基线已确认，完整技术栈清单见 [ADR 0004](./adr/0004-m0-engineering-baseline.md)）。当前仅沉淀文档，以下目录和工程配置尚未创建。
+状态：**active**（2026-09-20）。工程基线已按 [ADR 0004](./adr/0004-m0-engineering-baseline.md) 落地，以下目录已创建并在用（M0/M1）；evolution/ 与 evals/、examples/ 仍按“需要时才创建”原则留待 M2。
 
 ## 1. 从单包模块化起步
 
@@ -8,26 +8,27 @@
 
 ```text
 ProteusOS/
-├── docs/                       # 已有：设计、词汇、ADR、路线图
-├── src/                        # 后续实现时创建
-│   ├── kernel/                 # 身份/授权/版本/快照/晋升不变量
-│   ├── runtime/                # Task/Run/Process、DAG、调度与恢复
+├── docs/                       # 设计、词汇、ADR、路线图（含 ADR 0004/0005 已落地决策）
+├── src/
+│   ├── kernel/                 # 身份/版本/快照不变量、CAS active 指针
+│   ├── runtime/                # Task/Run/Process/Attempt、DAG 节点循环、恢复与对账
 │   ├── decision/               # 结构化决策合同与结果校验
-│   ├── evolution/              # M2 起：候选、评估、巩固编排
 │   ├── adapters/
-│   │   ├── decision-rule/      # 确定性规则
-│   │   ├── executor-process/   # 本地受控进程
-│   │   └── executor-acp/       # M1 起：外部协议映射
-│   ├── storage/                # SQLite、blob、outbox、迁移
-│   └── app/                    # 组装依赖、CLI 命令与配置
+│   │   ├── decision-rule/      # 确定性规则路由（消费 routing-policy 产物）
+│   │   ├── executor-process/   # 本地受信进程（M0 stats worker）
+│   │   ├── executor-acp/       # ACP client：驱动 claude-agent-acp / codex-acp
+│   │   └── executor-pi/        # pi 官方 SDK 直连（ADR 0005）
+│   ├── storage/                # node:sqlite、迁移、事件流、outbox、blob
+│   └── app/                    # 组装依赖、执行器注册表、CLI 命令与 seed
 ├── tests/
 │   ├── unit/                   # 纯不变量与状态迁移
-│   ├── contract/               # Provider/持久化合同
-│   ├── integration/            # 事务、恢复、晋升与执行组合
-│   ├── acceptance/             # 自举闭环与失败路径
-│   └── fixtures/               # 无凭据、可重复的测试产物与 worker
-├── evals/                      # 固定评估协议、任务、切分清单
-├── examples/                   # seed 图、规则、实例配置样例
+│   ├── contract/               # Provider/持久化/ACP 合同（fake agent，真实协议）
+│   ├── integration/            # 事务、恢复、并发预算、M1 委托闭环
+│   ├── acceptance/             # M0 判据固化与 CLI 闭环
+│   ├── e2e/                    # 真实 agent（PROTEUS_E2E=claude|codex|pi|all 显式启用）
+│   └── fixtures/               # 无凭据、可重复的测试产物、fake ACP agent 与任务
+├── bin/proteus.mjs             # CLI 启动器（tsx 加载 TS 源码）
+├── .github/workflows/ci.yml    # Linux + macOS 矩阵
 ├── package.json                # @techs/proteus 私有根包、明确脚本
 ├── tsconfig.json               # 严格类型检查
 └── pnpm-lock.yaml              # 依赖版本固定

@@ -2,6 +2,12 @@
 
 当前可以开始架构文档和 seed 原型，无需先解决完整记忆系统、模型微调或团队共进化。以下阶段按验收能力推进，不对应既定发布日期；与历史讨论中的 V0–V4 不建立产品版本号映射。
 
+## 0. 实现进度（2026-09-20）
+
+- **M0 完成**：五个纵切片全部落地并各自以验收测试收口（单节点闭环 → DAG + 规则决策 + verify → 并发与预算原子预留 → 崩溃恢复与对账 → seed 可重复固化），84 项 CI 测试全绿。
+- **M1 完成**：执行器注册表（local-process / claude-code-acp / codex-acp / pi）；委托编码 → 独立测试验收闭环；能力协商、权限请求、断连与取消合同由 fake agent（真实 ACP 协议实现）覆盖；真实凭据 E2E：Claude Code（50s）与 Codex（28s，经代理）通过，pi 链路验证至模型调用（当时凭据的默认模型返回 403，属账户配额，处理凭据后 `PROTEUS_E2E=pi` 即可复跑）。接入决策见 [ADR 0005](./adr/0005-external-executors.md)，实现与设计文档的对应见 [运行时实现注记](./runtime.md#9-实现注记m0m1)。
+- **下一步 M2**：最小自举（Candidate / Evaluation / Promotion）——M0 的 CAS active 指针与不可变快照机制直接复用。
+
 ## 1. 本次澄清结果
 
 讨论已经给出足够稳定的方向：独立基质、可替换决策与执行、长期个体、可继承产物、独立评估和协作继承。剩余事项属于可验证的实现选择，可写成 proposed 默认值后推进。
@@ -62,11 +68,11 @@ M0 的 seed 必须含基本执行合同、固定图、确定性选择规则、�
 | 事项 | Proposed 默认方案 | 需要验证或决策的时点 |
 | --- | --- | --- |
 | 开发语言与运行时 | 已决策（2026-09-20），完整清单见 [ADR 0004](./adr/0004-m0-engineering-baseline.md)：TypeScript + Node 24 + node:sqlite + pnpm（@techs/proteus）+ commander / zod v4 / pino + vitest + oxlint/oxfmt + GitHub Actions（Linux 矩阵）+ Apache-2.0 | Node 26 转 LTS（2026-10-28）时复核 node:sqlite API 与 engines 基线 |
-| 本地存储 | 已决策：内置 node:sqlite 单 writer + 按摘要寻址的 blob 文件，不引入远端服务 | 实现中验证事务、崩溃恢复与目标文件系统行为；驱动位于 Persistence port 后，可平移 |
+| 本地存储 | 已决策并验证（M0）：内置 node:sqlite 单 writer + 按摘要寻址的 blob 文件；迁移、事务、崩溃恢复与并发准入经 84 项测试覆盖 | 驱动位于 Persistence port 后，可平移；Node 26 LTS 时复核 API（ADR 0004） |
 | M0 预算维度 | Attempt 数上限 + 墙钟秒数，Run 与 Organism 两级；按预留/结算/unknown 语义记账 | M3 出现真实成本数据后再决定是否抽象为统一点数 |
 | CLI 与首次引导 | `proteus init/submit/runs/cancel/inspect`；实例根默认 `~/.proteus`；init 创建 local Principal 与默认 Organism，导入 seed 并安装 G0，幂等可重复 | task.yaml 四要素 schema（goal/inputs/constraints/acceptance，验收走槽位引用）与 G0 三槽位（task-graph / routing-policy / acceptance-evaluator）已确认；实现中细化参数与输出格式 |
 | 首个外部 worker | 已决策（2026-09-20）：双执行器——Claude Code 经 `@zed-industries/claude-code-acp`（ACP 合同验证主路径，本机 claude 2.1.278 已就绪）+ pi 经 `@earendil-works/pi-coding-agent` SDK 直连（Provider 可替换性验证；pi 无原生 ACP，其自有 RPC/SDK 即受控进程接口） | M1 实现时锁定 `@agentclientprotocol/sdk` 1.4.x 与 pi SDK 0.86.x；真实集成测试需本机凭据显式启用，CI 用 fake ACP agent 覆盖合同 |
-| 执行环境 | M0 只运行可信 fixture；生成代码在满足权限要求的受控环境执行 | M1/M2 前确定容器、独立宿主或其他真实隔离方案；工作区不算安全沙箱 |
+| 执行环境 | M0 只运行可信 fixture（已落地）；M1 E2E 目前在操作者本机运行——工作区隔离 + ACP 权限策略，**无真隔离** | M2 前确定容器、独立宿主或其他真实隔离方案（生成代码候选进入快照前必须具备）；工作区不算安全沙箱 |
 | 晋升权限 | 自动提议/评估，operator 显式晋升；权限内自动化以后再加 | M2 前确定允许自主晋升的类型、scope、预算与证据要求；缺省保持人工模式 |
 | 首个自举案例 | ChangedFileSummary 固定任务 | M1 前确认代表性；可以换案例，但保留相同闭环验收 |
 | 评价指标 | 成功与回归为硬约束，质量、时延、成本分别比较 | M2/M3 构造候选前固定评估协议，避免事后移动标准 |
