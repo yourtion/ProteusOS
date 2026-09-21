@@ -1,7 +1,9 @@
 # 运行时、决策与执行合同
 
-状态：设计基线。M0/M1 已实现并通过验收测试与真实 agent E2E 验证（2026-09-20），实现位于 `src/`，与本文的差异及落地选择见文末[实现注记](#9-实现注记m0m1)。
+状态：设计基线。M0–M2 已实现（2026-09-21），真实 agent 验证范围以[路线图](./roadmap.md)为准。实现位于 `src/`，与本文的差异及落地选择见文末[实现注记](#9-实现注记m0m2)。
 术语以 [领域词汇](CONTEXT.md) 为准，记录关系见 [领域模型](domain-model.md)，模块边界见 [总体架构](architecture.md)。
+
+M2 后的 DecisionProvider 扩展按 [ADR 0007](./adr/0007-organism-decision-experiment.md)与[实验规范](./experiments/organism-decision-v1.md)实施，目前仍为 planned。下述完整设计合同不能视为当前代码已实现；实验规范列出了接口、预算、来源记录与恢复的具体差距。
 
 ## 1. 执行单位与版本绑定
 
