@@ -10,6 +10,7 @@ import type { ExecutionRequest, ExecutionResult, ExecutorProvider } from "../../
  */
 export class LocalProcessExecutor implements ExecutorProvider {
   readonly name = "local-process";
+  readonly recoveryPolicy = "retry-safe";
   private readonly workerPath: string;
 
   constructor(workerPath: string) {

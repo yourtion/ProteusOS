@@ -34,7 +34,7 @@ import type {
   TaskBudget,
   TaskRecord,
 } from "./types.ts";
-import { parseCapabilityModule, runCapabilityModule } from "./capability.ts";
+import { isCapabilityName, parseCapabilityModule, runCapabilityModule } from "./capability.ts";
 
 export interface TaskSubmission {
   requestedBy: string;
@@ -85,6 +85,7 @@ export type RuntimeErrorCode =
   | "unknown_organism"
   | "no_active_genome"
   | "invalid_input_path"
+  | "invalid_capability"
   | "invalid_graph"
   | "verifier_mismatch"
   | "missing_binding"
@@ -139,7 +140,7 @@ export interface ReconcileReport {
   resolved: Array<{
     attemptId: string;
     nodeId: string;
-    verdict: "succeeded" | "failed";
+    verdict: "succeeded" | "failed" | "unknown";
     evidence: string;
   }>;
   summary: RunSummary | null;
@@ -171,6 +172,11 @@ export class Runtime {
     }
     assertInputPath(input.acceptance.outputSchema);
     if (input.acceptance.expectedOutput) assertInputPath(input.acceptance.expectedOutput);
+    for (const capability of input.requires ?? []) {
+      if (!isCapabilityName(capability)) {
+        throw new RuntimeError("invalid_capability", `能力名称不合法：${capability}`);
+      }
+    }
     if (options.evaluatorVersionId && options.purpose !== "evaluation") {
       throw new RuntimeError(
         "run_not_pending",
@@ -661,7 +667,8 @@ export class Runtime {
    * 完成证据 = 工作区 output.json 完整落盘（本地受信 worker 的产物合同：
    * 只写自己的工作区，output.json 最后写入）。
    * - 证据成立 → 判定 succeeded 并补记 node.completed，续跑时跳过该节点
-   * - 证据不成立 → 判定 failed（执行未完成、无外泄副作用）→ 有界重试新建 Attempt
+   * - 证据不成立且执行器声明 retry-safe → 判定 failed 并有界重试新建 Attempt
+   * - 其余情况 → 保留 unknown，等待人工或执行器侧证据，禁止自动重试
    */
   async reconcileRun(runId: string): Promise<ReconcileReport> {
     this.mustGetRun(runId);
@@ -675,24 +682,42 @@ export class Runtime {
     const resolved: Array<{
       attemptId: string;
       nodeId: string;
-      verdict: "succeeded" | "failed";
+      verdict: "succeeded" | "failed" | "unknown";
       evidence: string;
     }> = [];
     this.deps.storage.tx(() => {
       for (const a of unknowns) {
         const nodeId = processNode.get(a.processId) ?? "unknown-node";
+        const dispatch = this.deps.storage.getDispatch(a.dispatchId);
+        const recoveryPolicy = dispatch?.payload["recoveryPolicy"];
         const outputRef = join(this.instanceWorkspacesRoot(), runId, nodeId, "output.json");
-        let verdict: "succeeded" | "failed" = "failed";
+        let hasCompleteOutput = false;
         let evidence = "工作区无完整产物";
         if (existsSync(outputRef)) {
           try {
             JSON.parse(readFileSync(outputRef, "utf8"));
-            verdict = "succeeded";
+            hasCompleteOutput = true;
             evidence = "工作区产物完整（output.json 可解析）";
           } catch {
             evidence = "工作区产物损坏（output.json 不可解析）";
           }
         }
+        if (!hasCompleteOutput && recoveryPolicy !== "retry-safe") {
+          evidence = `${evidence}；执行器未声明可安全重试，保留 unknown 等待人工或外部证据`;
+          this.deps.storage.appendEvent({
+            streamId: `attempt-${a.id}`,
+            type: "attempt.reconciliation.deferred",
+            payload: { verdict: "unknown", evidence, nodeId, recoveryPolicy: "manual" },
+            correlationId: runId,
+            runId,
+            processId: a.processId,
+            attemptId: a.id,
+            occurredAt: this.deps.clock.now(),
+          });
+          resolved.push({ attemptId: a.id, nodeId, verdict: "unknown", evidence });
+          continue;
+        }
+        const verdict = hasCompleteOutput ? "succeeded" : "failed";
         this.deps.storage.updateAttempt(a.id, {
           state: verdict,
           endedAt: this.deps.clock.now(),
@@ -726,6 +751,14 @@ export class Runtime {
     const current = this.mustGetRun(runId);
     if (isTerminal(current.state)) {
       return { runId, resolved, summary: null, note: "run 已处于终态，仅记录对账结论" };
+    }
+    if (resolved.some((item) => item.verdict === "unknown")) {
+      return {
+        runId,
+        resolved,
+        summary: null,
+        note: "仍有无法确认副作用的 Attempt，保持 waiting，未自动重试",
+      };
     }
     const summary = await this.executeRun(runId);
     return { runId, resolved, summary, note: "对账完成并已续跑" };
@@ -900,7 +933,11 @@ export class Runtime {
         processId,
         attemptId,
         kind: "executor.start",
-        payload: { executor: executorName, node: node.id },
+        payload: {
+          executor: executorName,
+          node: node.id,
+          recoveryPolicy: executor.recoveryPolicy,
+        },
         state: "pending",
         handle: null,
         createdAt: startedAt,
@@ -1100,6 +1137,7 @@ export class Runtime {
     if (!version) return undefined;
     return {
       name,
+      recoveryPolicy: "manual",
       start: async (req) => {
         let parsed: ReturnType<typeof parseCapabilityModule>;
         try {

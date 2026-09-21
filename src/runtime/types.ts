@@ -247,6 +247,7 @@ export interface RuntimeStore {
   hasCancelIntent(runId: string): boolean;
 
   insertDispatch(d: DispatchRecord): void;
+  getDispatch(dispatchId: string): DispatchRecord | undefined;
   markDispatched(dispatchId: string, handle: string, at: number): void;
   completeDispatch(dispatchId: string, at: number): void;
 }
@@ -277,5 +278,7 @@ export interface ExecutionResult {
 
 export interface ExecutorProvider {
   readonly name: string;
+  /** retry-safe 仅适用于无工作区产物即可证明未产生外部副作用的受信执行器。 */
+  readonly recoveryPolicy: "retry-safe" | "manual";
   start(req: ExecutionRequest): Promise<ExecutionResult>;
 }

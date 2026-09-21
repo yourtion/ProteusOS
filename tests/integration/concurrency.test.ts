@@ -54,6 +54,7 @@ function slowExecutor(ms: number): ExecutorProvider {
   const inner = new LocalProcessExecutor(WORKER_PATH);
   return {
     name: "local-process",
+    recoveryPolicy: "retry-safe",
     start: async (req) => {
       await sleep(ms);
       return inner.start(req);

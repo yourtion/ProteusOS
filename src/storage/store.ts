@@ -539,6 +539,11 @@ export class Storage implements KernelStore, RuntimeStore {
     );
   }
 
+  getDispatch(dispatchId: string): DispatchRecord | undefined {
+    const row = this.db.get<DispatchRow>("SELECT * FROM outbox WHERE dispatch_id = ?", dispatchId);
+    return row ? mapDispatch(row) : undefined;
+  }
+
   markDispatched(dispatchId: string, handle: string, at: number): void {
     this.db.run(
       "UPDATE outbox SET state = 'dispatched', handle = ?, dispatched_at = ? WHERE dispatch_id = ?",

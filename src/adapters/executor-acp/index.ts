@@ -51,6 +51,7 @@ export interface AcpExecutorOptions {
 
 export class AcpExecutor implements ExecutorProvider {
   readonly name: string;
+  readonly recoveryPolicy = "manual";
   private readonly agentEntry: string;
   private readonly agentArgs: string[];
   private readonly permissionPolicy: AcpPermissionPolicy;

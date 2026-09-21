@@ -23,7 +23,9 @@ export const TaskFileSchema = z.object({
     })
     .optional(),
   /** 声明所需能力（短名，如 changed-file-summary）；快照须含 capability/<name> 槽位 */
-  requires: z.array(z.string().min(1)).default([]),
+  requires: z
+    .array(z.string().regex(/^[a-z0-9](?:[a-z0-9._-]*[a-z0-9])?$/, "能力名称必须是单段 slug"))
+    .default([]),
   acceptance: z.object({
     outputSchema: z.string().min(1),
     /** 可选固定期望输出，用于 held-out fixture 的语义比对 */

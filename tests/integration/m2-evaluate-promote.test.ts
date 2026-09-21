@@ -335,7 +335,12 @@ describe("M2 切片④：独立评估与晋升", () => {
         { kernel: app.kernel, storage: app.storage, blobs: app.blobs, clock: { now: Date.now } },
         {
           baseSnapshotId: base,
-          capabilities: [{ name: "first-capability", module: goodModuleVariant("-first") }],
+          capabilities: [
+            {
+              name: "first-capability",
+              module: { ...goodModuleVariant("-first"), name: "first-capability" },
+            },
+          ],
           createdBy: "principal-local",
         },
       );
@@ -343,7 +348,12 @@ describe("M2 切片④：独立评估与晋升", () => {
         { kernel: app.kernel, storage: app.storage, blobs: app.blobs, clock: { now: Date.now } },
         {
           baseSnapshotId: first.snapshot.id,
-          capabilities: [{ name: "second-capability", module: goodModuleVariant("-second") }],
+          capabilities: [
+            {
+              name: "second-capability",
+              module: { ...goodModuleVariant("-second"), name: "second-capability" },
+            },
+          ],
           createdBy: "principal-local",
         },
       );

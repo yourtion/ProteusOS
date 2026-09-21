@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import type { Artifact, ArtifactVersion, Clock, GenomeSnapshot, Kernel } from "../kernel/index.ts";
 import type { CapabilityModule } from "../runtime/capability.ts";
+import { isCapabilityName } from "../runtime/capability.ts";
 import type { BlobStore } from "../storage/blobs.ts";
 import { canonicalJson } from "../storage/blobs.ts";
 import type { Storage } from "../storage/store.ts";
@@ -235,6 +236,11 @@ export function ensureCapabilityGenome(
   },
 ): CapabilityGenome {
   return deps.storage.tx(() => {
+    for (const capability of opts.capabilities) {
+      if (!isCapabilityName(capability.name) || capability.module.name !== capability.name) {
+        throw new Error(`能力名称不合法或声明不一致：${capability.name}`);
+      }
+    }
     const { snapshot: base, versions: baseVersions } = deps.kernel.resolveSnapshot(
       opts.baseSnapshotId,
     );

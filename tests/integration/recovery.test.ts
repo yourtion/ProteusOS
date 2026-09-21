@@ -37,7 +37,10 @@ const ACCEPTANCE = {
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function runtimeWith(executor: ExecutorProvider): Runtime {
-  const app = instance();
+  return runtimeFor(instance(), executor);
+}
+
+function runtimeFor(app: AppInstance, executor: ExecutorProvider): Runtime {
   return new Runtime({
     storage: app.storage,
     kernel: app.kernel,
@@ -57,12 +60,14 @@ const realExecutor = () => new LocalProcessExecutor(WORKER_PATH);
 /** 永不 resolve：模拟执行进程随宿主一起消失（promise 被抛弃即"崩溃"） */
 const HANG: ExecutorProvider = {
   name: "local-process",
+  recoveryPolicy: "retry-safe",
   start: () => new Promise<ExecutionResult>(() => undefined),
 };
 
 /** 先真实完成再挂起：模拟"工作已做完、结果未记录即崩溃" */
 const DONE_THEN_HANG: ExecutorProvider = {
   name: "local-process",
+  recoveryPolicy: "retry-safe",
   start: async (req) => {
     const result = await realExecutor().start(req);
     await new Promise<never>(() => undefined);
@@ -78,6 +83,73 @@ async function findRunningRun(): Promise<string> {
 }
 
 describe("M0 切片④：崩溃恢复与对账", () => {
+  it("可能产生外部副作用的执行器缺少完成证据时保持 unknown，不自动重试", async () => {
+    const app = bootSeededInstance();
+    try {
+      const sideEffecting = {
+        name: "local-process",
+        recoveryPolicy: "manual",
+        start: () => new Promise<ExecutionResult>(() => undefined),
+      } satisfies ExecutorProvider;
+      const runtime = runtimeFor(app, sideEffecting);
+      void runtime.submitTask({
+        ...BASE,
+        inputs: [fixturePath("input-a")],
+        acceptance: ACCEPTANCE,
+      });
+      await sleep(100);
+      const run = app.storage.listRunsByStates(["running"], 10).at(-1);
+      if (!run) throw new Error("测试装配失败：找不到进行中的 Run");
+
+      await app.runtime.recoverRun(run.id);
+      const report = await app.runtime.reconcileRun(run.id);
+
+      expect(report.resolved).toMatchObject([{ verdict: "unknown" }]);
+      expect(report.summary).toBeNull();
+      expect(app.storage.getRun(run.id)!.state).toBe("waiting");
+      expect(app.runtime.getRunSummary(run.id).attempts).toHaveLength(1);
+      expect(app.runtime.getRunSummary(run.id).attempts[0]!.state).toBe("unknown");
+    } finally {
+      app.close();
+    }
+  });
+
+  it("可能产生外部副作用的执行器有完整产物时按原 Attempt 成功续跑", async () => {
+    const app = bootSeededInstance();
+    let calls = 0;
+    try {
+      const sideEffecting = {
+        name: "local-process",
+        recoveryPolicy: "manual",
+        start: async (req) => {
+          calls += 1;
+          const result = await realExecutor().start(req);
+          await new Promise<never>(() => undefined);
+          return result;
+        },
+      } satisfies ExecutorProvider;
+      const runtime = runtimeFor(app, sideEffecting);
+      void runtime.submitTask({
+        ...BASE,
+        inputs: [fixturePath("input-a")],
+        acceptance: ACCEPTANCE,
+      });
+      await sleep(100);
+      const run = app.storage.listRunsByStates(["running"], 10).at(-1);
+      if (!run) throw new Error("测试装配失败：找不到进行中的 Run");
+
+      await app.runtime.recoverRun(run.id);
+      const report = await app.runtime.reconcileRun(run.id);
+
+      expect(report.resolved).toMatchObject([{ verdict: "succeeded" }]);
+      expect(report.summary?.state).toBe("succeeded");
+      expect(calls).toBe(1);
+      expect(app.runtime.getRunSummary(run.id).attempts).toHaveLength(1);
+    } finally {
+      app.close();
+    }
+  });
+
   it("派发中崩溃：recover 标记 unknown，reconcile 无产物判 failed 并有界重试成功", async () => {
     runtimeWith(HANG).submitTask({
       ...BASE,
@@ -148,6 +220,7 @@ describe("M0 切片④：崩溃恢复与对账", () => {
     let calls = 0;
     const firstOkThenHang: ExecutorProvider = {
       name: "local-process",
+      recoveryPolicy: "retry-safe",
       start: async (req) => {
         calls += 1;
         if (calls === 1) return realExecutor().start(req);
@@ -188,6 +261,7 @@ describe("M0 切片④：取消竞态", () => {
     raceInst ??= bootSeededInstance();
     const slow: ExecutorProvider = {
       name: "local-process",
+      recoveryPolicy: "retry-safe",
       start: async (req) => {
         await sleep(150);
         return realExecutor().start(req);

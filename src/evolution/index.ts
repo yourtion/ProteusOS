@@ -4,6 +4,7 @@ import type { Clock, IdGen, PromotionRecord } from "../kernel/index.ts";
 import type { Kernel } from "../kernel/index.ts";
 import type { RunSummary, TaskBudget } from "../runtime/types.ts";
 import type { Runtime } from "../runtime/index.ts";
+import { isCapabilityName } from "../runtime/capability.ts";
 import type { BlobStore } from "../storage/blobs.ts";
 import { canonicalJson, digestOf } from "../storage/blobs.ts";
 import type { Storage } from "../storage/store.ts";
@@ -37,6 +38,7 @@ export class Evolution {
    * 将实现规范交给执行器；产出由 test-runner 裁判独立验收（测试失败不能构造候选）。
    */
   async build(input: BuildInput): Promise<RunSummary> {
+    assertCapabilityName(input.capability);
     const { snapshot } = ensureBuilderGenome(
       {
         kernel: this.deps.kernel,
@@ -103,6 +105,7 @@ export class Evolution {
       datasetRef?: string | null;
     },
   ): { candidate: CandidateRecord; created: boolean } {
+    assertCapabilityName(opts.capability);
     const run = this.deps.storage.getRun(builderRunId);
     if (!run) throw new EvolutionError("unknown_run", `builder run ${builderRunId} 不存在`);
     if (run.state !== "succeeded") {
@@ -400,15 +403,15 @@ export class Evolution {
     opts: { authorizedBy: string; operationId?: string; note?: string },
   ): PromoteOutcome {
     const candidate = this.mustGetCandidate(candidateId);
-    const latest = this.deps.storage.listEvaluationsByCandidate(candidateId, 1)[0];
-    if (!latest || latest.verdict !== "eligible") {
-      throw new EvolutionError(
-        "evaluation_not_eligible",
-        `候选 ${candidateId} 缺少 eligible 评估（最新：${latest ? latest.verdict : "无"}），禁止晋升`,
-      );
-    }
     const operationId = opts.operationId ?? this.deps.ids.next();
     return this.deps.storage.tx(() => {
+      const latest = this.deps.storage.listEvaluationsByCandidate(candidateId, 1)[0];
+      if (!latest || latest.verdict !== "eligible") {
+        throw new EvolutionError(
+          "evaluation_not_eligible",
+          `候选 ${candidateId} 缺少 eligible 评估（最新：${latest ? latest.verdict : "无"}），禁止晋升`,
+        );
+      }
       const outcome = this.deps.kernel.promote({
         organismId: this.deps.organismId,
         kind: "adopt",
@@ -621,6 +624,12 @@ function builderImplementationPath(
   capability: string,
 ): string {
   return join(instanceRoot, "workspaces", runId, "dev", "src", `${capability}.mjs`);
+}
+
+function assertCapabilityName(name: string): void {
+  if (!isCapabilityName(name)) {
+    throw new EvolutionError("invalid_capability_name", `能力名称不合法：${name}`);
+  }
 }
 
 function normalizeRegressions(

@@ -251,16 +251,17 @@ M1 增加真实 ACP 的能力协商、权限请求、产物验收、断连与取
 | pi 直连 | 进程内 SDK（`createAgentSession`），非子进程隔离；对一次性工作区按操作者决定显式授信（`projectTrusted`） |
 | 验收裁判 | 按快照 `acceptance-evaluator` 产物内容分发：`stats-acceptance-v1`（JSON Schema + totals 一致性）与 `test-runner-v1`（工作区内跑测试命令，退出码即判据） |
 | 重试身份 | 重试沿用 Process、仅新建 Attempt（§1 的模型）；Attempt 配额检查与创建同事务 |
-| 恢复命令 | `proteus recover`（遗留派发标记 unknown、Run 置 waiting；其余断点续跑，跳过已成功节点）与 `proteus reconcile`（完成证据 = 工作区产物完整性；agent 型节点无原子终产物时判 failed 走有界重试） |
+| 恢复命令 | `proteus recover`（遗留派发标记 unknown、Run 置 waiting；其余断点续跑，跳过已成功节点）与 `proteus reconcile`（完整工作区产物判成功；仅 `retry-safe` 执行器可在缺失产物时判失败并有界重试；ACP、pi 与动态能力执行器保持 unknown，等待人工或外部证据） |
 | M0 未实现项 | §5 的 handle/事件流/cancel 完整执行器合同、多 Attempt 重试的自动触发（当前重试经对账或人工触发）、`inspect` 的恢复能力声明——按需在后续里程碑补齐 |
 
 ### 9.1 实现注记（M2）
 
 | 主题 | 实现选择 |
 | --- | --- |
-| 能力声明 | Task `requires`（短名）↔ 快照槽位 `capability/<name>`；准入事务内检查，缺口 Run 直接以 `waiting` 创建（`missing_capabilities` + `waiting_until`），不执行图 |
+| 能力声明 | Task `requires`（单段可移植 slug）↔ 快照槽位 `capability/<name>`；任务准入、候选构造与能力产物解析统一校验，缺口 Run 直接以 `waiting` 创建（`missing_capabilities` + `waiting_until`），不执行图 |
 | 缺口等待出路 | 只有两条：被 `supersede` 接替（`failed/superseded`）或 `advance` 到期结案（`failed/missing_capability`）；Run 固定自身快照，不存在“能力补齐续跑”——`executeRun` 拒绝缺口 Run，`recover` 识别为 `waiting_capability` |
-| 能力执行 | `capability/` 前缀执行器名 → 快照槽位产物（`capability-module-v1`）落盘工作区 → 独立 node 子进程（cwd=工作区、超时、路径越界拒绝）；不热加载进 kernel（ADR 0006；进程级隔离，真隔离 M3） |
+| 能力执行 | `capability/` 前缀执行器名 → 快照槽位产物（`capability-module-v1`）落盘工作区 → 独立 node 子进程（cwd=工作区、超时、名称与文件目标双重路径边界校验）；不热加载进 kernel（ADR 0006；进程级隔离，真隔离 M3） |
+| 晋升事务 | 最新 Evaluation 的 `eligible` 门在与 CAS 晋升相同的 `BEGIN IMMEDIATE` 事务内读取；事务开始前捕获的旧结论不能用于晋升 |
 | 能力路由 | 决策上下文把 task.requires 展开为 `capability:<name>: true` 布尔键；组合图 decision options 追加能力执行器名；rule-v1 严格匹配零扩展，无声明任务走兜底规则（回归语义） |
 | 评估 Run 入口 | `submitTask(input, options)`：`purpose=evaluation` 显式绑定 `snapshotId`（不读不改 activeGenome）；`evaluatorVersionId` 仅评估用途允许并持久化于 `runs.evaluator_version_id`（恢复/续跑裁判不漂移）；`supersedesRunId`/`taskRevision` 支撑接替 |
 | 接替 | `proteus supersede <runId>`：R1 `failed/superseded` 结案 + 同 Task 修订（revision+1）的 R2 绑当前 active；既有经验与外部结果不抹去 |

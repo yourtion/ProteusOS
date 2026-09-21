@@ -21,6 +21,7 @@ export type PiRunner = (options: PiRunOptions) => Promise<{
 
 export class PiExecutor implements ExecutorProvider {
   readonly name: string;
+  readonly recoveryPolicy = "manual";
   private readonly runner: PiRunner;
 
   constructor(name = "pi", runner: PiRunner = defaultPiRunner) {

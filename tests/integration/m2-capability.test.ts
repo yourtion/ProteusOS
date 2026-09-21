@@ -1,5 +1,6 @@
 import { afterAll, describe, expect, it } from "vitest";
 import type { AppInstance } from "../../src/app/instance.ts";
+import { parseCapabilityModule } from "../../src/runtime/capability.ts";
 import { bootSeededInstance, fixturePath, installCustomGenome } from "../helpers.ts";
 
 /**
@@ -42,6 +43,19 @@ function submitRequires(
 }
 
 describe("M2 切片①：能力声明与缺口等待", () => {
+  it("能力模块名称拒绝路径分隔符与上级目录逃逸", () => {
+    for (const name of ["../../escaped", "nested/capability", "nested\\capability", ".", ".."]) {
+      expect(
+        parseCapabilityModule({
+          kind: "capability-module-v1",
+          name,
+          entry: "index.mjs",
+          files: [{ path: "index.mjs", content: "" }],
+        }),
+      ).toMatchObject({ ok: false });
+    }
+  });
+
   it("声明的能力在快照中缺失 → Run 以 waiting 创建并携带缺口与截止点", async () => {
     const summary = await submitRequires(["changed-file-summary"], 3600);
 

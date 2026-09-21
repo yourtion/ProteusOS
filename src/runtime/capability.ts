@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
-import { isAbsolute, join, resolve } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import type { ExecutionResult } from "./types.ts";
 
 /**
@@ -27,6 +27,11 @@ export type CapabilityModuleParse =
   | { ok: true; module: CapabilityModule }
   | { ok: false; error: string };
 
+/** 能力短名同时进入快照槽位和工作区目录，只允许单段、可移植的 slug。 */
+export function isCapabilityName(name: string): boolean {
+  return /^[a-z0-9](?:[a-z0-9._-]*[a-z0-9])?$/.test(name);
+}
+
 export function parseCapabilityModule(content: unknown): CapabilityModuleParse {
   if (typeof content !== "object" || content === null) {
     return { ok: false, error: "能力模块内容不是对象" };
@@ -38,7 +43,7 @@ export function parseCapabilityModule(content: unknown): CapabilityModuleParse {
       error: `能力模块 kind 应为 capability-module-v1，实际 ${String(c["kind"])}`,
     };
   }
-  if (typeof c["name"] !== "string" || c["name"].length === 0) {
+  if (typeof c["name"] !== "string" || !isCapabilityName(c["name"])) {
     return { ok: false, error: "能力模块缺少合法 name" };
   }
   if (typeof c["entry"] !== "string" || c["entry"].length === 0) {
@@ -79,7 +84,11 @@ export function parseCapabilityModule(content: unknown): CapabilityModuleParse {
 }
 
 export function capabilityModuleDir(workspace: string, name: string): string {
-  return join(workspace, "capability", name);
+  if (!isCapabilityName(name)) throw new Error(`能力名称不合法：${name}`);
+  const capabilityRoot = resolve(workspace, "capability");
+  const moduleRoot = resolve(capabilityRoot, name);
+  if (!isWithin(capabilityRoot, moduleRoot)) throw new Error(`能力模块目录越界：${name}`);
+  return moduleRoot;
 }
 
 /** 独立进程执行能力模块：产物落盘 → node 子进程（cwd=工作区）→ 读 output.json */
@@ -91,7 +100,7 @@ export function runCapabilityModule(
   const moduleRoot = capabilityModuleDir(workspace, module.name);
   for (const f of module.files) {
     const target = resolve(moduleRoot, f.path);
-    if (!target.startsWith(resolve(moduleRoot))) {
+    if (!isWithin(moduleRoot, target)) {
       return {
         ok: false,
         exitCode: null,
@@ -101,7 +110,7 @@ export function runCapabilityModule(
         outputRef: null,
       };
     }
-    mkdirSync(resolve(target, ".."), { recursive: true });
+    mkdirSync(dirname(target), { recursive: true });
     writeFileSync(target, f.content, "utf8");
   }
 
@@ -122,4 +131,9 @@ export function runCapabilityModule(
     // output.json 的存在性由调用方按合同检查（失败时如实记录）
     outputRef: result.status === 0 ? outputRef : null,
   };
+}
+
+function isWithin(root: string, target: string): boolean {
+  const rel = relative(resolve(root), resolve(target));
+  return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel));
 }
