@@ -4,12 +4,16 @@ import {
   buildCommand,
   candidatesCommand,
   cancelCommand,
+  evaluateCommand,
   initCommand,
   inspectCommand,
+  promoteCommand,
   recoverCommand,
   reconcileCommand,
+  rollbackCommand,
   runsCommand,
   submitCommand,
+  supersedeCommand,
 } from "./commands.ts";
 
 const program = new Command();
@@ -79,6 +83,51 @@ withCommon(
     .argument("[id]", "Candidate ID"),
 ).action(async (id: string | undefined, opts) => {
   await candidatesCommand(id, opts);
+});
+
+withCommon(
+  program
+    .command("evaluate")
+    .description("独立评估候选：新能力验收 + 既有能力回归 + 基线对照（裁判由评估计划钉住）")
+    .argument("<id>", "Candidate ID")
+    .requiredOption("--new-capability-task <file>", "新能力验收任务 task.yaml")
+    .requiredOption("--regression-task <file>", "既有能力回归任务 task.yaml"),
+).action(async (id: string, opts) => {
+  await evaluateCommand(id, opts);
+});
+
+withCommon(
+  program
+    .command("promote")
+    .description("operator 批准晋升（须有 eligible 评估；CAS 提交，失败保持原快照）")
+    .argument("<id>", "Candidate ID")
+    .requiredOption("--as <principal>", "授权 operator 的 Principal ID")
+    .option("--operation-id <id>", "幂等操作号（响应丢失重试时读回同一结果）")
+    .option("--note <note>", "授权依据说明"),
+).action(async (id: string, opts) => {
+  await promoteCommand(id, opts);
+});
+
+withCommon(
+  program
+    .command("rollback")
+    .description("回滚默认快照到历史版本（revision 只增不减，只影响后续 Run）")
+    .requiredOption("--to <snapshot>", "目标快照 ID 或 digest")
+    .requiredOption("--as <principal>", "授权 operator 的 Principal ID")
+    .option("--operation-id <id>", "幂等操作号")
+    .option("--note <note>", "回滚原因"),
+).action(async (opts) => {
+  await rollbackCommand(opts);
+});
+
+withCommon(
+  program
+    .command("supersede")
+    .description("结案缺口等待的 Run 并创建接替 Run（R1 → failed/superseded，R2 绑当前快照）")
+    .argument("<id>", "Run ID")
+    .option("--note <note>", "接替说明"),
+).action(async (id: string, opts) => {
+  await supersedeCommand(id, opts);
 });
 
 withCommon(

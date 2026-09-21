@@ -73,6 +73,8 @@ export interface SubmitOptions {
   supersedesRunId?: string;
   /** 评估计划固定的裁判版本；仅 purpose=evaluation 允许 */
   evaluatorVersionId?: string;
+  /** Task 修订号（接替场景为原 Task revision+1）；默认 1 */
+  taskRevision?: number;
 }
 
 export type RuntimeErrorCode =
@@ -217,9 +219,10 @@ export class Runtime {
       }
 
       const now = this.deps.clock.now();
+      const taskRevision = options.taskRevision ?? 1;
       this.deps.storage.insertTask({
         id: taskId,
-        revision: 1,
+        revision: taskRevision,
         requestedBy: input.requestedBy,
         goal: input.goal,
         inputs: [...input.inputs],
@@ -233,7 +236,7 @@ export class Runtime {
       this.deps.storage.insertRun({
         id: runId,
         taskId,
-        taskRevision: 1,
+        taskRevision,
         organismId: this.deps.organismId,
         purpose,
         snapshotId: snapshot.id,
@@ -320,6 +323,25 @@ export class Runtime {
       state: "failed",
       note: `能力缺口等待到期：缺少 ${run.missingCapabilities.join(", ")}，以 failed/missing_capability 结案`,
     };
+  }
+
+  /**
+   * 接替结案（M2，operator 显式调用）：能力缺口等待中的 Run 以 failed/superseded
+   * 结案，原因记录为被新运行接替；接替 Run 由调用方创建并经 supersedesRunId 关联。
+   * 既有经验与外部结果不被抹去。
+   */
+  supersedeRun(runId: string): RunSummary {
+    const run = this.mustGetRun(runId);
+    if (isTerminal(run.state)) {
+      throw new RuntimeError("run_not_pending", `run ${runId} 已终态（${run.state}），不能接替`);
+    }
+    if (!run.missingCapabilities) {
+      throw new RuntimeError(
+        "run_not_pending",
+        `run ${runId} 不在能力缺口等待中；接替仅适用于缺口等待的 Run（其他状态的 Run 请用 cancel）`,
+      );
+    }
+    return this.finalize(runId, "failed", "superseded", []);
   }
 
   /**

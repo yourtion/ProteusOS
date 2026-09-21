@@ -1,14 +1,24 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import type { Clock, IdGen } from "../kernel/index.ts";
+import type { Clock, IdGen, PromotionRecord } from "../kernel/index.ts";
 import type { Kernel } from "../kernel/index.ts";
 import type { RunSummary, TaskBudget } from "../runtime/types.ts";
 import type { Runtime } from "../runtime/index.ts";
 import type { BlobStore } from "../storage/blobs.ts";
 import { digestOf } from "../storage/blobs.ts";
 import type { Storage } from "../storage/store.ts";
-import { ensureBuilderGenome, ensureCapabilityGenome } from "./assets.ts";
-import type { CandidateRecord, CandidateStatus } from "./types.ts";
+import {
+  ensureBuilderGenome,
+  ensureCapabilityGenome,
+  ensureHybridEvaluatorVersion,
+  evaluationProtocolDigest,
+} from "./assets.ts";
+import type {
+  CandidateRecord,
+  CandidateStatus,
+  EvaluationRecord,
+  EvaluationRunOutcome,
+} from "./types.ts";
 
 /**
  * Evolution（M2 最小自举）：委托构建 → 采集构造候选 → （切片④）评估与晋升编排。
@@ -189,6 +199,284 @@ export class Evolution {
     }
     return { status, detail };
   }
+
+  /**
+   * 独立评估（自举故事步骤 4，协议 m2-bootstrap-eval-v1）：
+   * 三个 evaluation Run——候选×新能力验收、候选×回归、基准×回归（健康对照）。
+   * 裁判按内容寻址钉住 hybrid 版本（不取候选快照槽位），候选换裁判放水无效。
+   * 基线对照失败 → inconclusive（评估环境不可信，不判 rejected，可重评）。
+   */
+  async evaluateCandidate(
+    candidateId: string,
+    plan: {
+      newCapability: TaskSubmissionLike;
+      regression: TaskSubmissionLike;
+      requestedBy: string;
+    },
+  ): Promise<{ evaluation: EvaluationRecord; status: CandidateStatus }> {
+    const candidate = this.mustGetCandidate(candidateId);
+    const pinnedEvaluator = ensureHybridEvaluatorVersion(
+      {
+        kernel: this.deps.kernel,
+        storage: this.deps.storage,
+        blobs: this.deps.blobs,
+        clock: this.deps.clock,
+      },
+      { baseSnapshotId: candidate.baseSnapshotId, createdBy: plan.requestedBy },
+    );
+
+    this.deps.storage.tx(() => {
+      this.deps.storage.appendEvent({
+        streamId: `candidate-${candidateId}`,
+        type: "candidate.evaluating",
+        payload: { protocol: "m2-bootstrap-eval-v1", evaluatorVersionId: pinnedEvaluator.id },
+        organismId: this.deps.organismId,
+        occurredAt: this.deps.clock.now(),
+      });
+    });
+
+    const runOutcome = async (
+      role: EvaluationRunOutcome["role"],
+      purpose: string,
+      submission: TaskSubmissionLike,
+      snapshotId: string,
+    ): Promise<EvaluationRunOutcome> => {
+      const summary = await this.deps.runtime.submitTask(
+        { ...submission, requestedBy: plan.requestedBy },
+        { purpose: "evaluation", snapshotId, evaluatorVersionId: pinnedEvaluator.id },
+      );
+      const experience = this.deps.storage.getExperienceByRun(summary.runId);
+      return {
+        role,
+        purpose,
+        runId: summary.runId,
+        snapshotId,
+        state: summary.state,
+        failureReason: summary.failureReason,
+        durationMs: experience?.outcome.durationMs ?? 0,
+      };
+    };
+
+    const [newCapability, regression, baseline] = await Promise.all([
+      runOutcome("new-capability", "新能力验收", plan.newCapability, candidate.proposedSnapshotId),
+      runOutcome("regression", "既有能力回归", plan.regression, candidate.proposedSnapshotId),
+      runOutcome("baseline", "基线健康对照", plan.regression, candidate.baseSnapshotId),
+    ]);
+
+    const passed = (o: EvaluationRunOutcome) => o.state === "succeeded";
+    let verdict: EvaluationRecord["verdict"];
+    let note: string;
+    if (!passed(baseline)) {
+      verdict = "inconclusive";
+      note = "基线对照失败：评估环境不可信，不判 rejected，可修复后重评";
+    } else if (!passed(newCapability) || !passed(regression)) {
+      verdict = "rejected";
+      note = !passed(newCapability)
+        ? `新能力验收失败（${newCapability.failureReason}）`
+        : `既有能力回归失败（${regression.failureReason}）`;
+    } else {
+      verdict = "eligible";
+      note = "新能力验收与既有能力回归均通过";
+    }
+
+    const evaluation: EvaluationRecord = {
+      id: this.deps.ids.next(),
+      candidateId,
+      protocolDigest: evaluationProtocolDigest(),
+      baselineSnapshotId: candidate.baseSnapshotId,
+      runs: [newCapability, regression, baseline],
+      verdict,
+      metrics: {
+        newCapability: { passed: passed(newCapability), durationMs: newCapability.durationMs },
+        regression: { passed: passed(regression), durationMs: regression.durationMs },
+        baseline: { passed: passed(baseline), durationMs: baseline.durationMs },
+        cost: null,
+      },
+      createdAt: this.deps.clock.now(),
+    };
+    this.deps.storage.tx(() => {
+      this.deps.storage.insertEvaluation(evaluation);
+      this.deps.storage.appendEvent({
+        streamId: `candidate-${candidateId}`,
+        type: "candidate.evaluated",
+        payload: { evaluationId: evaluation.id, verdict, note, runs: evaluation.runs },
+        organismId: this.deps.organismId,
+        occurredAt: this.deps.clock.now(),
+      });
+    });
+    return { evaluation, status: this.candidateStatus(candidateId).status };
+  }
+
+  /**
+   * 晋升（自举故事步骤 5）：仅当最新评估 eligible 才放行（评估完成不等于自动授权，
+   * 首版由 operator 显式调用）；同一事务内 kernel.promote + candidate.adopted 事件。
+   * CAS 冲突 → candidate.stale 事件，旧记录保留。
+   */
+  promote(
+    candidateId: string,
+    opts: { authorizedBy: string; operationId?: string; note?: string },
+  ): PromoteOutcome {
+    const candidate = this.mustGetCandidate(candidateId);
+    const latest = this.deps.storage.listEvaluationsByCandidate(candidateId, 1)[0];
+    if (!latest || latest.verdict !== "eligible") {
+      throw new EvolutionError(
+        "evaluation_not_eligible",
+        `候选 ${candidateId} 缺少 eligible 评估（最新：${latest ? latest.verdict : "无"}），禁止晋升`,
+      );
+    }
+    const operationId = opts.operationId ?? this.deps.ids.next();
+    return this.deps.storage.tx(() => {
+      const outcome = this.deps.kernel.promote({
+        organismId: this.deps.organismId,
+        kind: "adopt",
+        toSnapshotId: candidate.proposedSnapshotId,
+        expectedRevision: candidate.baseRevision,
+        operationId,
+        authorizedBy: opts.authorizedBy,
+        evaluationRef: latest.id,
+        authorizationRef: opts.note ?? null,
+        note: opts.note ?? null,
+      });
+      if (outcome.result === "stale") {
+        this.deps.storage.appendEvent({
+          streamId: `candidate-${candidateId}`,
+          type: "candidate.stale",
+          payload: { currentRevision: outcome.currentRevision, operationId },
+          organismId: this.deps.organismId,
+          occurredAt: this.deps.clock.now(),
+        });
+        return outcome;
+      }
+      if (outcome.result === "promoted") {
+        this.deps.storage.appendEvent({
+          streamId: `candidate-${candidateId}`,
+          type: "candidate.adopted",
+          payload: {
+            promotionId: outcome.promotion.id,
+            revision: outcome.promotion.resultRevision,
+            evaluationId: latest.id,
+          },
+          organismId: this.deps.organismId,
+          occurredAt: this.deps.clock.now(),
+        });
+      }
+      this.appendPromotionEvent(outcome.promotion);
+      return outcome;
+    });
+  }
+
+  /**
+   * 回滚（自举故事步骤 7）：对历史快照再做一次 kind=rollback 的 Promotion——
+   * 同样的 CAS 与权限检查，revision 只增不减，不撤销既有外部副作用。
+   */
+  rollback(opts: {
+    toSnapshotId: string;
+    authorizedBy: string;
+    operationId?: string;
+    note?: string;
+  }): PromoteOutcome {
+    const operationId = opts.operationId ?? this.deps.ids.next();
+    return this.deps.storage.tx(() => {
+      const organism = this.deps.kernel.getOrganism(this.deps.organismId);
+      if (!organism) throw new EvolutionError("unknown_organism", "organism 不存在");
+      const outcome = this.deps.kernel.promote({
+        organismId: this.deps.organismId,
+        kind: "rollback",
+        toSnapshotId: opts.toSnapshotId,
+        expectedRevision: organism.revision,
+        operationId,
+        authorizedBy: opts.authorizedBy,
+        note: opts.note ?? null,
+      });
+      if (outcome.result === "promoted") {
+        this.appendPromotionEvent(outcome.promotion);
+      }
+      return outcome;
+    });
+  }
+
+  /**
+   * 接替（自举故事步骤 6）：R1（缺口等待）以 failed/superseded 结案，
+   * 同一 Task 修订（revision+1）创建 R2 绑定当前 active 快照，supersedesRunId 关联。
+   */
+  async supersedeAndReplace(
+    runId: string,
+    opts?: { note?: string },
+  ): Promise<{ superseded: RunSummary; successor: RunSummary }> {
+    const run = this.deps.storage.getRun(runId);
+    if (!run) throw new EvolutionError("unknown_run", `run ${runId} 不存在`);
+    const task = this.deps.storage.getTask(run.taskId);
+    if (!task) throw new EvolutionError("unknown_run", `run ${runId} 的 task 缺失`);
+
+    const superseded = this.deps.runtime.supersedeRun(runId);
+    const successor = await this.deps.runtime.submitTask(
+      {
+        requestedBy: task.requestedBy,
+        goal: task.goal,
+        inputs: task.inputs,
+        budget: task.budget,
+        requires: task.requires,
+        acceptance: task.acceptance,
+      },
+      { supersedesRunId: runId, taskRevision: task.revision + 1 },
+    );
+    this.deps.storage.tx(() => {
+      this.deps.storage.appendEvent({
+        streamId: `run-${runId}`,
+        type: "run.superseded",
+        payload: {
+          successorRunId: successor.runId,
+          successorSnapshotId: successor.snapshotId,
+          note: opts?.note ?? null,
+        },
+        correlationId: runId,
+        runId,
+        organismId: this.deps.organismId,
+        occurredAt: this.deps.clock.now(),
+      });
+    });
+    return { superseded, successor };
+  }
+
+  private appendPromotionEvent(promotion: PromotionRecord): void {
+    this.deps.storage.appendEvent({
+      streamId: `organism-${promotion.organismId}`,
+      type: "organism.genome.promoted",
+      payload: {
+        promotionId: promotion.id,
+        kind: promotion.kind,
+        fromSnapshotId: promotion.fromSnapshotId,
+        toSnapshotId: promotion.toSnapshotId,
+        fromRevision: promotion.expectedRevision,
+        toRevision: promotion.resultRevision,
+        actor: promotion.actor,
+        evaluationRef: promotion.evaluationRef,
+      },
+      organismId: promotion.organismId,
+      occurredAt: this.deps.clock.now(),
+    });
+  }
+
+  private mustGetCandidate(candidateId: string): CandidateRecord {
+    const candidate = this.deps.storage.getCandidate(candidateId);
+    if (!candidate) throw new EvolutionError("unknown_candidate", `候选 ${candidateId} 不存在`);
+    return candidate;
+  }
+}
+
+export type PromoteOutcome =
+  | { result: "promoted"; promotion: PromotionRecord }
+  | { result: "already"; promotion: PromotionRecord }
+  | { result: "stale"; currentRevision: number };
+
+/** 评估计划中的任务定义（submitTask 的 TaskSubmission 形） */
+export interface TaskSubmissionLike {
+  goal: string;
+  inputs: string[];
+  budget: TaskBudget;
+  requires?: string[];
+  missingCapabilityWaitSeconds?: number;
+  acceptance: { outputSchema: string; verifier: string };
 }
 
 export interface EvolutionRuntimeDeps {

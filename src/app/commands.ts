@@ -295,6 +295,8 @@ export async function inspectCommand(id: string, opts: CommonOpts): Promise<void
       withKind("run", inst.storage.getRun(id)) ??
       withKind("task", inst.storage.getTask(id)) ??
       withKind("candidate", inst.storage.getCandidate(id)) ??
+      withKind("evaluation", inst.storage.getEvaluation(id)) ??
+      withKind("promotion", inst.storage.getPromotion(id)) ??
       withKind("snapshot", inst.kernel.getSnapshot(id)) ??
       withKind("snapshot", inst.storage.findSnapshotByDigest(id)) ??
       withKind("artifact-version", inst.storage.getArtifactVersion(id)) ??
@@ -310,7 +312,7 @@ export async function inspectCommand(id: string, opts: CommonOpts): Promise<void
       return;
     }
     throw new Error(
-      `找不到对象：${id}（支持 run/task/candidate/snapshot/version/experience/事件流 ID）`,
+      `找不到对象：${id}（支持 run/task/candidate/evaluation/promotion/snapshot/version/experience/事件流 ID）`,
     );
   } finally {
     inst.close();
@@ -367,4 +369,149 @@ export async function reconcileCommand(id: string, opts: CommonOpts): Promise<vo
 
 function withKind<T>(kind: string, value: T | undefined): { kind: string; value: T } | undefined {
   return value === undefined ? undefined : { kind, value };
+}
+
+function taskSubmissionFrom(file: string, baseDir: string) {
+  const loaded = loadTaskFile(resolve(baseDir, file));
+  return {
+    goal: loaded.file.goal,
+    inputs: loaded.file.inputs.map((p) => resolveFrom(loaded.baseDir, p)),
+    budget: loaded.budget,
+    requires: loaded.file.requires,
+    missingCapabilityWaitSeconds: loaded.file.constraints?.missingCapabilityWaitSeconds,
+    acceptance: {
+      outputSchema: resolveFrom(loaded.baseDir, loaded.file.acceptance.outputSchema),
+      verifier: loaded.file.acceptance.verifier,
+    },
+  };
+}
+
+export interface EvaluateOpts extends CommonOpts {
+  newCapabilityTask: string;
+  regressionTask: string;
+}
+
+export async function evaluateCommand(id: string, opts: EvaluateOpts): Promise<void> {
+  const inst = openInstance(resolveInstanceRoot(opts.home));
+  try {
+    const { evaluation, status } = await inst.evolution.evaluateCandidate(id, {
+      newCapability: taskSubmissionFrom(opts.newCapabilityTask, process.cwd()),
+      regression: taskSubmissionFrom(opts.regressionTask, process.cwd()),
+      requestedBy: PRINCIPAL_ID,
+    });
+    if (opts.json) {
+      console.log(JSON.stringify({ evaluation, status }, null, 2));
+      return;
+    }
+    console.log(
+      `evaluation ${evaluation.id} → ${evaluation.verdict}（candidate ${id} → ${status}）`,
+    );
+    for (const run of evaluation.runs) {
+      console.log(
+        `  ${run.role.padEnd(15)} run ${run.runId} → ${run.state}${run.failureReason ? ` (${run.failureReason})` : ""}  ${run.durationMs}ms`,
+      );
+    }
+    console.log(
+      evaluation.verdict === "eligible"
+        ? "  ✓ 新能力验收与既有能力回归均通过，可 proteus promote"
+        : evaluation.verdict === "rejected"
+          ? "  ✗ 证据不满足：禁止晋升，旧默认行为继续有效"
+          : "  ? 基线对照失败：评估环境不可信（inconclusive），可修复后重评",
+    );
+  } finally {
+    inst.close();
+  }
+}
+
+export interface PromoteOpts extends CommonOpts {
+  as: string;
+  operationId?: string;
+  note?: string;
+}
+
+export async function promoteCommand(id: string, opts: PromoteOpts): Promise<void> {
+  const inst = openInstance(resolveInstanceRoot(opts.home));
+  try {
+    const outcome = inst.evolution.promote(id, {
+      authorizedBy: opts.as,
+      operationId: opts.operationId,
+      note: opts.note,
+    });
+    if (opts.json) {
+      console.log(JSON.stringify(outcome, null, 2));
+      return;
+    }
+    if (outcome.result === "stale") {
+      console.log(
+        `✗ candidate ${id} → stale：基准已过期（当前 revision ${outcome.currentRevision}），须基于新基准重构重评`,
+      );
+      process.exitCode = 1;
+      return;
+    }
+    const label = outcome.result === "already" ? "（幂等读回，revision 未再次增加）" : "";
+    console.log(
+      `✓ candidate ${id} → ${outcome.promotion.kind} ${label}revision ${outcome.promotion.expectedRevision} → ${outcome.promotion.resultRevision}`,
+    );
+    console.log(`  promotion  ${outcome.promotion.id}`);
+    console.log(
+      `  快照       ${outcome.promotion.fromSnapshotId} → ${outcome.promotion.toSnapshotId}`,
+    );
+  } finally {
+    inst.close();
+  }
+}
+
+export async function rollbackCommand(opts: PromoteOpts & { to: string }): Promise<void> {
+  const inst = openInstance(resolveInstanceRoot(opts.home));
+  try {
+    const target = inst.kernel.getSnapshot(opts.to) ?? inst.storage.findSnapshotByDigest(opts.to);
+    if (!target) throw new Error(`快照 ${opts.to}（id 或 digest）不存在`);
+    const outcome = inst.evolution.rollback({
+      toSnapshotId: target.id,
+      authorizedBy: opts.as,
+      operationId: opts.operationId,
+      note: opts.note,
+    });
+    if (opts.json) {
+      console.log(JSON.stringify(outcome, null, 2));
+      return;
+    }
+    if (outcome.result === "stale") {
+      console.log(`✗ 回滚 → stale：revision 已变化（当前 ${outcome.currentRevision}），请重试`);
+      process.exitCode = 1;
+      return;
+    }
+    console.log(
+      `✓ rollback revision ${outcome.promotion.expectedRevision} → ${outcome.promotion.resultRevision}（回滚不倒退 revision，只影响后续 Run）`,
+    );
+    console.log(`  promotion  ${outcome.promotion.id}`);
+  } finally {
+    inst.close();
+  }
+}
+
+export async function supersedeCommand(
+  id: string,
+  opts: CommonOpts & { note?: string },
+): Promise<void> {
+  const inst = openInstance(resolveInstanceRoot(opts.home));
+  try {
+    const { superseded, successor } = await inst.evolution.supersedeAndReplace(id, {
+      note: opts.note,
+    });
+    if (opts.json) {
+      console.log(JSON.stringify({ superseded, successor }, null, 2));
+      return;
+    }
+    console.log(`run ${id} → failed/superseded（能力缺失且被新运行接替）`);
+    console.log(
+      `run ${successor.runId} → ${successor.state}（接替，绑定快照 ${successor.snapshotId}）`,
+    );
+    if (successor.state === "waiting") {
+      console.log("  接替 Run 仍在能力缺口等待——请确认默认快照已含所需能力");
+      process.exitCode = 1;
+    }
+  } finally {
+    inst.close();
+  }
 }

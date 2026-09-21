@@ -62,3 +62,26 @@ export interface GenomeSnapshot {
 }
 
 export type ArtifactSlot = string;
+
+/** Promotion 种类：adopt=采用候选；rollback=回滚到历史快照（同样走 CAS，revision 只增不减） */
+export type PromotionKind = "adopt" | "rollback";
+
+/**
+ * 晋升记录（M2）：成功记录与指针切换同事务提交；
+ * operationId 幂等——提交成功但响应丢失时按它读回同一结果。
+ */
+export interface PromotionRecord {
+  id: string;
+  operationId: string;
+  kind: PromotionKind;
+  organismId: string;
+  fromSnapshotId: string;
+  toSnapshotId: string;
+  expectedRevision: number;
+  resultRevision: number;
+  evaluationRef: string | null;
+  authorizationRef: string | null;
+  actor: string;
+  note: string | null;
+  createdAt: number;
+}

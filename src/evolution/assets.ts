@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { Artifact, ArtifactVersion, Clock, GenomeSnapshot, Kernel } from "../kernel/index.ts";
 import type { CapabilityModule } from "../runtime/capability.ts";
 import type { BlobStore } from "../storage/blobs.ts";
@@ -72,6 +73,58 @@ export const HYBRID_EVALUATOR_CONTENT = {
   kind: "hybrid-acceptance-v1",
   checks: ["json-schema", "totals-consistency(stats 形态输出)"],
 } as const;
+
+/**
+ * 评估协议（m2-bootstrap-eval-v1，构造候选前固定，避免事后移动标准）：
+ * 成功与回归为硬约束，质量/时延/成本分别比较，不合成总分。
+ */
+export const EVALUATION_PROTOCOL_CONTENT = {
+  schemaVersion: 1,
+  kind: "m2-bootstrap-eval-v1",
+  runs: [
+    { role: "new-capability", binding: "candidate", requisite: "succeeded" },
+    { role: "regression", binding: "candidate", requisite: "succeeded" },
+    { role: "baseline", binding: "base", requisite: "succeeded" },
+  ],
+  verdictRules: {
+    eligible: "三个 Run 全部 succeeded",
+    rejected: "候选绑定的新能力验收或回归失败（证据保留）",
+    inconclusive: "基线对照失败——评估环境不可信，不判 rejected，可重评",
+  },
+  evaluator: "按内容寻址钉住 hybrid-acceptance-v1（不取候选快照槽位）",
+  metrics: ["success", "regression", "latency"],
+} as const;
+
+export function evaluationProtocolDigest(): string {
+  return createHash("sha256")
+    .update(canonicalJson(EVALUATION_PROTOCOL_CONTENT), "utf8")
+    .digest("hex");
+}
+
+/**
+ * 评估计划钉住的裁判版本：按内容寻址注册 HYBRID_EVALUATOR_CONTENT。
+ * digest 幂等——与组合候选时注册的是同一版本；即使候选快照的
+ * acceptance-evaluator 槽位被换成放水裁判，评估裁判也不受影响。
+ */
+export function ensureHybridEvaluatorVersion(
+  deps: EvolutionDeps,
+  opts: { baseSnapshotId: string; createdBy: string },
+): ArtifactVersion {
+  return deps.storage.tx(() => {
+    const { versions } = deps.kernel.resolveSnapshot(opts.baseSnapshotId);
+    const baseEvaluator = versions.get("acceptance-evaluator");
+    if (!baseEvaluator) {
+      throw new Error(`基准快照 ${opts.baseSnapshotId} 缺少 acceptance-evaluator 槽位`);
+    }
+    deps.blobs.write(canonicalJson(EVALUATION_PROTOCOL_CONTENT));
+    return registerDerivedVersion(deps, {
+      slot: "acceptance-evaluator",
+      baseVersion: baseEvaluator,
+      content: HYBRID_EVALUATOR_CONTENT,
+      createdBy: opts.createdBy,
+    });
+  });
+}
 
 export const EVOLUTION_LINEAGE_ID = "lineage-evolution";
 

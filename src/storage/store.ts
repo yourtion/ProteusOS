@@ -1,6 +1,7 @@
 import type { SQLInputValue } from "node:sqlite";
 import type { ArtifactVersion, GenomeSnapshot, KernelStore } from "../kernel/index.ts";
-import type { CandidateRecord } from "../evolution/types.ts";
+import type { PromotionRecord } from "../kernel/index.ts";
+import type { CandidateRecord, EvaluationRecord } from "../evolution/types.ts";
 import type {
   AttemptRecord,
   AttemptState,
@@ -23,11 +24,13 @@ import type {
   AttemptRow,
   CandidateRow,
   DispatchRow,
+  EvaluationRow,
   EventRow,
   ExperienceRow,
   OrganismRow,
   PrincipalRow,
   ProcessRow,
+  PromotionRow,
   RunRow,
   SnapshotRow,
   TaskRow,
@@ -601,6 +604,79 @@ export class Storage implements KernelStore, RuntimeStore {
       )
       .map(mapCandidate);
   }
+
+  insertEvaluation(e: EvaluationRecord): void {
+    this.db.run(
+      `INSERT INTO evaluations (id, candidate_id, protocol_digest, baseline_snapshot_id, runs, verdict, metrics, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      e.id,
+      e.candidateId,
+      e.protocolDigest,
+      e.baselineSnapshotId,
+      JSON.stringify(e.runs),
+      e.verdict,
+      JSON.stringify(e.metrics),
+      e.createdAt,
+    );
+  }
+
+  getEvaluation(id: string): EvaluationRecord | undefined {
+    const row = this.db.get<EvaluationRow>("SELECT * FROM evaluations WHERE id = ?", id);
+    return row ? mapEvaluation(row) : undefined;
+  }
+
+  listEvaluationsByCandidate(candidateId: string, limit: number): EvaluationRecord[] {
+    return this.db
+      .all<EvaluationRow>(
+        "SELECT * FROM evaluations WHERE candidate_id = ? ORDER BY created_at DESC LIMIT ?",
+        candidateId,
+        limit,
+      )
+      .map(mapEvaluation);
+  }
+
+  insertPromotion(p: PromotionRecord): void {
+    this.db.run(
+      `INSERT INTO promotions (id, operation_id, kind, organism_id, from_snapshot_id, to_snapshot_id, expected_revision, result_revision, evaluation_ref, authorization_ref, actor, note, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      p.id,
+      p.operationId,
+      p.kind,
+      p.organismId,
+      p.fromSnapshotId,
+      p.toSnapshotId,
+      p.expectedRevision,
+      p.resultRevision,
+      p.evaluationRef,
+      p.authorizationRef,
+      p.actor,
+      p.note,
+      p.createdAt,
+    );
+  }
+
+  getPromotionByOperationId(operationId: string): PromotionRecord | undefined {
+    const row = this.db.get<PromotionRow>(
+      "SELECT * FROM promotions WHERE operation_id = ?",
+      operationId,
+    );
+    return row ? mapPromotion(row) : undefined;
+  }
+
+  getPromotion(id: string): PromotionRecord | undefined {
+    const row = this.db.get<PromotionRow>("SELECT * FROM promotions WHERE id = ?", id);
+    return row ? mapPromotion(row) : undefined;
+  }
+
+  listPromotions(organismId: string, limit: number): PromotionRecord[] {
+    return this.db
+      .all<PromotionRow>(
+        "SELECT * FROM promotions WHERE organism_id = ? ORDER BY created_at DESC LIMIT ?",
+        organismId,
+        limit,
+      )
+      .map(mapPromotion);
+  }
 }
 
 // ---- 行映射 ----
@@ -714,6 +790,37 @@ function mapCandidate(row: CandidateRow): CandidateRecord {
     proposedBy: row.proposed_by,
     sourceRefs: JSON.parse(row.source_refs) as Record<string, string>,
     datasetRef: row.dataset_ref,
+    createdAt: row.created_at,
+  };
+}
+
+function mapEvaluation(row: EvaluationRow): EvaluationRecord {
+  return {
+    id: row.id,
+    candidateId: row.candidate_id,
+    protocolDigest: row.protocol_digest,
+    baselineSnapshotId: row.baseline_snapshot_id,
+    runs: JSON.parse(row.runs) as EvaluationRecord["runs"],
+    verdict: row.verdict as EvaluationRecord["verdict"],
+    metrics: JSON.parse(row.metrics) as EvaluationRecord["metrics"],
+    createdAt: row.created_at,
+  };
+}
+
+function mapPromotion(row: PromotionRow): PromotionRecord {
+  return {
+    id: row.id,
+    operationId: row.operation_id,
+    kind: row.kind as PromotionRecord["kind"],
+    organismId: row.organism_id,
+    fromSnapshotId: row.from_snapshot_id,
+    toSnapshotId: row.to_snapshot_id,
+    expectedRevision: row.expected_revision,
+    resultRevision: row.result_revision,
+    evaluationRef: row.evaluation_ref,
+    authorizationRef: row.authorization_ref,
+    actor: row.actor,
+    note: row.note,
     createdAt: row.created_at,
   };
 }

@@ -7,6 +7,8 @@ import type {
   Organism,
   Principal,
   PrincipalKind,
+  PromotionKind,
+  PromotionRecord,
 } from "./types.ts";
 
 /** Kernel 持久化 port；由 storage 实现。Kernel 自身不触碰数据库或 SDK。 */
@@ -30,6 +32,8 @@ export interface KernelStore {
     snapshotId: string,
     expectedRevision: number,
   ): { ok: true; revision: number } | { ok: false; reason: "conflict" };
+  insertPromotion(p: PromotionRecord): void;
+  getPromotionByOperationId(operationId: string): PromotionRecord | undefined;
 }
 
 export interface Clock {
@@ -58,7 +62,10 @@ export class KernelError extends Error {
     | "unknown_version"
     | "slot_mismatch"
     | "missing_binding"
-    | "duplicate_slot";
+    | "duplicate_slot"
+    | "unknown_organism"
+    | "unknown_principal"
+    | "promotion_target_unresolvable";
 
   constructor(code: KernelError["code"], message: string) {
     super(message);
@@ -248,6 +255,76 @@ export class Kernel {
   ): { ok: true; revision: number } | { ok: false; reason: "conflict" } {
     return this.store.setActiveGenome(organismId, snapshotId, expectedRevision);
   }
+
+  /**
+   * 晋升（M2）：一次验证快照可解析、授权者存在与 revision，再交由同事务的
+   * CAS 与成功记录原子提交（docs/repository.md：调用者不手动串起可漏掉的步骤）。
+   * - operationId 已存在 → already：幂等读回同一结果，不重复增加 revision
+   * - CAS 冲突 → stale：不落记录，调用方据此重构候选重评
+   * 事件记录由调用方（evolution）在同一事务内追加。
+   * 必须在 Storage.tx 内调用。
+   */
+  promote(input: {
+    organismId: string;
+    kind: PromotionKind;
+    toSnapshotId: string;
+    expectedRevision: number;
+    operationId: string;
+    authorizedBy: string;
+    evaluationRef?: string | null;
+    authorizationRef?: string | null;
+    note?: string | null;
+  }):
+    | { result: "promoted"; promotion: PromotionRecord }
+    | { result: "already"; promotion: PromotionRecord }
+    | { result: "stale"; currentRevision: number } {
+    const existing = this.store.getPromotionByOperationId(input.operationId);
+    if (existing) return { result: "already", promotion: existing };
+
+    const organism = this.store.getOrganism(input.organismId);
+    if (!organism) {
+      throw new KernelError("unknown_organism", `organism ${input.organismId} 不存在`);
+    }
+    // 目标快照必须可解析完整依赖闭包（不能回滚/晋升到依赖缺失的组合）
+    try {
+      this.resolveSnapshot(input.toSnapshotId);
+    } catch (err) {
+      throw new KernelError(
+        "promotion_target_unresolvable",
+        `目标快照 ${input.toSnapshotId} 不可解析：${String(err)}`,
+      );
+    }
+    if (!this.store.getPrincipal(input.authorizedBy)) {
+      throw new KernelError("unknown_principal", `授权者 ${input.authorizedBy} 不存在`);
+    }
+
+    const fromSnapshotId = organism.activeGenomeId ?? "";
+    const cas = this.store.setActiveGenome(
+      input.organismId,
+      input.toSnapshotId,
+      input.expectedRevision,
+    );
+    if (!cas.ok) {
+      return { result: "stale", currentRevision: organism.revision };
+    }
+    const promotion: PromotionRecord = {
+      id: this.ids.next(),
+      operationId: input.operationId,
+      kind: input.kind,
+      organismId: input.organismId,
+      fromSnapshotId,
+      toSnapshotId: input.toSnapshotId,
+      expectedRevision: input.expectedRevision,
+      resultRevision: cas.revision,
+      evaluationRef: input.evaluationRef ?? null,
+      authorizationRef: input.authorizationRef ?? null,
+      actor: input.authorizedBy,
+      note: input.note ?? null,
+      createdAt: this.clock.now(),
+    };
+    this.store.insertPromotion(promotion);
+    return { result: "promoted", promotion };
+  }
 }
 
 /**
@@ -269,4 +346,13 @@ export function snapshotDigest(
   return createHash("sha256").update(sorted).digest("hex");
 }
 
-export type { Artifact, ArtifactVersion, GenomeSnapshot, Lineage, Organism, Principal };
+export type {
+  Artifact,
+  ArtifactVersion,
+  GenomeSnapshot,
+  Lineage,
+  Organism,
+  Principal,
+  PromotionKind,
+  PromotionRecord,
+} from "./types.ts";

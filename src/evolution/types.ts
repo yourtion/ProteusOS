@@ -1,8 +1,9 @@
 /**
  * Evolution 领域类型（M2）。三种记录分别表达的事实不可合并（docs/evolution.md §5）：
- * Candidate 提议、Evaluation 证据、Promotion 决定。
+ * Candidate 提议、Evaluation 证据、Promotion 决定（Promotion 归 kernel 领域，此处 re-export）。
  * Candidate 流程状态由 candidate-<id> 事件流投影，不物化为 status 列。
  */
+export type { PromotionKind, PromotionRecord } from "../kernel/types.ts";
 
 export interface CandidateRecord {
   id: string;
@@ -45,22 +46,6 @@ export interface EvaluationRecord {
   /** eligible=requisite 全过；rejected=候选失败；inconclusive=评估环境不可信（可重评） */
   verdict: "eligible" | "rejected" | "inconclusive";
   metrics: EvaluationMetrics;
-  createdAt: number;
-}
-
-export interface PromotionRecord {
-  id: string;
-  operationId: string;
-  kind: "adopt" | "rollback";
-  organismId: string;
-  fromSnapshotId: string;
-  toSnapshotId: string;
-  expectedRevision: number;
-  resultRevision: number;
-  evaluationRef: string | null;
-  authorizationRef: string | null;
-  actor: string;
-  note: string | null;
   createdAt: number;
 }
 

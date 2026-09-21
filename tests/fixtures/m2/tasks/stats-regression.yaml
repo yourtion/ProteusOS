@@ -1,0 +1,10 @@
+goal: 统计摘要（既有能力回归）
+inputs: ["../../stats/input-a"]
+constraints:
+  budget:
+    maxAttempts: 3
+    maxWallClockSeconds: 60
+requires: []
+acceptance:
+  outputSchema: ../../stats/schemas/stats-summary.schema.json
+  verifier: stats-acceptance

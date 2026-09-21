@@ -1,0 +1,10 @@
+goal: 对变更清单生成可验证的文件分类摘要（新能力验收）
+inputs: ["../inputs/changed-files.json"]
+constraints:
+  budget:
+    maxAttempts: 3
+    maxWallClockSeconds: 60
+requires: ["changed-file-summary"]
+acceptance:
+  outputSchema: ../schemas/changed-file-summary.schema.json
+  verifier: stats-acceptance
