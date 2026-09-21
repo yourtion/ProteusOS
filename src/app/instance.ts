@@ -7,6 +7,7 @@ import { RuleDecisionProvider } from "../adapters/decision-rule/index.ts";
 import { AcpExecutor } from "../adapters/executor-acp/index.ts";
 import { LocalProcessExecutor } from "../adapters/executor-process/index.ts";
 import { PiExecutor } from "../adapters/executor-pi/index.ts";
+import { Evolution } from "../evolution/index.ts";
 import { Kernel } from "../kernel/index.ts";
 import { Runtime } from "../runtime/index.ts";
 import type { ExecutorProvider } from "../runtime/types.ts";
@@ -29,6 +30,7 @@ export interface AppInstance {
   storage: Storage;
   kernel: Kernel;
   runtime: Runtime;
+  evolution: Evolution;
   blobs: BlobStore;
   logger: Logger;
   close(): void;
@@ -117,11 +119,22 @@ export function openInstance(
     ids,
     organismBudget: options.organismBudget ?? DEFAULT_ORGANISM_BUDGET,
   });
+  const evolution = new Evolution({
+    kernel,
+    storage,
+    blobs,
+    runtime,
+    organismId: ORGANISM_ID,
+    instanceRoot: root,
+    clock,
+    ids,
+  });
   return {
     root,
     storage,
     kernel,
     runtime,
+    evolution,
     blobs,
     logger: options.logger ?? createLogger(),
     close: () => db.close(),

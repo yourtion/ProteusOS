@@ -75,6 +75,71 @@ export const HYBRID_EVALUATOR_CONTENT = {
 
 export const EVOLUTION_LINEAGE_ID = "lineage-evolution";
 
+/**
+ * builder 快照：固定 builder 图（dev → check）+ test-runner 裁判。
+ * 图骨架固定，执行器名与测试命令按参数注入；digest 幂等。
+ * 构建规范只授予写工作区之权，不涉及 seed 裁判与 kernel（roadmap M2 步骤 2）。
+ */
+export function ensureBuilderGenome(
+  deps: EvolutionDeps,
+  opts: {
+    executorName: string;
+    testCommand: string[];
+    createdBy: string;
+  },
+): { snapshot: GenomeSnapshot } {
+  return deps.storage.tx(() => {
+    deps.kernel.createLineage(EVOLUTION_LINEAGE_ID, opts.createdBy, "scope:evolution");
+    const now = deps.clock.now();
+    deps.storage.insertArtifact({
+      id: "builder-graph",
+      kind: "task-graph",
+      lineageId: EVOLUTION_LINEAGE_ID,
+      ownerId: opts.createdBy,
+      createdAt: now,
+    });
+    deps.storage.insertArtifact({
+      id: "builder-acceptance",
+      kind: "acceptance-evaluator",
+      lineageId: EVOLUTION_LINEAGE_ID,
+      ownerId: opts.createdBy,
+      createdAt: now,
+    });
+    const graphVersion = registerDerivedVersion(deps, {
+      slot: "task-graph",
+      baseVersion: undefined,
+      artifact: deps.storage.getArtifact("builder-graph")!,
+      content: {
+        schemaVersion: 2,
+        kind: "dag-v1",
+        nodes: [
+          { id: "dev", type: "execute", executor: opts.executorName, dependsOn: [] },
+          {
+            id: "check",
+            type: "verify",
+            verifier: "builder-acceptance",
+            inputFrom: "dev",
+            dependsOn: ["dev"],
+          },
+        ],
+      },
+      createdBy: opts.createdBy,
+    });
+    const evaluatorVersion = registerDerivedVersion(deps, {
+      slot: "acceptance-evaluator",
+      baseVersion: undefined,
+      artifact: deps.storage.getArtifact("builder-acceptance")!,
+      content: { schemaVersion: 1, kind: "test-runner-v1", command: opts.testCommand },
+      createdBy: opts.createdBy,
+    });
+    const snapshot = deps.kernel.createSnapshot(
+      { "task-graph": graphVersion.id, "acceptance-evaluator": evaluatorVersion.id },
+      opts.createdBy,
+    );
+    return { snapshot };
+  });
+}
+
 export interface CapabilityAsset {
   name: string;
   module: CapabilityModule;

@@ -1,5 +1,6 @@
 import type { SQLInputValue } from "node:sqlite";
 import type { ArtifactVersion, GenomeSnapshot, KernelStore } from "../kernel/index.ts";
+import type { CandidateRecord } from "../evolution/types.ts";
 import type {
   AttemptRecord,
   AttemptState,
@@ -20,6 +21,7 @@ import type { SqliteDb } from "./sqlite.ts";
 import type {
   ArtifactRow,
   AttemptRow,
+  CandidateRow,
   DispatchRow,
   EventRow,
   ExperienceRow,
@@ -556,6 +558,49 @@ export class Storage implements KernelStore, RuntimeStore {
       ? this.db.all<DispatchRow>("SELECT * FROM outbox WHERE state = ?", state).map(mapDispatch)
       : this.db.all<DispatchRow>("SELECT * FROM outbox").map(mapDispatch);
   }
+
+  // ---- Evolution：candidate / evaluation / promotion（M2）----
+
+  insertCandidate(c: CandidateRecord): void {
+    this.db.run(
+      `INSERT INTO candidates (id, organism_id, base_snapshot_id, base_revision, proposed_snapshot_id, hypothesis, proposed_by, source_refs, dataset_ref, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      c.id,
+      c.organismId,
+      c.baseSnapshotId,
+      c.baseRevision,
+      c.proposedSnapshotId,
+      c.hypothesis,
+      c.proposedBy,
+      JSON.stringify(c.sourceRefs),
+      c.datasetRef,
+      c.createdAt,
+    );
+  }
+
+  getCandidate(id: string): CandidateRecord | undefined {
+    const row = this.db.get<CandidateRow>("SELECT * FROM candidates WHERE id = ?", id);
+    return row ? mapCandidate(row) : undefined;
+  }
+
+  findCandidateByProposedSnapshot(organismId: string, proposedSnapshotId: string) {
+    const row = this.db.get<CandidateRow>(
+      "SELECT * FROM candidates WHERE organism_id = ? AND proposed_snapshot_id = ? ORDER BY created_at LIMIT 1",
+      organismId,
+      proposedSnapshotId,
+    );
+    return row ? mapCandidate(row) : undefined;
+  }
+
+  listCandidates(organismId: string, limit: number): CandidateRecord[] {
+    return this.db
+      .all<CandidateRow>(
+        "SELECT * FROM candidates WHERE organism_id = ? ORDER BY created_at DESC LIMIT ?",
+        organismId,
+        limit,
+      )
+      .map(mapCandidate);
+  }
 }
 
 // ---- 行映射 ----
@@ -655,5 +700,20 @@ function mapDispatch(row: DispatchRow): DispatchRecord {
     createdAt: row.created_at,
     dispatchedAt: row.dispatched_at,
     completedAt: row.completed_at,
+  };
+}
+
+function mapCandidate(row: CandidateRow): CandidateRecord {
+  return {
+    id: row.id,
+    organismId: row.organism_id,
+    baseSnapshotId: row.base_snapshot_id,
+    baseRevision: row.base_revision,
+    proposedSnapshotId: row.proposed_snapshot_id,
+    hypothesis: row.hypothesis,
+    proposedBy: row.proposed_by,
+    sourceRefs: JSON.parse(row.source_refs) as Record<string, string>,
+    datasetRef: row.dataset_ref,
+    createdAt: row.created_at,
   };
 }

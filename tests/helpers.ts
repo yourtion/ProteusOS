@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { openInstance, type AppInstance } from "../src/app/instance.ts";
+import type { ExecutorProvider } from "../src/runtime/types.ts";
 import { installSeed, canonicalJson } from "../src/app/seed.ts";
 
 export const FIXTURES = fileURLToPath(new URL("./fixtures/stats", import.meta.url));
@@ -16,9 +17,12 @@ export function tempInstanceRoot(): string {
   return mkdtempSync(join(tmpdir(), "proteos-test-"));
 }
 
-/** 建临时实例并安装 seed（每次调用都是干净实例） */
-export function bootSeededInstance(root: string = tempInstanceRoot()): AppInstance {
-  const inst = openInstance(root);
+/** 建临时实例并安装 seed（每次调用都是干净实例）；executors 可注入测试替身 */
+export function bootSeededInstance(
+  root: string = tempInstanceRoot(),
+  executors?: Map<string, ExecutorProvider>,
+): AppInstance {
+  const inst = openInstance(root, executors ? { executors } : {});
   installSeed({
     kernel: inst.kernel,
     storage: inst.storage,

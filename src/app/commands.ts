@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { basename, join, resolve } from "node:path";
 import { openInstance, resolveInstanceRoot } from "./instance.ts";
 import { PRINCIPAL_ID, installSeed } from "./seed.ts";
 import { loadTaskFile, resolveFrom } from "./task-file.ts";
@@ -170,12 +172,129 @@ export async function advanceCommand(id: string, opts: CommonOpts): Promise<void
   }
 }
 
+export interface BuildOpts extends CommonOpts {
+  capability: string;
+  spec: string;
+  tests: string;
+  executor?: string;
+}
+
+/** 委托构建（自举故事步骤 2-3）：builder Run 内联到终态，成功则采集构造候选 */
+export async function buildCommand(opts: BuildOpts): Promise<void> {
+  const goal = readFileSync(resolve(opts.spec), "utf8");
+  const testsDir = resolve(opts.tests);
+  const inst = openInstance(resolveInstanceRoot(opts.home));
+  try {
+    const summary = await inst.evolution.build({
+      capability: opts.capability,
+      goal,
+      inputs: [testsDir],
+      executorName: opts.executor ?? "claude-code-acp",
+      // Node 26 的 --test 需要具体测试文件；约定测试目录含 <capability>.test.mjs
+      testCommand: [
+        "node",
+        "--test",
+        join("inputs", basename(testsDir), `${opts.capability}.test.mjs`),
+      ],
+      budget: { maxAttempts: 3, maxWallClockSeconds: 600 },
+      outputSchema: resolve(opts.spec), // test-runner 裁判不消费 schema；仅满足路径校验
+      requestedBy: PRINCIPAL_ID,
+    });
+    if (summary.state !== "succeeded") {
+      if (opts.json) {
+        console.log(JSON.stringify({ builderRun: summary, candidate: null }, null, 2));
+      } else {
+        console.log(
+          `✗ builder run ${summary.runId} → ${summary.state}（${summary.failureReason}）`,
+        );
+        console.log("  测试未通过的产出不能构造候选；请修正规范或实现后重试");
+      }
+      process.exitCode = 1;
+      return;
+    }
+    const { candidate, created } = inst.evolution.collectCandidate(summary.runId, {
+      capability: opts.capability,
+      hypothesis: `为 ${opts.capability} 增加派生能力（构建来源 run ${summary.runId}）`,
+      proposedBy: PRINCIPAL_ID,
+    });
+    const status = inst.evolution.candidateStatus(candidate.id);
+    if (opts.json) {
+      console.log(
+        JSON.stringify({ builderRun: summary.runId, candidate, status, created }, null, 2),
+      );
+      return;
+    }
+    console.log(`✓ builder run ${summary.runId} → succeeded`);
+    console.log(
+      `${created ? "✓" : "·"} candidate ${candidate.id} → ${status.status}${created ? "" : "（快照去重，复用既有候选）"}`,
+    );
+    console.log(`  基准       ${candidate.baseSnapshotId} (revision ${candidate.baseRevision})`);
+    console.log(`  候选快照   ${candidate.proposedSnapshotId}`);
+  } finally {
+    inst.close();
+  }
+}
+
+export async function candidatesCommand(id: string | undefined, opts: CommonOpts): Promise<void> {
+  const inst = openInstance(resolveInstanceRoot(opts.home));
+  try {
+    if (id) {
+      const candidate = inst.storage.getCandidate(id);
+      if (!candidate) throw new Error(`candidate ${id} 不存在`);
+      const status = inst.evolution.candidateStatus(id);
+      const events = inst.storage.listEvents({ streamId: `candidate-${id}` }, 100);
+      if (opts.json) {
+        console.log(JSON.stringify({ candidate, status, events }, null, 2));
+        return;
+      }
+      console.log(`candidate  ${candidate.id}`);
+      console.log(`status     ${status.status} — ${status.detail}`);
+      console.log(`基准       ${candidate.baseSnapshotId} (revision ${candidate.baseRevision})`);
+      console.log(`候选快照   ${candidate.proposedSnapshotId}`);
+      console.log(`hypothesis ${candidate.hypothesis}`);
+      console.log(
+        `proposedBy ${candidate.proposedBy}  ${new Date(candidate.createdAt).toISOString()}`,
+      );
+      console.log(`source     ${JSON.stringify(candidate.sourceRefs)}`);
+      console.log(`events:`);
+      for (const e of events) {
+        console.log(`  ${String(e.seq).padStart(3)}  ${e.type}`);
+      }
+      return;
+    }
+    const candidates = inst.storage.listCandidates("organism-default", 20);
+    if (opts.json) {
+      console.log(
+        JSON.stringify(
+          candidates.map((c) => ({ ...c, status: inst.evolution.candidateStatus(c.id).status })),
+          null,
+          2,
+        ),
+      );
+      return;
+    }
+    if (candidates.length === 0) {
+      console.log("（无候选）");
+      return;
+    }
+    for (const c of candidates) {
+      const status = inst.evolution.candidateStatus(c.id);
+      console.log(
+        `${c.id}  ${status.status.padEnd(10)} ${new Date(c.createdAt).toISOString()}  ${c.hypothesis.slice(0, 50)}`,
+      );
+    }
+  } finally {
+    inst.close();
+  }
+}
+
 export async function inspectCommand(id: string, opts: CommonOpts): Promise<void> {
   const inst = openInstance(resolveInstanceRoot(opts.home));
   try {
     const found =
       withKind("run", inst.storage.getRun(id)) ??
       withKind("task", inst.storage.getTask(id)) ??
+      withKind("candidate", inst.storage.getCandidate(id)) ??
       withKind("snapshot", inst.kernel.getSnapshot(id)) ??
       withKind("snapshot", inst.storage.findSnapshotByDigest(id)) ??
       withKind("artifact-version", inst.storage.getArtifactVersion(id)) ??
@@ -190,7 +309,9 @@ export async function inspectCommand(id: string, opts: CommonOpts): Promise<void
       console.log(JSON.stringify({ kind: "events", streamId: id, events }, null, 2));
       return;
     }
-    throw new Error(`找不到对象：${id}（支持 run/task/snapshot/version/experience/事件流 ID）`);
+    throw new Error(
+      `找不到对象：${id}（支持 run/task/candidate/snapshot/version/experience/事件流 ID）`,
+    );
   } finally {
     inst.close();
   }

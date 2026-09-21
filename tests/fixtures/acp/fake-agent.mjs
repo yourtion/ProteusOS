@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 /**
  * 测试用 fake ACP agent（M1）：真实实现 ACP 协议（@agentclientprotocol/sdk），
  * 行为脚本化，供 executor-acp 合同测试与 M1 验收故事（CI）使用。
@@ -9,10 +8,13 @@
  * - 含 "DENY-ME"   → 权限被拒后 stopReason=cancelled
  * - 含 "SLOW-MODE" → 模拟长任务：等待约 4s（期间可被 session/cancel 打断为 cancelled）
  * - 含 "EXIT-MODE" → 处理中进程自行退出（模拟 agent 崩溃断连）
+ * - 含 "CHANGED-FILE-SUMMARY"（M2 builder）→ 写 src/changed-file-summary.mjs
+ *   （BUGGY 同用：分类恒为 other，能力测试失败）
  * - 默认           → 请求权限 → 写正确实现 src/wordcount.mjs → end_turn
  */
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { Readable, Writable } from "node:stream";
 import { agent, methods, ndJsonStream, PROTOCOL_VERSION } from "@agentclientprotocol/sdk";
 
@@ -60,7 +62,7 @@ const app = agent({ name: "fake-acp-agent" })
     const toolCall = {
       sessionUpdate: "tool_call",
       toolCallId: "tool-1",
-      title: "write src/wordcount.mjs",
+      title: "write implementation",
       kind: "create",
       status: "in_progress",
     };
@@ -96,15 +98,44 @@ const app = agent({ name: "fake-acp-agent" })
     }
 
     const buggy = text.includes("BUGGY");
+    const capabilityBuild = text.includes("CHANGED-FILE-SUMMARY");
     mkdirSync(join(sessionState.cwd, "src"), { recursive: true });
-    writeFileSync(
-      join(sessionState.cwd, "src", "wordcount.mjs"),
-      buggy
-        ? "export function countWords(text) {\n  return 0; // BUGGY\n}\n"
-        : "export function countWords(text) {\n  return text.split(/\\s+/).filter((w) => w.length > 0).length;\n}\n",
-      "utf8",
-    );
+    if (capabilityBuild) {
+      // M2 builder 分支：标准实现从 fixture 读取（与测试基准一致）；BUGGY 恒返 other
+      const good = readFileSync(
+        join(
+          fileURLToPath(import.meta.url),
+          "..",
+          "..",
+          "m2",
+          "capability",
+          "changed-file-summary.mjs",
+        ),
+        "utf8",
+      );
+      const bad = [
+        good.split("export function")[0] ?? "",
+        "export function classifyChanges(changes) {",
+        '  return { total: changes.length, files: changes.map((c) => ({ path: c.path, category: "other" })) }; // BUGGY',
+        "}",
+        "",
+      ].join("\n");
+      writeFileSync(
+        join(sessionState.cwd, "src", "changed-file-summary.mjs"),
+        buggy ? bad : good,
+        "utf8",
+      );
+    } else {
+      writeFileSync(
+        join(sessionState.cwd, "src", "wordcount.mjs"),
+        buggy
+          ? "export function countWords(text) {\n  return 0; // BUGGY\n}\n"
+          : "export function countWords(text) {\n  return text.split(/\\s+/).filter((w) => w.length > 0).length;\n}\n",
+        "utf8",
+      );
+    }
 
+    const writtenFile = capabilityBuild ? "src/changed-file-summary.mjs" : "src/wordcount.mjs";
     await client.notify(methods.client.session.update, {
       sessionId: sessionState.sessionId,
       update: { ...toolCall, status: "completed" },
@@ -113,7 +144,7 @@ const app = agent({ name: "fake-acp-agent" })
       sessionId: sessionState.sessionId,
       update: {
         sessionUpdate: "agent_message_chunk",
-        content: { type: "text", text: `已实现 src/wordcount.mjs${buggy ? "（故意错误）" : ""}` },
+        content: { type: "text", text: `已实现 ${writtenFile}${buggy ? "（故意错误）" : ""}` },
       },
     });
     return { stopReason: "end_turn" };

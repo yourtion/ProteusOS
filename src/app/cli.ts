@@ -1,6 +1,8 @@
 import { Command } from "commander";
 import {
   advanceCommand,
+  buildCommand,
+  candidatesCommand,
   cancelCommand,
   initCommand,
   inspectCommand,
@@ -56,6 +58,27 @@ withCommon(
     .argument("<id>", "Run ID"),
 ).action(async (id: string, opts) => {
   await advanceCommand(id, opts);
+});
+
+withCommon(
+  program
+    .command("build")
+    .description("委托构建能力实现并采集构造候选（builder Run 内联到终态）")
+    .requiredOption("--capability <name>", "能力短名（如 changed-file-summary）")
+    .requiredOption("--spec <file>", "实现规范文件（作为 builder 任务指令）")
+    .requiredOption("--tests <dir>", "能力验收测试目录（复制进 builder 工作区）")
+    .option("--executor <name>", "编码 worker 执行器名（默认 claude-code-acp）"),
+).action(async (opts) => {
+  await buildCommand(opts);
+});
+
+withCommon(
+  program
+    .command("candidates")
+    .description("列出或查看候选（状态由事件投影）")
+    .argument("[id]", "Candidate ID"),
+).action(async (id: string | undefined, opts) => {
+  await candidatesCommand(id, opts);
 });
 
 withCommon(
