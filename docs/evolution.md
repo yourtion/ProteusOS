@@ -184,10 +184,10 @@ MVP 支持单用户、单 Organism、多个 Process 并发。先实现规则、S
 M2 落地本文 §5–§8 的最小版本，对应实现与让步：
 
 - **三种记录独立落库**（migration v3）：Candidate（基准快照+revision、候选快照、动机、来源 refs——builder Run 可追溯）；Evaluation（协议 digest、基线、逐 Run 结果、分列指标、verdict）；Promotion（operationId 唯一、kind=adopt/rollback、from/to、expected/result revision、evaluation 引用、actor）。Candidate 流程状态由 `candidate-<id>` 事件流投影（proposed/evaluating/eligible/rejected/stale/adopted），不物化 status 列。
-- **候选来源**：M3 前允许人工/委托构建提出（`proteus build`），流程完整记录来源（builder Run id、goal digest）；builder 产出须经 test-runner 独立验收，测试失败不能构造候选。
-- **评估协议 m2-bootstrap-eval-v1**（构造候选前固定）：候选×新能力验收 + 候选×既有能力回归 + 基准×回归（健康对照）。基线失败 → `inconclusive`（评估环境不可信，不判 rejected，可重评）——"证据不足不能记通过"。裁判按内容寻址钉住预注册 hybrid 版本（持久化于 `runs.evaluator_version_id`），候选快照槽位换放水裁判对评估无效。
+- **候选来源**：M3 前允许人工/委托构建提出（`proteus build`），流程完整记录来源（builder Run id、goal digest、验收时的产出 digest）；builder 产出须经 test-runner 独立验收，采集时内容必须与验收后立即记录的摘要一致，测试失败或产出漂移不能构造候选。
+- **评估协议 m2-bootstrap-eval-v1**（构造候选前固定）：Candidate 记录评估计划 digest，覆盖任务、输入内容树、schema、固定期望输出、预算与能力声明；评估时重新计算并拒绝漂移。新能力任务必须实际声明候选能力。候选×新能力验收 + 每项既有能力的候选×回归和基准×回归（健康对照）；基线失败 → `inconclusive`（评估环境不可信，不判 rejected，可重评）——"证据不足不能记通过"。裁判按内容寻址钉住预注册 hybrid 版本（持久化于 `runs.evaluator_version_id`），候选快照槽位换放水裁判对评估无效。
 - **§7 CAS 协议**：`Kernel.promote` 一个事务内完成验证（快照可解析/授权者/revision）+ 条件更新 + 成功记录；operationId 幂等读回（提交成功响应丢失场景）；stale 不落记录、候选标 stale 须基于新基准重构重评；回滚到相同快照引用后旧并发请求仍 stale。
-- **§8 回滚**：`kind=rollback` 的 Promotion，revision 只增不减；目标快照必须可解析完整闭包（依赖缺失不能回滚）。
+- **§8 回滚**：`kind=rollback` 的 Promotion，revision 只增不减；目标快照必须可解析完整闭包，并已出现在该 Organism 的历史 Promotion 路径中（依赖缺失、未评估或从未采用的候选不能回滚激活）。
 - **晋升授权**：proposed 首版默认——评估自动执行，晋升由 operator 显式批准（`proteus promote --as`）；评估完成不等于授权（最新评估必须 eligible 才放行）。
 - **让步（ADR 0006）**：hybrid 裁判与能力变化同处候选快照，以"固定裁判一方 + tests/evals 等价性证明"折衷，M3 拆分；评估预算与普通 Run 共享 organism 池；成本指标显式 null。
 - **§11 MVP 五条验收**全部落地：并发同快照（M0 既有 + 评估三 Run 并行）、人工候选 + 固定基线评估、operator 批准可审计 Promotion、stale 重构重评、回滚后再跑（tests/acceptance/m2.test.ts 七步故事固化；真实 builder 版 `PROTEUS_E2E=bootstrap`）。

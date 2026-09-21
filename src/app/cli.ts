@@ -71,6 +71,8 @@ withCommon(
     .requiredOption("--capability <name>", "能力短名（如 changed-file-summary）")
     .requiredOption("--spec <file>", "实现规范文件（作为 builder 任务指令）")
     .requiredOption("--tests <dir>", "能力验收测试目录（复制进 builder 工作区）")
+    .requiredOption("--new-capability-task <file>", "构造候选前固定的新能力验收任务")
+    .requiredOption("--regression-task <files...>", "构造候选前固定的核心及既有能力回归任务")
     .option("--executor <name>", "编码 worker 执行器名（默认 claude-code-acp）"),
 ).action(async (opts) => {
   await buildCommand(opts);
@@ -91,7 +93,7 @@ withCommon(
     .description("独立评估候选：新能力验收 + 既有能力回归 + 基线对照（裁判由评估计划钉住）")
     .argument("<id>", "Candidate ID")
     .requiredOption("--new-capability-task <file>", "新能力验收任务 task.yaml")
-    .requiredOption("--regression-task <file>", "既有能力回归任务 task.yaml"),
+    .requiredOption("--regression-task <files...>", "核心及既有能力回归任务 task.yaml"),
 ).action(async (id: string, opts) => {
   await evaluateCommand(id, opts);
 });

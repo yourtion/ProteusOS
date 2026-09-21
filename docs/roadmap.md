@@ -6,7 +6,7 @@
 
 - **M0 完成**：五个纵切片全部落地并各自以验收测试收口（单节点闭环 → DAG + 规则决策 + verify → 并发与预算原子预留 → 崩溃恢复与对账 → seed 可重复固化）。
 - **M1 完成**：执行器注册表（local-process / claude-code-acp / codex-acp / pi）；委托编码 → 独立测试验收闭环；能力协商、权限请求、断连与取消合同由 fake agent（真实 ACP 协议实现）覆盖；真实凭据 E2E：Claude Code（50s）与 Codex（28s，经代理）通过，pi 链路验证至模型调用（当时凭据的默认模型返回 403，属账户配额，处理凭据后 `PROTEUS_E2E=pi` 即可复跑）。接入决策见 [ADR 0005](./adr/0005-external-executors.md)。
-- **M2 完成**：最小自举（Candidate / Evaluation / Promotion）五片落地。能力即快照槽位（`capability/<name>`）+ 独立子进程加载；Task 声明 `requires`，缺口进入带截止点的 waiting；委托构建 → test-runner 独立验收 → 采集注册不可变版本 → 候选快照（digest 幂等去重）；评估协议 m2-bootstrap-eval-v1（候选×新能力 + 候选×回归 + 基线对照，裁判按内容寻址钉住）；`Kernel.promote` 一次验证 + CAS + operationId 幂等读回；接替为显式 `supersede`（R1 failed/superseded → R2 绑新快照）；回滚 revision 只增不减。七步自举故事经 CLI 验收固化（tests/acceptance/m2.test.ts），真实 builder 版挂 `PROTEUS_E2E=bootstrap`。实现决策与让步见 [ADR 0006](./adr/0006-m2-minimal-bootstrap.md)。
+- **M2 完成**：最小自举（Candidate / Evaluation / Promotion）五片落地。能力即快照槽位（`capability/<name>`）+ 独立子进程加载；Task 声明 `requires`，缺口进入带截止点的 waiting；委托构建 → test-runner 独立验收 → 产出摘要证明 → 采集注册不可变版本 → 候选快照（digest 幂等去重）；评估协议 m2-bootstrap-eval-v1 在候选构造前固定任务、输入、预算和裁判，候选×新能力 + 候选×回归 + 基线对照，新能力同时校验 schema 与固定期望结果；`Kernel.promote` 一次验证 + CAS + operationId 幂等读回；接替为显式 `supersede`（R1 failed/superseded → R2 绑新快照）；回滚只允许历史采用快照且 revision 只增不减。七步自举故事经 CLI 验收固化（tests/acceptance/m2.test.ts），真实 builder 版挂 `PROTEUS_E2E=bootstrap`。实现决策与让步见 [ADR 0006](./adr/0006-m2-minimal-bootstrap.md)。
 - **下一步 M3**：经验驱动演化——冻结经验集、Consolidation、多目标比较；前置：真隔离方案落地、裁判拆分独立晋升、评估独立预算池。
 
 ## 1. 本次澄清结果
@@ -40,7 +40,7 @@ M0 的 seed 必须含基本执行合同、固定图、确定性选择规则、�
 1. 用户提交 Task T，包含输入 fixture、输出 schema 和验收规范。Run R1 使用 G0 中已有的能力检查图，对 Task 声明的需求做检查；发现缺少该能力，记录缺口后进入带截止点的等待状态。R1 的可执行图不引用尚不存在的实现，因此仍满足快照依赖完整性。
 2. 固定 builder 图创建关联的构建任务，在独立工作区将实现规范交给已配置编码 worker。规范不授予修改 seed 裁判或 kernel 的权力。
 3. 产出代码、能力声明和构建来源，注册为不可变 ArtifactVersion；构造基于 G0/revision 0 的候选 G1，增加新能力 binding 与使用它的图版本，并解析完整依赖闭包。
-4. 使用预先编写的验收与回归 fixture，在受控环境运行旧/新组合。G0 的缺失能力是已知基线，G1 必须通过新能力验收且不破坏原有能力；候选提交的测试只是补充证据。
+4. 使用构造候选前按内容摘要固定的验收与回归 fixture，在受控环境运行旧/新组合。G0 的缺失能力是已知基线，G1 必须通过输出 schema 与固定期望结果的语义验收；新增能力保留既有能力路由，评估计划须为基准中每项既有能力提供回归任务。候选提交的测试只是补充证据。
 5. 展示差异、评估结果、权限需求与资源消耗；由 operator 批准（proposed 首版默认），执行一次 CAS Promotion。失败则保持 G0。
 6. 将 R1 以 `failed` 结案，原因记录为能力缺失且被新运行接替；创建同一 Task 修订的 R2，以 supersedesRunId 关联 R1 并固定 G1。R2 使用新能力完成摘要，由独立验收器确认结果。
 7. 回滚默认指针到 G0，revision 继续增长。新建 R3 再次确认能力缺失路径，等待截止后以 `failed/missing_capability` 结案；这是预期回滚行为的验收通过，不是 Task T 成功。G1 与 R2 记录仍可查看，R2 的外部结果不会被回滚抹去。
@@ -76,7 +76,7 @@ M0 的 seed 必须含基本执行合同、固定图、确定性选择规则、�
 | 执行环境 | M0 只运行可信 fixture（已落地）；M1 E2E 在操作者本机运行（工作区隔离 + ACP 权限策略）；**M2 已决策（2026-09-21，ADR 0006）：能力代码以独立 node 子进程 + 工作区 + 超时 + 路径越界拒绝执行（进程级隔离），真隔离（容器/独立宿主）显式挂账 M3**——工作区不算安全沙箱的立场不变 | M3 构造第一批进入默认行为的候选前，容器或独立宿主方案必须就位 |
 | 晋升权限 | **M2 已落地 proposed 首版默认**：评估自动执行（协议 m2-bootstrap-eval-v1），晋升由 operator 显式批准（`proteus promote --as`）；评估完成不等于授权；CAS 冲突候选标 stale 须重构重评 | M3 出现稳定评估基线后，再决定允许自主晋升的类型、scope、预算与证据要求 |
 | 首个自举案例 | ChangedFileSummary 固定任务——**M2 已完成**（CLI 七步验收 + PROTEUS_E2E=bootstrap 真实 builder 版） | — |
-| 评价指标 | **M2 已固定协议 m2-bootstrap-eval-v1**：成功与回归为硬约束，时延分列记录，成本显式 null（真实计费数据出现前不臆造）；基线对照失败记 inconclusive 可重评 | M3 扩展多目标比较与重复运行方差前，复核该协议是否需要升级版本 |
+| 评价指标 | **M2 已固定协议 m2-bootstrap-eval-v1**：候选构造前固定任务/输入/schema/期望输出/预算摘要；成功与全部既有能力回归为硬约束，时延分列记录，成本显式 null（真实计费数据出现前不臆造）；基线对照失败记 inconclusive 可重评 | M3 扩展多目标比较与重复运行方差前，复核该协议是否需要升级版本 |
 | 用户数据保留 | 最小采集、禁止默认共享、来源可追溯 | 接入真实经历前确定保留期、删除和可训练用途 |
 | 本地决策模型与微调 | 先 RuleProvider；真实需求和基线出现后比较模型 | M3 后选择数据、指标和训练路线，不提前绑定 Jev 或某一开源模型 |
 | 团队治理 | 先保留归属与精确引用，后实现发布和本地继承 | M4 前明确组织身份、分享策略、团队发布授权及迁移方式 |

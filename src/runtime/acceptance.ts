@@ -1,4 +1,7 @@
 import { spawnSync } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
+import { isAbsolute, resolve } from "node:path";
+import { canonicalJson, digestOf } from "../storage/blobs.ts";
 import type { OutcomeCheck } from "./types.ts";
 import { validateSchema } from "./schema-validator.ts";
 
@@ -32,12 +35,14 @@ export interface TestRunnerContent {
   kind: "test-runner-v1";
   /** 在产出工作区执行的测试命令，如 ["node", "--test", "tests/"] */
   command: string[];
+  /** 测试通过时同时固定这些工作区相对路径的内容摘要 */
+  attestPaths?: string[];
 }
 
 export function evaluateTestRunner(
   content: unknown,
   workspace: string,
-): { passed: boolean; checks: OutcomeCheck[] } {
+): { passed: boolean; checks: OutcomeCheck[]; attestedOutputs?: Record<string, string> } {
   const command =
     typeof content === "object" &&
     content !== null &&
@@ -57,19 +62,43 @@ export function evaluateTestRunner(
     timeout: 120_000,
     env: process.env,
   });
-  const passed = result.status === 0;
+  let passed = result.status === 0;
   const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
+  const checks: OutcomeCheck[] = [
+    {
+      name: "tests",
+      passed,
+      detail: passed
+        ? undefined
+        : `测试命令退出码 ${String(result.status)}：${output.slice(-400) || "(无输出)"}`,
+    },
+  ];
+  const attestedOutputs: Record<string, string> = {};
+  const attestPaths =
+    typeof content === "object" &&
+    content !== null &&
+    Array.isArray((content as { attestPaths?: unknown }).attestPaths)
+      ? (content as { attestPaths: unknown[] }).attestPaths
+      : [];
+  for (const path of attestPaths) {
+    const valid = typeof path === "string" && path.length > 0 && !isAbsolute(path);
+    const target = valid ? resolve(workspace, path) : "";
+    const inWorkspace = valid && target.startsWith(`${resolve(workspace)}/`);
+    if (!inWorkspace || !existsSync(target)) {
+      passed = false;
+      checks.push({
+        name: "attested-output",
+        passed: false,
+        detail: `待证明产物缺失或路径越界：${String(path)}`,
+      });
+      continue;
+    }
+    attestedOutputs[path] = digestOf(readFileSync(target, "utf8"));
+  }
   return {
     passed,
-    checks: [
-      {
-        name: "tests",
-        passed,
-        detail: passed
-          ? undefined
-          : `测试命令退出码 ${String(result.status)}：${output.slice(-400) || "(无输出)"}`,
-      },
-    ],
+    checks,
+    ...(Object.keys(attestedOutputs).length > 0 ? { attestedOutputs } : {}),
   };
 }
 
@@ -132,6 +161,16 @@ export function evaluateHybridOutput(
     },
   ];
   return { passed: checks.every((c) => c.passed), checks };
+}
+
+/** 固定 fixture 的语义验收：忽略 JSON 对象键顺序，数组顺序仍属于合同。 */
+export function evaluateExpectedOutput(output: unknown, expected: unknown): OutcomeCheck {
+  const passed = canonicalJson(output) === canonicalJson(expected);
+  return {
+    name: "expected-output",
+    passed,
+    detail: passed ? undefined : "输出与评估计划固定的期望结果不一致",
+  };
 }
 
 function checkTotalsConsistency(output: unknown): OutcomeCheck {

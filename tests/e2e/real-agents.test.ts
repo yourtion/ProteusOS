@@ -155,6 +155,7 @@ describe("M1 E2E：真实 agent（PROTEUS_E2E 显式启用）", () => {
         requires: ["changed-file-summary"],
         acceptance: {
           outputSchema: join(M2, "schemas", "changed-file-summary.schema.json"),
+          expectedOutput: join(M2, "evals", "summary-output.json"),
           verifier: "stats-acceptance",
         },
       });
@@ -172,14 +173,7 @@ describe("M1 E2E：真实 agent（PROTEUS_E2E 显式启用）", () => {
         requestedBy: "principal-local",
       });
       expect(builder.state).toBe("succeeded");
-      const { candidate } = evo.collectCandidate(builder.runId, {
-        capability: "changed-file-summary",
-        hypothesis: "真实 Claude Code 构建的派生能力",
-        proposedBy: "principal-local",
-      });
-
-      // ④ 独立评估 → ⑤ 晋升 → ⑥ 接替
-      const evalOut = await evo.evaluateCandidate(candidate.id, {
+      const evaluationPlan = {
         newCapability: {
           goal: "对变更清单生成可验证的文件分类摘要",
           inputs: [join(M2, "inputs", "changed-files.json")],
@@ -187,6 +181,7 @@ describe("M1 E2E：真实 agent（PROTEUS_E2E 显式启用）", () => {
           requires: ["changed-file-summary"],
           acceptance: {
             outputSchema: join(M2, "schemas", "changed-file-summary.schema.json"),
+            expectedOutput: join(M2, "evals", "summary-output.json"),
             verifier: "stats-acceptance",
           },
         },
@@ -200,7 +195,16 @@ describe("M1 E2E：真实 agent（PROTEUS_E2E 显式启用）", () => {
           },
         },
         requestedBy: "principal-local",
+      };
+      const { candidate } = evo.collectCandidate(builder.runId, {
+        capability: "changed-file-summary",
+        hypothesis: "真实 Claude Code 构建的派生能力",
+        proposedBy: "principal-local",
+        evaluationPlan,
       });
+
+      // ④ 独立评估 → ⑤ 晋升 → ⑥ 接替
+      const evalOut = await evo.evaluateCandidate(candidate.id, evaluationPlan);
       expect(evalOut.evaluation.verdict).toBe("eligible");
 
       const promoted = evo.promote(candidate.id, { authorizedBy: "principal-local" });

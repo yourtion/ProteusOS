@@ -13,4 +13,6 @@ M2 落地 Candidate / Evaluation / Promotion，端到端完成 ChangedFileSummar
 
 **晋升一次验证、同事务提交、幂等读回。** `Kernel.promote` 在一个事务内完成快照可解析校验（不能晋升/回滚到依赖缺失的组合）、授权者存在、CAS 条件更新与成功记录（repository.md"调用者不手动串起可漏掉的步骤"）。`operationId` 幂等：提交成功但响应丢失时按它读回同一结果，revision 不重复增加；CAS 冲突返回 stale 并由 Evolution 记 `candidate.stale`（须基于新基准重构重评），不落 promotion 记录。回滚是 `kind=rollback` 的一次 Promotion：revision 只增不减，回滚到相同快照引用后旧的并发晋升请求仍然 stale。评估门（最新评估必须 eligible）与 operator 批准在 Evolution 层，同一事务内先于 CAS 检查。接替为显式命令：`supersede` 把缺口等待的 R1 以 `failed/superseded` 结案并创建同 Task 修订（revision+1）的 R2 绑定当前 active——promote 保持纯晋升，单一职责。
 
+**M2 收官审查后的补强。** builder Run 成功时立即记录约定产出的内容摘要，采集只接受与该证明一致的内容，避免验收后修改工作区再借用旧证据。候选构造必须同时固定评估计划摘要；摘要覆盖目标、输入文件树、schema、可选期望输出、预算、能力声明和回归任务，执行评估时重新计算并拒绝漂移。新能力任务必须声明候选能力；基准快照已有的其他能力必须分别出现在回归任务中。能力候选的图与策略从基准已有能力槽位和本次新增能力的并集生成，持续积累不会丢失旧路由。ChangedFileSummary 以固定完整输出做语义比对，不再只验证 JSON schema。rollback 目标必须出现在该 Organism 的历史 Promotion 路径中，未评估、被拒或从未采用的候选快照不能借 rollback 激活。
+
 其余已确认事项：评估预算与普通 Run 共享 organism 池（purpose 标记区分，独立预算池 M3）；评估指标按成功/回归/时延分列、成本显式 null（真实计费数据出现前不臆造）；canonicalJson 下沉至 storage/blobs.ts（evolution 不依赖 app 层）。验证布局新增 tests/evals/（Evaluation 层）。

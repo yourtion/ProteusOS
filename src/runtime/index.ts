@@ -6,6 +6,7 @@ import type { ArtifactVersion, Clock, IdGen, Kernel } from "../kernel/index.ts";
 import { digestOf, type BlobStore } from "../storage/blobs.ts";
 import type { Storage } from "../storage/store.ts";
 import {
+  evaluateExpectedOutput,
   evaluateHybridOutput,
   evaluateStatsOutput,
   evaluateTestRunner,
@@ -48,6 +49,8 @@ export interface TaskSubmission {
   acceptance: {
     /** JSON Schema 文件绝对路径 */
     outputSchema: string;
+    /** 可选固定期望输出 JSON 文件绝对路径 */
+    expectedOutput?: string;
     /** 必须与快照 acceptance-evaluator 槽位绑定的 artifact 一致 */
     verifier: string;
   };
@@ -167,6 +170,7 @@ export class Runtime {
       assertInputPath(p);
     }
     assertInputPath(input.acceptance.outputSchema);
+    if (input.acceptance.expectedOutput) assertInputPath(input.acceptance.expectedOutput);
     if (options.evaluatorVersionId && options.purpose !== "evaluation") {
       throw new RuntimeError(
         "run_not_pending",
@@ -376,7 +380,7 @@ export class Runtime {
     const dag = normalizeDag(parseGraph(this.deps.blobs.read(graphVersion.contentRef)));
     try {
       validateDag(dag);
-    } catch (err) {
+    } catch {
       return this.finalize(runId, "failed", "invalid_graph", [], null, {
         dag,
         nodeStates: new Map(),
@@ -510,6 +514,12 @@ export class Runtime {
           JSON.parse(outputRaw),
           JSON.parse(readFileSync(task.acceptance.outputSchema, "utf8")),
         );
+        if (task.acceptance.expectedOutput) {
+          const expected = JSON.parse(readFileSync(task.acceptance.expectedOutput, "utf8"));
+          const expectedCheck = evaluateExpectedOutput(JSON.parse(outputRaw), expected);
+          evaluation.checks.push(expectedCheck);
+          evaluation.passed &&= expectedCheck.passed;
+        }
         checks.push(...evaluation.checks);
         if (!evaluation.passed) {
           failure = { nodeId: firstExecute.id, reason: "acceptance_failed" };
@@ -654,7 +664,7 @@ export class Runtime {
    * - 证据不成立 → 判定 failed（执行未完成、无外泄副作用）→ 有界重试新建 Attempt
    */
   async reconcileRun(runId: string): Promise<ReconcileReport> {
-    const run = this.mustGetRun(runId);
+    this.mustGetRun(runId);
     const unknowns = this.listRunAttempts(runId).filter((a) => a.state === "unknown");
     if (unknowns.length === 0) {
       return { runId, resolved: [], summary: null, note: "没有待对账的 unknown Attempt" };
@@ -982,7 +992,11 @@ export class Runtime {
   ): string {
     // 裁判按生效验收器产物内容分发：候选不能替换本轮裁判（docs/evolution.md §6）
     const kind = readEvaluatorKind(evaluatorContent);
-    let evaluation: { passed: boolean; checks: OutcomeCheck[] };
+    let evaluation: {
+      passed: boolean;
+      checks: OutcomeCheck[];
+      attestedOutputs?: Record<string, string>;
+    };
     let outputDigest: string | null = null;
     if (kind === "test-runner-v1") {
       // 测试命令在产出代码的 execute 节点工作区执行
@@ -1009,6 +1023,12 @@ export class Runtime {
         kind === "hybrid-acceptance-v1"
           ? evaluateHybridOutput(output, schema)
           : evaluateStatsOutput(output, schema);
+      if (task.acceptance.expectedOutput) {
+        const expected = JSON.parse(readFileSync(task.acceptance.expectedOutput, "utf8"));
+        const expectedCheck = evaluateExpectedOutput(output, expected);
+        evaluation.checks.push(expectedCheck);
+        evaluation.passed &&= expectedCheck.passed;
+      }
       outputDigest = digestOf(outputRaw);
     }
     checks.push(...evaluation.checks);
@@ -1016,7 +1036,12 @@ export class Runtime {
       this.deps.storage.appendEvent({
         streamId: `run-${runId}`,
         type: "verify.completed",
-        payload: { nodeId: node.id, passed: evaluation.passed, checks: evaluation.checks },
+        payload: {
+          nodeId: node.id,
+          passed: evaluation.passed,
+          checks: evaluation.checks,
+          ...(evaluation.attestedOutputs ? { attestedOutputs: evaluation.attestedOutputs } : {}),
+        },
         correlationId: runId,
         runId,
         organismId: this.deps.organismId,

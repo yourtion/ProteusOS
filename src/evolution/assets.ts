@@ -83,8 +83,18 @@ export const EVALUATION_PROTOCOL_CONTENT = {
   kind: "m2-bootstrap-eval-v1",
   runs: [
     { role: "new-capability", binding: "candidate", requisite: "succeeded" },
-    { role: "regression", binding: "candidate", requisite: "succeeded" },
-    { role: "baseline", binding: "base", requisite: "succeeded" },
+    {
+      role: "regression",
+      binding: "candidate",
+      cardinality: "one-per-existing-capability-plus-core-regression",
+      requisite: "all-succeeded",
+    },
+    {
+      role: "baseline",
+      binding: "base",
+      cardinality: "same-regression-set",
+      requisite: "all-succeeded",
+    },
   ],
   verdictRules: {
     eligible: "三个 Run 全部 succeeded",
@@ -136,6 +146,7 @@ export const EVOLUTION_LINEAGE_ID = "lineage-evolution";
 export function ensureBuilderGenome(
   deps: EvolutionDeps,
   opts: {
+    capability: string;
     executorName: string;
     testCommand: string[];
     createdBy: string;
@@ -182,7 +193,12 @@ export function ensureBuilderGenome(
       slot: "acceptance-evaluator",
       baseVersion: undefined,
       artifact: deps.storage.getArtifact("builder-acceptance")!,
-      content: { schemaVersion: 1, kind: "test-runner-v1", command: opts.testCommand },
+      content: {
+        schemaVersion: 1,
+        kind: "test-runner-v1",
+        command: opts.testCommand,
+        attestPaths: [`src/${opts.capability}.mjs`],
+      },
       createdBy: opts.createdBy,
     });
     const snapshot = deps.kernel.createSnapshot(
@@ -229,7 +245,14 @@ export function ensureCapabilityGenome(
     }
     deps.kernel.createLineage(EVOLUTION_LINEAGE_ID, opts.createdBy, "scope:evolution");
 
-    const names = opts.capabilities.map((c) => c.name);
+    const names = [
+      ...new Set([
+        ...Object.keys(base.bindings)
+          .filter((slot) => slot.startsWith("capability/"))
+          .map((slot) => slot.slice("capability/".length)),
+        ...opts.capabilities.map((c) => c.name),
+      ]),
+    ].sort();
     const bindings: Record<string, string> = { ...base.bindings };
 
     bindings["task-graph"] = registerDerivedVersion(deps, {

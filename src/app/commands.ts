@@ -51,6 +51,9 @@ export async function submitCommand(taskPath: string, opts: CommonOpts): Promise
       missingCapabilityWaitSeconds: file.constraints?.missingCapabilityWaitSeconds,
       acceptance: {
         outputSchema: resolveFrom(baseDir, file.acceptance.outputSchema),
+        expectedOutput: file.acceptance.expectedOutput
+          ? resolveFrom(baseDir, file.acceptance.expectedOutput)
+          : undefined,
         verifier: file.acceptance.verifier,
       },
     });
@@ -176,6 +179,8 @@ export interface BuildOpts extends CommonOpts {
   capability: string;
   spec: string;
   tests: string;
+  newCapabilityTask: string;
+  regressionTask: string | string[];
   executor?: string;
 }
 
@@ -183,6 +188,13 @@ export interface BuildOpts extends CommonOpts {
 export async function buildCommand(opts: BuildOpts): Promise<void> {
   const goal = readFileSync(resolve(opts.spec), "utf8");
   const testsDir = resolve(opts.tests);
+  const evaluationPlan = {
+    newCapability: taskSubmissionFrom(opts.newCapabilityTask, process.cwd()),
+    regression: optionFiles(opts.regressionTask).map((file) =>
+      taskSubmissionFrom(file, process.cwd()),
+    ),
+    requestedBy: PRINCIPAL_ID,
+  };
   const inst = openInstance(resolveInstanceRoot(opts.home));
   try {
     const summary = await inst.evolution.build({
@@ -216,6 +228,7 @@ export async function buildCommand(opts: BuildOpts): Promise<void> {
       capability: opts.capability,
       hypothesis: `为 ${opts.capability} 增加派生能力（构建来源 run ${summary.runId}）`,
       proposedBy: PRINCIPAL_ID,
+      evaluationPlan,
     });
     const status = inst.evolution.candidateStatus(candidate.id);
     if (opts.json) {
@@ -381,6 +394,9 @@ function taskSubmissionFrom(file: string, baseDir: string) {
     missingCapabilityWaitSeconds: loaded.file.constraints?.missingCapabilityWaitSeconds,
     acceptance: {
       outputSchema: resolveFrom(loaded.baseDir, loaded.file.acceptance.outputSchema),
+      expectedOutput: loaded.file.acceptance.expectedOutput
+        ? resolveFrom(loaded.baseDir, loaded.file.acceptance.expectedOutput)
+        : undefined,
       verifier: loaded.file.acceptance.verifier,
     },
   };
@@ -388,7 +404,7 @@ function taskSubmissionFrom(file: string, baseDir: string) {
 
 export interface EvaluateOpts extends CommonOpts {
   newCapabilityTask: string;
-  regressionTask: string;
+  regressionTask: string | string[];
 }
 
 export async function evaluateCommand(id: string, opts: EvaluateOpts): Promise<void> {
@@ -396,7 +412,9 @@ export async function evaluateCommand(id: string, opts: EvaluateOpts): Promise<v
   try {
     const { evaluation, status } = await inst.evolution.evaluateCandidate(id, {
       newCapability: taskSubmissionFrom(opts.newCapabilityTask, process.cwd()),
-      regression: taskSubmissionFrom(opts.regressionTask, process.cwd()),
+      regression: optionFiles(opts.regressionTask).map((file) =>
+        taskSubmissionFrom(file, process.cwd()),
+      ),
       requestedBy: PRINCIPAL_ID,
     });
     if (opts.json) {
@@ -421,6 +439,10 @@ export async function evaluateCommand(id: string, opts: EvaluateOpts): Promise<v
   } finally {
     inst.close();
   }
+}
+
+function optionFiles(value: string | string[]): string[] {
+  return Array.isArray(value) ? value : [value];
 }
 
 export interface PromoteOpts extends CommonOpts {

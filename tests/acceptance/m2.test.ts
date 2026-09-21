@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
-import { fixturePath, REPO_ROOT, tempInstanceRoot } from "../helpers.ts";
+import { REPO_ROOT, tempInstanceRoot } from "../helpers.ts";
 
 /**
  * M2 验收固化：第一个自举故事全链路（roadmap §3，CLI 驱动、fake builder）。
@@ -93,6 +93,10 @@ describe("M2：第一个自举故事（端到端）", () => {
       join(M2, "capability-tests"),
       "--executor",
       "fake-acp",
+      "--new-capability-task",
+      join(M2, "tasks", "summary-task.yaml"),
+      "--regression-task",
+      join(M2, "tasks", "stats-regression.yaml"),
       "--json",
     ]);
     expect(build.builderRun).toBeTruthy();

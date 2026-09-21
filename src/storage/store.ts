@@ -677,6 +677,20 @@ export class Storage implements KernelStore, RuntimeStore {
       )
       .map(mapPromotion);
   }
+
+  /** rollback 只允许选择该 Organism 晋升历史中出现过的快照。 */
+  hasHistoricalPromotionSnapshot(organismId: string, snapshotId: string): boolean {
+    return Boolean(
+      this.db.get<{ found: number }>(
+        `SELECT 1 AS found FROM promotions
+         WHERE organism_id = ? AND (from_snapshot_id = ? OR to_snapshot_id = ?)
+         LIMIT 1`,
+        organismId,
+        snapshotId,
+        snapshotId,
+      ),
+    );
+  }
 }
 
 // ---- 行映射 ----

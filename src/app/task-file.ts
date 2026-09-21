@@ -26,6 +26,8 @@ export const TaskFileSchema = z.object({
   requires: z.array(z.string().min(1)).default([]),
   acceptance: z.object({
     outputSchema: z.string().min(1),
+    /** 可选固定期望输出，用于 held-out fixture 的语义比对 */
+    expectedOutput: z.string().min(1).optional(),
     /** 指向 G0 的 acceptance-evaluator 槽位绑定的 artifact（stats-acceptance） */
     verifier: z.string().min(1),
   }),

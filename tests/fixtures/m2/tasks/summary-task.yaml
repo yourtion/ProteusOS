@@ -9,4 +9,5 @@ constraints:
 requires: ["changed-file-summary"]
 acceptance:
   outputSchema: ../schemas/changed-file-summary.schema.json
+  expectedOutput: ../evals/summary-output.json
   verifier: stats-acceptance

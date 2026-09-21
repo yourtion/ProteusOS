@@ -5,7 +5,8 @@ import { afterAll, describe, expect, it } from "vitest";
 import { AcpExecutor } from "../../src/adapters/executor-acp/index.ts";
 import { LocalProcessExecutor } from "../../src/adapters/executor-process/index.ts";
 import type { AppInstance } from "../../src/app/instance.ts";
-import { ensureCapabilityGenome } from "../../src/evolution/assets.ts";
+import { evaluationPlanDigest } from "../../src/evolution/index.ts";
+import { ensureCapabilityGenome, makeCapabilityPolicyContent } from "../../src/evolution/assets.ts";
 import type { CapabilityModule } from "../../src/runtime/capability.ts";
 import type { ExecutorProvider } from "../../src/runtime/types.ts";
 import { canonicalJson } from "../../src/storage/blobs.ts";
@@ -56,6 +57,7 @@ const SUMMARY_TASK = {
   requires: ["changed-file-summary"],
   acceptance: {
     outputSchema: join(M2, "schemas", "changed-file-summary.schema.json"),
+    expectedOutput: join(M2, "evals", "summary-output.json"),
     verifier: "stats-acceptance",
   },
 };
@@ -95,6 +97,7 @@ async function buildCandidate(hypothesis: string) {
     capability: "changed-file-summary",
     hypothesis,
     proposedBy: "principal-local",
+    evaluationPlan: EVAL_PLAN,
   }).candidate;
 }
 
@@ -141,7 +144,11 @@ function manualCandidate(
       proposedSnapshotId,
       hypothesis: opts.hypothesis,
       proposedBy: "principal-local",
-      sourceRefs: { capability: "changed-file-summary", manual: "true" },
+      sourceRefs: {
+        capability: "changed-file-summary",
+        manual: "true",
+        evaluationPlanDigest: evaluationPlanDigest(EVAL_PLAN),
+      },
       datasetRef: null,
       createdAt: Date.now(),
     });
@@ -154,6 +161,12 @@ function manualCandidate(
     });
   });
   return app.storage.getCandidate(opts.id)!;
+}
+
+async function expectEvaluationRejected(candidateId: string) {
+  const result = await instance().evolution.evaluateCandidate(candidateId, EVAL_PLAN);
+  expect(result.evaluation.verdict).toBe("rejected");
+  return result;
 }
 
 /** 好实现的内容变体（尾部注释保证 digest 不同，避开候选去重） */
@@ -272,6 +285,93 @@ describe("M2 切片④：独立评估与晋升", () => {
     expect(() =>
       app.evolution.promote(candidate.id, { authorizedBy: "principal-local" }),
     ).toThrowError(/缺少 eligible 评估/);
+  });
+
+  it("schema 合法但内容错误的新能力输出不能通过固定期望结果验收", async () => {
+    const badModule: CapabilityModule = {
+      kind: "capability-module-v1",
+      name: "changed-file-summary",
+      entry: "index.mjs",
+      files: [
+        {
+          path: "index.mjs",
+          content:
+            'import { writeFileSync } from "node:fs";\nwriteFileSync("output.json", JSON.stringify({ summary: { total: 999, files: [{ path: "nonexistent.ts", category: "docs" }] } }));\n',
+        },
+      ],
+    };
+    const candidate = manualCandidate(badModule, {
+      id: "cand-schema-valid-wrong-answer",
+      hypothesis: "格式正确但语义错误",
+    });
+
+    const { evaluation } = await expectEvaluationRejected(candidate.id);
+    expect(evaluation.runs.find((r) => r.role === "new-capability")!.failureReason).toBe(
+      "acceptance_failed",
+    );
+  });
+
+  it("新能力任务未声明候选能力时拒绝评估计划", async () => {
+    const candidate = manualCandidate(goodModuleVariant("-plan-bypass"), {
+      id: "cand-plan-bypass",
+      hypothesis: "评估计划不能绕过候选能力",
+    });
+    const bypassPlan = {
+      newCapability: REGRESSION_TASK,
+      regression: REGRESSION_TASK,
+      requestedBy: "principal-local",
+    };
+
+    await expect(
+      instance().evolution.evaluateCandidate(candidate.id, bypassPlan),
+    ).rejects.toThrowError(/new-capability.*changed-file-summary|候选能力/);
+  });
+
+  it("候选能力组合保留基准快照中的既有能力路由", () => {
+    const app = bootSeededInstance();
+    try {
+      const base = app.kernel.getOrganism("organism-default")!.activeGenomeId!;
+      const first = ensureCapabilityGenome(
+        { kernel: app.kernel, storage: app.storage, blobs: app.blobs, clock: { now: Date.now } },
+        {
+          baseSnapshotId: base,
+          capabilities: [{ name: "first-capability", module: goodModuleVariant("-first") }],
+          createdBy: "principal-local",
+        },
+      );
+      const second = ensureCapabilityGenome(
+        { kernel: app.kernel, storage: app.storage, blobs: app.blobs, clock: { now: Date.now } },
+        {
+          baseSnapshotId: first.snapshot.id,
+          capabilities: [{ name: "second-capability", module: goodModuleVariant("-second") }],
+          createdBy: "principal-local",
+        },
+      );
+      const policy = JSON.parse(
+        app.blobs.read(second.versions.get("routing-policy")!.contentRef),
+      ) as ReturnType<typeof makeCapabilityPolicyContent>;
+
+      expect(policy).toEqual(
+        makeCapabilityPolicyContent(["first-capability", "second-capability"]),
+      );
+    } finally {
+      app.close();
+    }
+  });
+
+  it("rollback 拒绝从未被采用的候选快照", () => {
+    const app = instance();
+    const candidate = manualCandidate(goodModuleVariant("-never-adopted"), {
+      id: "cand-never-adopted",
+      hypothesis: "未采用候选",
+    });
+
+    expect(() =>
+      app.evolution.rollback({
+        toSnapshotId: candidate.proposedSnapshotId,
+        authorizedBy: "principal-local",
+      }),
+    ).toThrowError(/历史.*采用|不能回滚/);
   });
 
   it("基线对照失败 → inconclusive（评估环境不可信，不判 rejected）", async () => {

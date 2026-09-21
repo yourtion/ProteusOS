@@ -1,0 +1,12 @@
+{
+  "summary": {
+    "total": 5,
+    "files": [
+      { "path": "src/index.ts", "category": "source" },
+      { "path": "src/wordcount.test.mjs", "category": "test" },
+      { "path": "docs/guide.md", "category": "docs" },
+      { "path": "package.json", "category": "config" },
+      { "path": "LICENSE", "category": "other" }
+    ]
+  }
+}

@@ -1,11 +1,11 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import type { Clock, IdGen, PromotionRecord } from "../kernel/index.ts";
 import type { Kernel } from "../kernel/index.ts";
 import type { RunSummary, TaskBudget } from "../runtime/types.ts";
 import type { Runtime } from "../runtime/index.ts";
 import type { BlobStore } from "../storage/blobs.ts";
-import { digestOf } from "../storage/blobs.ts";
+import { canonicalJson, digestOf } from "../storage/blobs.ts";
 import type { Storage } from "../storage/store.ts";
 import {
   ensureBuilderGenome,
@@ -45,12 +45,13 @@ export class Evolution {
         clock: this.deps.clock,
       },
       {
+        capability: input.capability,
         executorName: input.executorName,
         testCommand: input.testCommand,
         createdBy: input.requestedBy,
       },
     );
-    return this.deps.runtime.submitTask(
+    const summary = await this.deps.runtime.submitTask(
       {
         requestedBy: input.requestedBy,
         goal: input.goal,
@@ -60,6 +61,30 @@ export class Evolution {
       },
       { purpose: "evaluation", snapshotId: snapshot.id },
     );
+    if (summary.state === "succeeded") {
+      const verified = this.deps.storage
+        .listEvents({ runId: summary.runId }, 200)
+        .find((event) => event.type === "verify.completed");
+      const attestedOutputs = verified?.payload["attestedOutputs"];
+      const outputDigest =
+        typeof attestedOutputs === "object" && attestedOutputs !== null
+          ? (attestedOutputs as Record<string, unknown>)[`src/${input.capability}.mjs`]
+          : undefined;
+      if (typeof outputDigest === "string") {
+        this.deps.storage.tx(() => {
+          this.deps.storage.appendEvent({
+            streamId: `run-${summary.runId}`,
+            type: "builder.output.attested",
+            payload: { capability: input.capability, outputDigest },
+            correlationId: summary.runId,
+            runId: summary.runId,
+            organismId: this.deps.organismId,
+            occurredAt: this.deps.clock.now(),
+          });
+        });
+      }
+    }
+    return summary;
   }
 
   /**
@@ -74,6 +99,7 @@ export class Evolution {
       capability: string;
       hypothesis: string;
       proposedBy: string;
+      evaluationPlan: EvaluationPlan;
       datasetRef?: string | null;
     },
   ): { candidate: CandidateRecord; created: boolean } {
@@ -85,13 +111,10 @@ export class Evolution {
         `builder run ${builderRunId} 状态为 ${run.state}（${run.failureReason ?? "无原因"}）：测试未通过的产出不能构造候选`,
       );
     }
-    const implPath = join(
+    const implPath = builderImplementationPath(
       this.deps.instanceRoot,
-      "workspaces",
       builderRunId,
-      "dev",
-      "src",
-      `${opts.capability}.mjs`,
+      opts.capability,
     );
     if (!existsSync(implPath)) {
       throw new EvolutionError(
@@ -99,11 +122,26 @@ export class Evolution {
         `builder 工作区缺少约定产出路径 src/${opts.capability}.mjs，无法采集`,
       );
     }
+    const implementation = readFileSync(implPath, "utf8");
+    const builderOutputDigest = digestOf(implementation);
+    const attestation = this.deps.storage
+      .listEvents({ runId: builderRunId }, 200)
+      .find(
+        (event) =>
+          event.type === "builder.output.attested" &&
+          event.payload["capability"] === opts.capability,
+      );
+    if (!attestation || attestation.payload["outputDigest"] !== builderOutputDigest) {
+      throw new EvolutionError(
+        "builder_output_changed",
+        `builder 产物在验收后发生变化或缺少摘要证明，拒绝采集 ${opts.capability}`,
+      );
+    }
     const module = {
       kind: "capability-module-v1" as const,
       name: opts.capability,
       entry: "index.mjs",
-      files: [{ path: "index.mjs", content: readFileSync(implPath, "utf8") }],
+      files: [{ path: "index.mjs", content: implementation }],
     };
 
     const organism = this.deps.kernel.getOrganism(this.deps.organismId);
@@ -112,6 +150,8 @@ export class Evolution {
       throw new EvolutionError("no_active_genome", "默认快照未安装，无基准可组合候选");
     }
     const baseRevision = organism.revision;
+    assertEvaluationPlan(opts.evaluationPlan, opts.capability, baseSnapshotId, this.deps.kernel);
+    const planDigest = evaluationPlanDigest(opts.evaluationPlan);
     const genome = ensureCapabilityGenome(
       {
         kernel: this.deps.kernel,
@@ -145,6 +185,8 @@ export class Evolution {
           builderRunId,
           capability: opts.capability,
           builderGoalDigest: digestOf(runGoal(this.deps.storage, builderRunId)),
+          builderOutputDigest,
+          evaluationPlanDigest: planDigest,
         },
         datasetRef: opts.datasetRef ?? null,
         createdAt: now,
@@ -208,13 +250,22 @@ export class Evolution {
    */
   async evaluateCandidate(
     candidateId: string,
-    plan: {
-      newCapability: TaskSubmissionLike;
-      regression: TaskSubmissionLike;
-      requestedBy: string;
-    },
+    plan: EvaluationPlan,
   ): Promise<{ evaluation: EvaluationRecord; status: CandidateStatus }> {
     const candidate = this.mustGetCandidate(candidateId);
+    const capability = candidate.sourceRefs["capability"];
+    if (!capability) {
+      throw new EvolutionError("candidate_capability_missing", "候选缺少 capability 来源引用");
+    }
+    assertEvaluationPlan(plan, capability, candidate.baseSnapshotId, this.deps.kernel);
+    const planDigest = evaluationPlanDigest(plan);
+    if (candidate.sourceRefs["evaluationPlanDigest"] !== planDigest) {
+      throw new EvolutionError(
+        "evaluation_plan_changed",
+        `评估计划与候选构造前固定的摘要不一致，拒绝评估候选 ${candidateId}`,
+      );
+    }
+    const regressions = normalizeRegressions(plan.regression);
     const pinnedEvaluator = ensureHybridEvaluatorVersion(
       {
         kernel: this.deps.kernel,
@@ -229,7 +280,11 @@ export class Evolution {
       this.deps.storage.appendEvent({
         streamId: `candidate-${candidateId}`,
         type: "candidate.evaluating",
-        payload: { protocol: "m2-bootstrap-eval-v1", evaluatorVersionId: pinnedEvaluator.id },
+        payload: {
+          protocol: "m2-bootstrap-eval-v1",
+          evaluationPlanDigest: planDigest,
+          evaluatorVersionId: pinnedEvaluator.id,
+        },
         organismId: this.deps.organismId,
         occurredAt: this.deps.clock.now(),
       });
@@ -257,23 +312,37 @@ export class Evolution {
       };
     };
 
-    const [newCapability, regression, baseline] = await Promise.all([
+    const outcomes = await Promise.all([
       runOutcome("new-capability", "新能力验收", plan.newCapability, candidate.proposedSnapshotId),
-      runOutcome("regression", "既有能力回归", plan.regression, candidate.proposedSnapshotId),
-      runOutcome("baseline", "基线健康对照", plan.regression, candidate.baseSnapshotId),
+      ...regressions.map((regression, index) =>
+        runOutcome(
+          "regression",
+          `既有能力回归 ${index + 1}`,
+          regression,
+          candidate.proposedSnapshotId,
+        ),
+      ),
+      ...regressions.map((regression, index) =>
+        runOutcome("baseline", `基线健康对照 ${index + 1}`, regression, candidate.baseSnapshotId),
+      ),
     ]);
+    const [newCapability, ...remaining] = outcomes;
+    const regressionRuns = remaining.slice(0, regressions.length);
+    const baselineRuns = remaining.slice(regressions.length);
 
     const passed = (o: EvaluationRunOutcome) => o.state === "succeeded";
+    const allPassed = (runs: EvaluationRunOutcome[]) => runs.every(passed);
     let verdict: EvaluationRecord["verdict"];
     let note: string;
-    if (!passed(baseline)) {
+    if (!allPassed(baselineRuns)) {
       verdict = "inconclusive";
       note = "基线对照失败：评估环境不可信，不判 rejected，可修复后重评";
-    } else if (!passed(newCapability) || !passed(regression)) {
+    } else if (!passed(newCapability!) || !allPassed(regressionRuns)) {
       verdict = "rejected";
-      note = !passed(newCapability)
-        ? `新能力验收失败（${newCapability.failureReason}）`
-        : `既有能力回归失败（${regression.failureReason}）`;
+      const failedRegression = regressionRuns.find((run) => !passed(run));
+      note = !passed(newCapability!)
+        ? `新能力验收失败（${newCapability!.failureReason}）`
+        : `既有能力回归失败（${failedRegression?.failureReason}）`;
     } else {
       verdict = "eligible";
       note = "新能力验收与既有能力回归均通过";
@@ -282,14 +351,28 @@ export class Evolution {
     const evaluation: EvaluationRecord = {
       id: this.deps.ids.next(),
       candidateId,
-      protocolDigest: evaluationProtocolDigest(),
+      protocolDigest: digestOf(
+        canonicalJson({
+          protocolDigest: evaluationProtocolDigest(),
+          evaluationPlanDigest: planDigest,
+        }),
+      ),
       baselineSnapshotId: candidate.baseSnapshotId,
-      runs: [newCapability, regression, baseline],
+      runs: outcomes,
       verdict,
       metrics: {
-        newCapability: { passed: passed(newCapability), durationMs: newCapability.durationMs },
-        regression: { passed: passed(regression), durationMs: regression.durationMs },
-        baseline: { passed: passed(baseline), durationMs: baseline.durationMs },
+        newCapability: {
+          passed: passed(newCapability!),
+          durationMs: newCapability!.durationMs,
+        },
+        regression: {
+          passed: allPassed(regressionRuns),
+          durationMs: regressionRuns.reduce((sum, run) => sum + run.durationMs, 0),
+        },
+        baseline: {
+          passed: allPassed(baselineRuns),
+          durationMs: baselineRuns.reduce((sum, run) => sum + run.durationMs, 0),
+        },
         cost: null,
       },
       createdAt: this.deps.clock.now(),
@@ -379,6 +462,14 @@ export class Evolution {
     return this.deps.storage.tx(() => {
       const organism = this.deps.kernel.getOrganism(this.deps.organismId);
       if (!organism) throw new EvolutionError("unknown_organism", "organism 不存在");
+      if (
+        !this.deps.storage.hasHistoricalPromotionSnapshot(this.deps.organismId, opts.toSnapshotId)
+      ) {
+        throw new EvolutionError(
+          "rollback_target_not_adopted",
+          `快照 ${opts.toSnapshotId} 未出现在该个体的历史采用记录中，不能回滚`,
+        );
+      }
       const outcome = this.deps.kernel.promote({
         organismId: this.deps.organismId,
         kind: "rollback",
@@ -476,7 +567,13 @@ export interface TaskSubmissionLike {
   budget: TaskBudget;
   requires?: string[];
   missingCapabilityWaitSeconds?: number;
-  acceptance: { outputSchema: string; verifier: string };
+  acceptance: { outputSchema: string; expectedOutput?: string; verifier: string };
+}
+
+export interface EvaluationPlan {
+  newCapability: TaskSubmissionLike;
+  regression: TaskSubmissionLike | TaskSubmissionLike[];
+  requestedBy: string;
 }
 
 export interface EvolutionRuntimeDeps {
@@ -516,4 +613,97 @@ function runGoal(storage: Storage, runId: string): string {
   const run = storage.getRun(runId);
   const task = run ? storage.getTask(run.taskId) : undefined;
   return task?.goal ?? "";
+}
+
+function builderImplementationPath(
+  instanceRoot: string,
+  runId: string,
+  capability: string,
+): string {
+  return join(instanceRoot, "workspaces", runId, "dev", "src", `${capability}.mjs`);
+}
+
+function normalizeRegressions(
+  regression: TaskSubmissionLike | TaskSubmissionLike[],
+): TaskSubmissionLike[] {
+  return Array.isArray(regression) ? regression : [regression];
+}
+
+/**
+ * 固定评估计划摘要：任务声明、预算、输入树、schema 与期望结果均按内容寻址。
+ * 路径本身不参与摘要，同一内容移动位置不会制造不同计划。
+ */
+export function evaluationPlanDigest(plan: EvaluationPlan): string {
+  const taskFingerprint = (task: TaskSubmissionLike) => ({
+    goal: task.goal,
+    budget: task.budget,
+    requires: task.requires ?? [],
+    missingCapabilityWaitSeconds: task.missingCapabilityWaitSeconds,
+    inputs: task.inputs.map(pathFingerprint),
+    acceptance: {
+      verifier: task.acceptance.verifier,
+      outputSchemaDigest: digestOf(readFileSync(task.acceptance.outputSchema, "utf8")),
+      expectedOutputDigest: task.acceptance.expectedOutput
+        ? digestOf(readFileSync(task.acceptance.expectedOutput, "utf8"))
+        : null,
+    },
+  });
+  return digestOf(
+    canonicalJson({
+      protocol: "m2-bootstrap-eval-v1",
+      requestedBy: plan.requestedBy,
+      newCapability: taskFingerprint(plan.newCapability),
+      regressions: normalizeRegressions(plan.regression).map(taskFingerprint),
+    }),
+  );
+}
+
+function pathFingerprint(path: string): { kind: "file" | "directory"; digest: string } {
+  const stat = statSync(path);
+  if (stat.isFile()) return { kind: "file", digest: digestOf(readFileSync(path, "utf8")) };
+  if (!stat.isDirectory()) {
+    throw new EvolutionError("invalid_evaluation_input", `评估输入不是文件或目录：${path}`);
+  }
+  const entries = readdirSync(path, { withFileTypes: true })
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map((entry) => ({ name: entry.name, value: pathFingerprint(join(path, entry.name)) }));
+  return { kind: "directory", digest: digestOf(canonicalJson(entries)) };
+}
+
+function assertEvaluationPlan(
+  plan: EvaluationPlan,
+  capability: string,
+  baseSnapshotId: string,
+  kernel: Kernel,
+): void {
+  if (!(plan.newCapability.requires ?? []).includes(capability)) {
+    throw new EvolutionError(
+      "evaluation_plan_does_not_exercise_candidate",
+      `new-capability 任务必须声明候选能力 ${capability}`,
+    );
+  }
+  const regressions = normalizeRegressions(plan.regression);
+  if (regressions.length === 0) {
+    throw new EvolutionError("evaluation_plan_missing_regression", "评估计划至少需要一个回归任务");
+  }
+  if (!regressions.some((task) => (task.requires ?? []).length === 0)) {
+    throw new EvolutionError(
+      "evaluation_plan_missing_core_regression",
+      "评估计划必须包含一个不声明派生能力的核心回归任务",
+    );
+  }
+  const { snapshot } = kernel.resolveSnapshot(baseSnapshotId);
+  const existingCapabilities = Object.keys(snapshot.bindings)
+    .filter((slot) => slot.startsWith("capability/"))
+    .map((slot) => slot.slice("capability/".length))
+    .filter((name) => name !== capability);
+  const uncovered = existingCapabilities.filter(
+    (name) => !regressions.some((task) => task.requires?.length === 1 && task.requires[0] === name),
+  );
+  if (uncovered.length > 0) {
+    throw new EvolutionError(
+      "evaluation_plan_missing_capability_regression",
+      `评估计划未覆盖已有能力回归：${uncovered.join(", ")}`,
+    );
+  }
 }

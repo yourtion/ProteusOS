@@ -22,6 +22,8 @@ export interface TaskBudget {
 export interface TaskAcceptance {
   /** JSON Schema 文件路径（相对 task 文件所在目录） */
   outputSchema: string;
+  /** 可选的固定期望输出 JSON；存在时除 schema 外还须逐值相等 */
+  expectedOutput?: string;
   /** 指向 GenomeSnapshot acceptance-evaluator 槽位绑定的 artifact id */
   verifier: string;
 }
