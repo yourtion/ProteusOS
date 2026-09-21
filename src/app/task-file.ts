@@ -18,8 +18,12 @@ export const TaskFileSchema = z.object({
   constraints: z
     .object({
       budget: BudgetSchema.optional(),
+      /** 能力缺口等待截止秒数；缺省 3600 */
+      missingCapabilityWaitSeconds: z.number().int().positive().optional(),
     })
     .optional(),
+  /** 声明所需能力（短名，如 changed-file-summary）；快照须含 capability/<name> 槽位 */
+  requires: z.array(z.string().min(1)).default([]),
   acceptance: z.object({
     outputSchema: z.string().min(1),
     /** 指向 G0 的 acceptance-evaluator 槽位绑定的 artifact（stats-acceptance） */

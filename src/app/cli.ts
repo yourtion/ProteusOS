@@ -1,5 +1,6 @@
 import { Command } from "commander";
 import {
+  advanceCommand,
   cancelCommand,
   initCommand,
   inspectCommand,
@@ -47,6 +48,15 @@ withCommon(program.command("cancel").description("请求取消 Run").argument("<
     await cancelCommand(id, opts);
   },
 );
+
+withCommon(
+  program
+    .command("advance")
+    .description("推进能力缺口等待中的 Run：截止已到则 failed/missing_capability 结案")
+    .argument("<id>", "Run ID"),
+).action(async (id: string, opts) => {
+  await advanceCommand(id, opts);
+});
 
 withCommon(
   program

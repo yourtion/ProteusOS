@@ -216,8 +216,8 @@ export class Storage implements KernelStore, RuntimeStore {
 
   insertTask(t: TaskRecord): void {
     this.db.run(
-      `INSERT INTO tasks (id, revision, requested_by, goal, inputs, budget, acceptance, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO tasks (id, revision, requested_by, goal, inputs, budget, acceptance, requires, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       t.id,
       t.revision,
       t.requestedBy,
@@ -225,6 +225,7 @@ export class Storage implements KernelStore, RuntimeStore {
       JSON.stringify(t.inputs),
       JSON.stringify(t.budget),
       JSON.stringify(t.acceptance),
+      JSON.stringify(t.requires),
       t.createdAt,
     );
   }
@@ -240,6 +241,7 @@ export class Storage implements KernelStore, RuntimeStore {
           inputs: JSON.parse(row.inputs) as string[],
           budget: JSON.parse(row.budget) as TaskBudget,
           acceptance: JSON.parse(row.acceptance) as TaskAcceptance,
+          requires: JSON.parse(row.requires) as string[],
           createdAt: row.created_at,
         }
       : undefined;
@@ -247,8 +249,8 @@ export class Storage implements KernelStore, RuntimeStore {
 
   insertRun(r: RunRecord): void {
     this.db.run(
-      `INSERT INTO runs (id, task_id, task_revision, organism_id, purpose, snapshot_id, graph_digest, state, supersedes_run_id, budget, failure_reason, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO runs (id, task_id, task_revision, organism_id, purpose, snapshot_id, graph_digest, state, supersedes_run_id, budget, failure_reason, missing_capabilities, waiting_until, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       r.id,
       r.taskId,
       r.taskRevision,
@@ -260,6 +262,8 @@ export class Storage implements KernelStore, RuntimeStore {
       r.supersedesRunId,
       JSON.stringify(r.budget),
       r.failureReason,
+      r.missingCapabilities ? JSON.stringify(r.missingCapabilities) : null,
+      r.waitingUntil,
       r.createdAt,
       r.updatedAt,
     );
@@ -593,6 +597,10 @@ function mapRun(row: RunRow): RunRecord {
     supersedesRunId: row.supersedes_run_id,
     budget: JSON.parse(row.budget) as TaskBudget,
     failureReason: row.failure_reason,
+    missingCapabilities: row.missing_capabilities
+      ? (JSON.parse(row.missing_capabilities) as string[])
+      : null,
+    waitingUntil: row.waiting_until,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };

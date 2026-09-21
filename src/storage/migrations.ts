@@ -175,4 +175,59 @@ UPDATE budget_ledger SET organism_id = (
 CREATE INDEX idx_budget_organism ON budget_ledger(organism_id);
 `,
   },
+  {
+    // M2 最小自举：能力声明/缺口等待列 + Candidate/Evaluation/Promotion 三表。
+    // Candidate 流程状态不落列，由 candidate-<id> 事件流投影（docs/domain-model.md §5）。
+    version: 3,
+    name: "m2-bootstrap",
+    sql: `
+ALTER TABLE tasks ADD COLUMN requires TEXT NOT NULL DEFAULT '[]';
+ALTER TABLE runs ADD COLUMN missing_capabilities TEXT;
+ALTER TABLE runs ADD COLUMN waiting_until INTEGER;
+
+CREATE TABLE candidates (
+  id TEXT PRIMARY KEY,
+  organism_id TEXT NOT NULL,
+  base_snapshot_id TEXT NOT NULL,
+  base_revision INTEGER NOT NULL,
+  proposed_snapshot_id TEXT NOT NULL,
+  hypothesis TEXT NOT NULL,
+  proposed_by TEXT NOT NULL,
+  source_refs TEXT NOT NULL,
+  dataset_ref TEXT,
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX idx_candidates_organism ON candidates(organism_id);
+CREATE INDEX idx_candidates_proposed ON candidates(proposed_snapshot_id);
+
+CREATE TABLE evaluations (
+  id TEXT PRIMARY KEY,
+  candidate_id TEXT NOT NULL,
+  protocol_digest TEXT NOT NULL,
+  baseline_snapshot_id TEXT NOT NULL,
+  runs TEXT NOT NULL,
+  verdict TEXT NOT NULL,
+  metrics TEXT NOT NULL,
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX idx_evaluations_candidate ON evaluations(candidate_id);
+
+CREATE TABLE promotions (
+  id TEXT PRIMARY KEY,
+  operation_id TEXT NOT NULL UNIQUE,
+  kind TEXT NOT NULL,
+  organism_id TEXT NOT NULL,
+  from_snapshot_id TEXT NOT NULL,
+  to_snapshot_id TEXT NOT NULL,
+  expected_revision INTEGER NOT NULL,
+  result_revision INTEGER NOT NULL,
+  evaluation_ref TEXT,
+  authorization_ref TEXT,
+  actor TEXT NOT NULL,
+  note TEXT,
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX idx_promotions_organism ON promotions(organism_id);
+`,
+  },
 ];

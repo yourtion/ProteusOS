@@ -45,6 +45,8 @@ export async function submitCommand(taskPath: string, opts: CommonOpts): Promise
       goal: file.goal,
       inputs: file.inputs.map((p) => resolveFrom(baseDir, p)),
       budget,
+      requires: file.requires,
+      missingCapabilityWaitSeconds: file.constraints?.missingCapabilityWaitSeconds,
       acceptance: {
         outputSchema: resolveFrom(baseDir, file.acceptance.outputSchema),
         verifier: file.acceptance.verifier,
@@ -58,6 +60,13 @@ export async function submitCommand(taskPath: string, opts: CommonOpts): Promise
     console.log(`${icon} run ${summary.runId} → ${summary.state}`);
     console.log(`  task       ${summary.taskId}`);
     console.log(`  snapshot   ${summary.snapshotId} (${summary.graphSource})`);
+    const run = inst.storage.getRun(summary.runId);
+    if (run?.missingCapabilities) {
+      console.log(`  waiting    缺少能力 ${run.missingCapabilities.join(", ")}`);
+      if (run.waitingUntil) {
+        console.log(`  deadline   ${new Date(run.waitingUntil).toISOString()}`);
+      }
+    }
     for (const n of summary.nodes) {
       console.log(`  node       ${n.id.padEnd(10)} ${n.type.padEnd(8)} ${n.state}`);
     }
@@ -135,6 +144,21 @@ export async function cancelCommand(id: string, opts: CommonOpts): Promise<void>
   const inst = openInstance(resolveInstanceRoot(opts.home));
   try {
     const result = await inst.runtime.cancel(id);
+    if (opts.json) {
+      console.log(JSON.stringify(result, null, 2));
+      return;
+    }
+    console.log(`run ${result.runId} → ${result.state}`);
+    console.log(`  ${result.note}`);
+  } finally {
+    inst.close();
+  }
+}
+
+export async function advanceCommand(id: string, opts: CommonOpts): Promise<void> {
+  const inst = openInstance(resolveInstanceRoot(opts.home));
+  try {
+    const result = await inst.runtime.advanceRun(id);
     if (opts.json) {
       console.log(JSON.stringify(result, null, 2));
       return;

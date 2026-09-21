@@ -34,6 +34,10 @@ export interface TaskSubmission {
   /** 绝对路径（由 CLI 相对 task 文件解析） */
   inputs: string[];
   budget: TaskBudget;
+  /** 声明所需能力（短名）；快照须含 capability/<name> 槽位，缺一口即进入缺口等待 */
+  requires?: string[];
+  /** 能力缺口等待截止秒数（默认 3600）；到期 advance 结案 failed/missing_capability */
+  missingCapabilityWaitSeconds?: number;
   acceptance: {
     /** JSON Schema 文件绝对路径 */
     outputSchema: string;
@@ -41,6 +45,13 @@ export interface TaskSubmission {
     verifier: string;
   };
 }
+
+/** 能力短名 → 快照槽位名（capability/<name>，artifact kind 与槽位一致） */
+export function capabilitySlot(name: string): string {
+  return `capability/${name}`;
+}
+
+export const DEFAULT_MISSING_CAPABILITY_WAIT_SECONDS = 3600;
 
 export type RuntimeErrorCode =
   | "unknown_run"
@@ -91,7 +102,7 @@ class NodeFailure extends Error {
 
 export interface RecoveryAction {
   runId: string;
-  action: "resumed" | "needs_reconciliation" | "already_terminal";
+  action: "resumed" | "needs_reconciliation" | "already_terminal" | "waiting_capability";
   unknownAttempts: Array<{ attemptId: string; ordinal: number }>;
   summary: RunSummary | null;
 }
@@ -135,6 +146,7 @@ export class Runtime {
 
     const runId = this.deps.ids.next();
     const taskId = this.deps.ids.next();
+    let missingPending: string[] = [];
 
     this.deps.storage.tx(() => {
       const organism = this.deps.kernel.getOrganism(this.deps.organismId);
@@ -153,6 +165,12 @@ export class Runtime {
       const graphVersion = versions.get("task-graph");
       if (!graphVersion) throw new RuntimeError("missing_binding", "快照缺少 task-graph 槽位");
 
+      // 能力检查（M2）：Task 声明的每个能力须有快照槽位；缺口进入带截止点的等待，
+      // 不执行图——Run 固定本快照，能力只会出现在未来快照中，出路是接替或到期结案
+      const requires = input.requires ?? [];
+      const missing = requires.filter((c) => !versions.has(capabilitySlot(c)));
+      missingPending = missing;
+
       const graphContent = this.deps.blobs.read(graphVersion.contentRef);
       try {
         validateDag(normalizeDag(parseGraph(graphContent)));
@@ -169,8 +187,11 @@ export class Runtime {
         inputs: [...input.inputs],
         budget: { ...input.budget },
         acceptance: { ...input.acceptance },
+        requires: [...requires],
         createdAt: now,
       });
+      const waitSeconds =
+        input.missingCapabilityWaitSeconds ?? DEFAULT_MISSING_CAPABILITY_WAIT_SECONDS;
       this.deps.storage.insertRun({
         id: runId,
         taskId,
@@ -179,10 +200,12 @@ export class Runtime {
         purpose: "normal",
         snapshotId: snapshot.id,
         graphDigest: digestOf(graphContent),
-        state: "pending",
+        state: missing.length > 0 ? "waiting" : "pending",
         supersedesRunId: null,
         budget: { ...input.budget },
         failureReason: null,
+        missingCapabilities: missing.length > 0 ? missing : null,
+        waitingUntil: missing.length > 0 ? now + waitSeconds * 1000 : null,
         createdAt: now,
         updatedAt: now,
       });
@@ -205,7 +228,15 @@ export class Runtime {
       this.deps.storage.appendEvent({
         streamId: `run-${runId}`,
         type: "run.created",
-        payload: { taskId, snapshotId: snapshot.id, purpose: "normal" },
+        payload: {
+          taskId,
+          snapshotId: snapshot.id,
+          purpose: "normal",
+          requires,
+          ...(missing.length > 0
+            ? { missingCapabilities: missing, waitingUntil: now + waitSeconds * 1000 }
+            : {}),
+        },
         correlationId: runId,
         causationId: taskId,
         organismId: this.deps.organismId,
@@ -214,7 +245,40 @@ export class Runtime {
       });
     });
 
+    if (missingPending.length > 0) {
+      return this.getRunSummary(runId);
+    }
     return this.executeRun(runId);
+  }
+
+  /**
+   * 推进能力缺口等待中的 Run（operator 显式调用）：
+   * 截止时刻已到 → failed/missing_capability 结案；未到 → 保持等待。
+   * 缺口 Run 固定自身快照，能力不会在其中出现，因此不存在"能力补齐续跑"路径。
+   */
+  async advanceRun(runId: string): Promise<{ runId: string; state: RunState; note: string }> {
+    const run = this.mustGetRun(runId);
+    if (!run.missingCapabilities) {
+      return { runId, state: run.state, note: "run 不在能力缺口等待中，无操作" };
+    }
+    if (isTerminal(run.state)) {
+      return { runId, state: run.state, note: `run 已终态（${run.state}），无操作` };
+    }
+    const now = this.deps.clock.now();
+    const until = run.waitingUntil ?? run.createdAt;
+    if (now < until) {
+      return {
+        runId,
+        state: run.state,
+        note: `等待截止 ${new Date(until).toISOString()} 未到，保持 waiting`,
+      };
+    }
+    this.finalize(runId, "failed", "missing_capability", []);
+    return {
+      runId,
+      state: "failed",
+      note: `能力缺口等待到期：缺少 ${run.missingCapabilities.join(", ")}，以 failed/missing_capability 结案`,
+    };
   }
 
   /**
@@ -224,6 +288,12 @@ export class Runtime {
    */
   async executeRun(runId: string): Promise<RunSummary> {
     const initial = this.mustGetRun(runId);
+    if (initial.missingCapabilities && !isTerminal(initial.state)) {
+      throw new RuntimeError(
+        "run_not_pending",
+        `run ${runId} 在能力缺口等待中（缺少 ${initial.missingCapabilities.join(", ")}），不能执行；请 supersede 接替或等待截止后 advance`,
+      );
+    }
     const resumable: RunState[] = ["pending", "running", "waiting"];
     if (!resumable.includes(initial.state)) {
       throw new RuntimeError("run_not_pending", `run ${runId} 状态为 ${initial.state}，不能执行`);
@@ -449,6 +519,16 @@ export class Runtime {
         actions.push({
           runId: run.id,
           action: "already_terminal",
+          unknownAttempts: [],
+          summary: null,
+        });
+        continue;
+      }
+      if (run.missingCapabilities) {
+        // 缺口等待不是执行中断，不属恢复范围；出路是接替或到期 advance
+        actions.push({
+          runId: run.id,
+          action: "waiting_capability",
           unknownAttempts: [],
           summary: null,
         });

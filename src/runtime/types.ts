@@ -35,6 +35,8 @@ export interface TaskRecord {
   inputs: string[];
   budget: TaskBudget;
   acceptance: TaskAcceptance;
+  /** 声明所需能力（短名，如 changed-file-summary）；对应快照槽位 capability/<name> */
+  requires: string[];
   createdAt: number;
 }
 
@@ -50,6 +52,10 @@ export interface RunRecord {
   supersedesRunId: string | null;
   budget: TaskBudget;
   failureReason: string | null;
+  /** 能力缺口等待：缺失能力清单；null 表示非缺口等待 */
+  missingCapabilities: string[] | null;
+  /** 缺口等待截止时刻（epoch ms）；到时 advance 结案 failed/missing_capability */
+  waitingUntil: number | null;
   createdAt: number;
   updatedAt: number;
 }
