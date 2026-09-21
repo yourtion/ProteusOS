@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import type { AppInstance } from "../../src/app/instance.ts";
@@ -7,12 +8,13 @@ import { Runtime } from "../../src/runtime/index.ts";
 import type { ExecutorProvider } from "../../src/runtime/types.ts";
 import { DEFAULT_ORGANISM_BUDGET } from "../../src/runtime/types.ts";
 import { RuleDecisionProvider } from "../../src/adapters/decision-rule/index.ts";
+import { Evolution } from "../../src/evolution/index.ts";
 import { v7 as uuidv7 } from "uuid";
 import { bootSeededInstance, fixturePath, installCustomGenome } from "../helpers.ts";
 
 /**
- * 真实 agent E2E（M1）：消耗真实凭据与费用，默认跳过。
- * 运行：PROTEUS_E2E=claude ｜ codex ｜ pi ｜ all（pnpm test -- tests/e2e）
+ * 真实 agent E2E（M1/M2）：消耗真实凭据与费用，默认跳过。
+ * 运行：PROTEUS_E2E=claude ｜ codex ｜ pi ｜ bootstrap ｜ all（pnpm test -- tests/e2e）
  * 前置：本机 claude CLI 已登录 / OpenAI 凭据 / ~/.pi/agent 已配置模型。
  */
 
@@ -113,8 +115,118 @@ describe("M1 E2E：真实 agent（PROTEUS_E2E 显式启用）", () => {
     E2E_TIMEOUT,
   );
 
+  it.runIf(enabled("bootstrap"))(
+    "M2 自举故事（真实 Claude Code 作为 builder）：缺口等待 → 委托构建 → 评估 → 晋升 → 接替 Run 完成",
+    async () => {
+      const M2 = fileURLToPath(new URL("../fixtures/m2", import.meta.url));
+      const runtime = new Runtime({
+        storage: inst.storage,
+        kernel: inst.kernel,
+        organismId: "organism-default",
+        executors: buildExecutors(),
+        decision: new RuleDecisionProvider(),
+        blobs: inst.blobs,
+        instanceRoot: inst.root,
+        clock: { now: Date.now },
+        ids: { next: uuidv7 },
+        organismBudget: {
+          ...DEFAULT_ORGANISM_BUDGET,
+          maxConcurrentRuns: 4,
+          maxInFlightWallClockSeconds: 3600,
+        },
+      });
+      const evo = new Evolution({
+        kernel: inst.kernel,
+        storage: inst.storage,
+        blobs: inst.blobs,
+        runtime,
+        organismId: "organism-default",
+        instanceRoot: inst.root,
+        clock: { now: Date.now },
+        ids: { next: uuidv7 },
+      });
+
+      // ① R1 缺口等待
+      const r1 = await runtime.submitTask({
+        requestedBy: "principal-local",
+        goal: "对变更清单生成可验证的文件分类摘要",
+        inputs: [join(M2, "inputs", "changed-files.json")],
+        budget: { maxAttempts: 3, maxWallClockSeconds: 120 },
+        requires: ["changed-file-summary"],
+        acceptance: {
+          outputSchema: join(M2, "schemas", "changed-file-summary.schema.json"),
+          verifier: "stats-acceptance",
+        },
+      });
+      expect(r1.state).toBe("waiting");
+
+      // ②③ 真实 Claude Code 构建 → 独立测试验收 → 候选
+      const builder = await evo.build({
+        capability: "changed-file-summary",
+        goal: readFileSync(join(M2, "specs", "changed-file-summary-spec.md"), "utf8"),
+        inputs: [join(M2, "capability-tests")],
+        executorName: "claude-code-acp",
+        testCommand: ["node", "--test", "inputs/capability-tests/changed-file-summary.test.mjs"],
+        budget: { maxAttempts: 2, maxWallClockSeconds: 480 },
+        outputSchema: fixturePath("schemas", "stats-summary.schema.json"),
+        requestedBy: "principal-local",
+      });
+      expect(builder.state).toBe("succeeded");
+      const { candidate } = evo.collectCandidate(builder.runId, {
+        capability: "changed-file-summary",
+        hypothesis: "真实 Claude Code 构建的派生能力",
+        proposedBy: "principal-local",
+      });
+
+      // ④ 独立评估 → ⑤ 晋升 → ⑥ 接替
+      const evalOut = await evo.evaluateCandidate(candidate.id, {
+        newCapability: {
+          goal: "对变更清单生成可验证的文件分类摘要",
+          inputs: [join(M2, "inputs", "changed-files.json")],
+          budget: { maxAttempts: 3, maxWallClockSeconds: 120 },
+          requires: ["changed-file-summary"],
+          acceptance: {
+            outputSchema: join(M2, "schemas", "changed-file-summary.schema.json"),
+            verifier: "stats-acceptance",
+          },
+        },
+        regression: {
+          goal: "统计摘要（回归）",
+          inputs: [fixturePath("input-a")],
+          budget: { maxAttempts: 3, maxWallClockSeconds: 120 },
+          acceptance: {
+            outputSchema: fixturePath("schemas", "stats-summary.schema.json"),
+            verifier: "stats-acceptance",
+          },
+        },
+        requestedBy: "principal-local",
+      });
+      expect(evalOut.evaluation.verdict).toBe("eligible");
+
+      const promoted = evo.promote(candidate.id, { authorizedBy: "principal-local" });
+      expect(promoted.result).toBe("promoted");
+
+      const { superseded, successor } = await evo.supersedeAndReplace(r1.runId);
+      expect(superseded.state).toBe("failed");
+      expect(successor.state).toBe("succeeded");
+
+      const output = JSON.parse(
+        readFileSync(join(inst.root, "workspaces", successor.runId, "work", "output.json"), "utf8"),
+      ) as { summary: { files: Array<{ path: string; category: string }> } };
+      const expected = JSON.parse(
+        readFileSync(join(M2, "evals", "summary-expected.json"), "utf8"),
+      ) as Record<string, string>;
+      expect(Object.fromEntries(output.summary.files.map((f) => [f.path, f.category]))).toEqual(
+        expected,
+      );
+    },
+    E2E_TIMEOUT,
+  );
+
   it("占位：未启用时本文件除跳过项外保持绿", () => {
-    expect(MODE === "" || MODE === "all" || ["claude", "codex", "pi"].includes(MODE)).toBe(true);
+    expect(
+      MODE === "" || MODE === "all" || ["claude", "codex", "pi", "bootstrap"].includes(MODE),
+    ).toBe(true);
   });
 });
 

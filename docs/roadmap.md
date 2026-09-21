@@ -2,11 +2,12 @@
 
 当前可以开始架构文档和 seed 原型，无需先解决完整记忆系统、模型微调或团队共进化。以下阶段按验收能力推进，不对应既定发布日期；与历史讨论中的 V0–V4 不建立产品版本号映射。
 
-## 0. 实现进度（2026-09-20）
+## 0. 实现进度（2026-09-21）
 
-- **M0 完成**：五个纵切片全部落地并各自以验收测试收口（单节点闭环 → DAG + 规则决策 + verify → 并发与预算原子预留 → 崩溃恢复与对账 → seed 可重复固化），84 项 CI 测试全绿。
-- **M1 完成**：执行器注册表（local-process / claude-code-acp / codex-acp / pi）；委托编码 → 独立测试验收闭环；能力协商、权限请求、断连与取消合同由 fake agent（真实 ACP 协议实现）覆盖；真实凭据 E2E：Claude Code（50s）与 Codex（28s，经代理）通过，pi 链路验证至模型调用（当时凭据的默认模型返回 403，属账户配额，处理凭据后 `PROTEUS_E2E=pi` 即可复跑）。接入决策见 [ADR 0005](./adr/0005-external-executors.md)，实现与设计文档的对应见 [运行时实现注记](./runtime.md#9-实现注记m0m1)。
-- **下一步 M2**：最小自举（Candidate / Evaluation / Promotion）——M0 的 CAS active 指针与不可变快照机制直接复用。
+- **M0 完成**：五个纵切片全部落地并各自以验收测试收口（单节点闭环 → DAG + 规则决策 + verify → 并发与预算原子预留 → 崩溃恢复与对账 → seed 可重复固化）。
+- **M1 完成**：执行器注册表（local-process / claude-code-acp / codex-acp / pi）；委托编码 → 独立测试验收闭环；能力协商、权限请求、断连与取消合同由 fake agent（真实 ACP 协议实现）覆盖；真实凭据 E2E：Claude Code（50s）与 Codex（28s，经代理）通过，pi 链路验证至模型调用（当时凭据的默认模型返回 403，属账户配额，处理凭据后 `PROTEUS_E2E=pi` 即可复跑）。接入决策见 [ADR 0005](./adr/0005-external-executors.md)。
+- **M2 完成**：最小自举（Candidate / Evaluation / Promotion）五片落地。能力即快照槽位（`capability/<name>`）+ 独立子进程加载；Task 声明 `requires`，缺口进入带截止点的 waiting；委托构建 → test-runner 独立验收 → 采集注册不可变版本 → 候选快照（digest 幂等去重）；评估协议 m2-bootstrap-eval-v1（候选×新能力 + 候选×回归 + 基线对照，裁判按内容寻址钉住）；`Kernel.promote` 一次验证 + CAS + operationId 幂等读回；接替为显式 `supersede`（R1 failed/superseded → R2 绑新快照）；回滚 revision 只增不减。七步自举故事经 CLI 验收固化（tests/acceptance/m2.test.ts），真实 builder 版挂 `PROTEUS_E2E=bootstrap`。实现决策与让步见 [ADR 0006](./adr/0006-m2-minimal-bootstrap.md)。
+- **下一步 M3**：经验驱动演化——冻结经验集、Consolidation、多目标比较；前置：真隔离方案落地、裁判拆分独立晋升、评估独立预算池。
 
 ## 1. 本次澄清结果
 
@@ -72,10 +73,10 @@ M0 的 seed 必须含基本执行合同、固定图、确定性选择规则、�
 | M0 预算维度 | Attempt 数上限 + 墙钟秒数，Run 与 Organism 两级；按预留/结算/unknown 语义记账 | M3 出现真实成本数据后再决定是否抽象为统一点数 |
 | CLI 与首次引导 | `proteus init/submit/runs/cancel/inspect`；实例根默认 `~/.proteus`；init 创建 local Principal 与默认 Organism，导入 seed 并安装 G0，幂等可重复 | task.yaml 四要素 schema（goal/inputs/constraints/acceptance，验收走槽位引用）与 G0 三槽位（task-graph / routing-policy / acceptance-evaluator）已确认；实现中细化参数与输出格式 |
 | 首个外部 worker | 已决策（2026-09-20）：双执行器——Claude Code 经 `@zed-industries/claude-code-acp`（ACP 合同验证主路径，本机 claude 2.1.278 已就绪）+ pi 经 `@earendil-works/pi-coding-agent` SDK 直连（Provider 可替换性验证；pi 无原生 ACP，其自有 RPC/SDK 即受控进程接口） | M1 实现时锁定 `@agentclientprotocol/sdk` 1.4.x 与 pi SDK 0.86.x；真实集成测试需本机凭据显式启用，CI 用 fake ACP agent 覆盖合同 |
-| 执行环境 | M0 只运行可信 fixture（已落地）；M1 E2E 目前在操作者本机运行——工作区隔离 + ACP 权限策略，**无真隔离** | M2 前确定容器、独立宿主或其他真实隔离方案（生成代码候选进入快照前必须具备）；工作区不算安全沙箱 |
-| 晋升权限 | 自动提议/评估，operator 显式晋升；权限内自动化以后再加 | M2 前确定允许自主晋升的类型、scope、预算与证据要求；缺省保持人工模式 |
-| 首个自举案例 | ChangedFileSummary 固定任务 | M1 前确认代表性；可以换案例，但保留相同闭环验收 |
-| 评价指标 | 成功与回归为硬约束，质量、时延、成本分别比较 | M2/M3 构造候选前固定评估协议，避免事后移动标准 |
+| 执行环境 | M0 只运行可信 fixture（已落地）；M1 E2E 在操作者本机运行（工作区隔离 + ACP 权限策略）；**M2 已决策（2026-09-21，ADR 0006）：能力代码以独立 node 子进程 + 工作区 + 超时 + 路径越界拒绝执行（进程级隔离），真隔离（容器/独立宿主）显式挂账 M3**——工作区不算安全沙箱的立场不变 | M3 构造第一批进入默认行为的候选前，容器或独立宿主方案必须就位 |
+| 晋升权限 | **M2 已落地 proposed 首版默认**：评估自动执行（协议 m2-bootstrap-eval-v1），晋升由 operator 显式批准（`proteus promote --as`）；评估完成不等于授权；CAS 冲突候选标 stale 须重构重评 | M3 出现稳定评估基线后，再决定允许自主晋升的类型、scope、预算与证据要求 |
+| 首个自举案例 | ChangedFileSummary 固定任务——**M2 已完成**（CLI 七步验收 + PROTEUS_E2E=bootstrap 真实 builder 版） | — |
+| 评价指标 | **M2 已固定协议 m2-bootstrap-eval-v1**：成功与回归为硬约束，时延分列记录，成本显式 null（真实计费数据出现前不臆造）；基线对照失败记 inconclusive 可重评 | M3 扩展多目标比较与重复运行方差前，复核该协议是否需要升级版本 |
 | 用户数据保留 | 最小采集、禁止默认共享、来源可追溯 | 接入真实经历前确定保留期、删除和可训练用途 |
 | 本地决策模型与微调 | 先 RuleProvider；真实需求和基线出现后比较模型 | M3 后选择数据、指标和训练路线，不提前绑定 Jev 或某一开源模型 |
 | 团队治理 | 先保留归属与精确引用，后实现发布和本地继承 | M4 前明确组织身份、分享策略、团队发布授权及迁移方式 |

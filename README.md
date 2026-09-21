@@ -2,11 +2,12 @@
 
 承载长期、可适应智能的运行基质：让具有持续身份的个体执行任务、积累经验，并通过可验证、可继承、可回滚的产物变化改进行为。
 
-## 当前状态（2026-09-20）
+## 当前状态（2026-09-21）
 
-- **M0 已完成**：单 Organism 本地闭环——身份、不可变版本、GenomeSnapshot、有限 DAG（decision / execute / verify）、预算原子预留、崩溃恢复与对账、可重复 seed 安装。73+ 项测试全绿。
+- **M0 已完成**：单 Organism 本地闭环——身份、不可变版本、GenomeSnapshot、有限 DAG（decision / execute / verify）、预算原子预留、崩溃恢复与对账、可重复 seed 安装。
 - **M1 已完成**：外部委托——Claude Code 与 Codex 经 ACP（官方 agent 适配器）接入、pi 经官方 SDK 直连；委托编码 → 独立测试验收的完整闭环，真实 agent E2E 已验证。
-- 下一步 M2：最小自举（Candidate / Evaluation / Promotion，复用既有 CAS 与快照机制）。
+- **M2 已完成**：最小自举——能力声明与缺口等待、能力经独立子进程加载、委托构建 → 不可变版本 → 候选快照、独立评估（裁判钉住）→ operator 批准 CAS 晋升 → 接替 Run 完成原任务 → 回滚；ChangedFileSummary 七步自举故事 CLI 验收固化。122+ 项测试全绿。
+- 下一步 M3：经验驱动演化（冻结经验集、Consolidation、多目标比较；前置：真隔离、裁判拆分独立晋升、评估独立预算池）。
 
 ## 快速开始
 

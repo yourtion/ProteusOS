@@ -1,0 +1,7 @@
+{
+  "src/index.ts": "source",
+  "src/wordcount.test.mjs": "test",
+  "docs/guide.md": "docs",
+  "package.json": "config",
+  "LICENSE": "other"
+}

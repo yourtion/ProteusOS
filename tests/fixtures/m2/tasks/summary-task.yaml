@@ -4,6 +4,8 @@ constraints:
   budget:
     maxAttempts: 3
     maxWallClockSeconds: 60
+  # 缺口等待截止 1 秒：R1/R3 的等待可在测试中推进结案
+  missingCapabilityWaitSeconds: 1
 requires: ["changed-file-summary"]
 acceptance:
   outputSchema: ../schemas/changed-file-summary.schema.json

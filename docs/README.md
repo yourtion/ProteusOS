@@ -36,8 +36,9 @@ ProteusOS 是承载长期、可适应智能的运行基质：让具有持续身�
 - [ADR 0003：个体主权与联邦继承](./adr/0003-organism-and-federation.md)
 - [ADR 0004：仓库技术栈与工程基线](./adr/0004-m0-engineering-baseline.md)
 - [ADR 0005：M1 外部执行器接入方式](./adr/0005-external-executors.md)
+- [ADR 0006：M2 最小自举——能力槽位、进程级隔离与预注册裁判](./adr/0006-m2-minimal-bootstrap.md)
 
-ADR 0001–0003 状态为 `proposed`，记录本次架构建议及取舍，不将历史对话中每项建议追认为已批准决定。ADR 0004 / 0005 状态为 `accepted`，记录已确认并落地的工程决策。
+ADR 0001–0003 状态为 `proposed`，记录本次架构建议及取舍，不将历史对话中每项建议追认为已批准决定。ADR 0004 / 0005 / 0006 状态为 `accepted`，记录已确认并落地的工程决策。
 
 ## 文档维护
 

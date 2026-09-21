@@ -1,6 +1,6 @@
 # 仓库架构与实现约束
 
-状态：**active**（2026-09-20）。工程基线已按 [ADR 0004](./adr/0004-m0-engineering-baseline.md) 落地，以下目录已创建并在用（M0/M1）；evolution/ 与 evals/、examples/ 仍按“需要时才创建”原则留待 M2。
+状态：**active**（2026-09-21）。工程基线已按 [ADR 0004](./adr/0004-m0-engineering-baseline.md) 落地；M0/M1/M2 目录已创建并在用（含 `src/evolution/` 与验证布局 Evaluation 层 `tests/evals/`，M2 起）；examples/ 仍按“需要时才创建”原则留待后续里程碑。
 
 ## 1. 从单包模块化起步
 

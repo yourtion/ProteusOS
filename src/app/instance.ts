@@ -60,6 +60,8 @@ export function resolvePackageBin(packageName: string, binName: string): string 
  * 执行器注册表（M1）：图节点 executor 名 → 实现。
  * local-process（M0 worker）；claude-code-acp / codex-acp 经同一 AcpExecutor
  * 驱动官方 agent 适配器；pi 经官方 SDK 直连。
+ * PROTEUS_FAKE_ACP_AGENT=<script> 时额外注册 fake-acp（测试/演练用，
+ * 与真实适配器同一 ACP 合同）。
  */
 export function buildExecutors(): Map<string, ExecutorProvider> {
   const workerPath = fileURLToPath(
@@ -68,6 +70,10 @@ export function buildExecutors(): Map<string, ExecutorProvider> {
   const executors = new Map<string, ExecutorProvider>();
   executors.set("local-process", new LocalProcessExecutor(workerPath));
   executors.set("pi", new PiExecutor("pi"));
+  const fakeAgent = process.env.PROTEUS_FAKE_ACP_AGENT;
+  if (fakeAgent) {
+    executors.set("fake-acp", new AcpExecutor({ name: "fake-acp", agentEntry: fakeAgent }));
+  }
   for (const [name, spec] of [
     [
       "claude-code-acp",
