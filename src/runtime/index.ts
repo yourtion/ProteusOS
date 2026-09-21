@@ -2,10 +2,15 @@ import { cpSync, existsSync, mkdirSync, readFileSync, statSync } from "node:fs";
 import { basename, join } from "node:path";
 import type { DecisionProvider } from "../decision/index.ts";
 import { validateChoice } from "../decision/index.ts";
-import type { Clock, IdGen, Kernel } from "../kernel/index.ts";
+import type { ArtifactVersion, Clock, IdGen, Kernel } from "../kernel/index.ts";
 import { digestOf, type BlobStore } from "../storage/blobs.ts";
 import type { Storage } from "../storage/store.ts";
-import { evaluateStatsOutput, evaluateTestRunner, readEvaluatorKind } from "./acceptance.ts";
+import {
+  evaluateHybridOutput,
+  evaluateStatsOutput,
+  evaluateTestRunner,
+  readEvaluatorKind,
+} from "./acceptance.ts";
 import {
   normalizeDag,
   parseGraph,
@@ -19,6 +24,7 @@ import type {
   ExecutorProvider,
   OrganismBudget,
   OutcomeCheck,
+  RunPurpose,
   RunRecord,
   RunState,
   RunSummary,
@@ -27,6 +33,7 @@ import type {
   TaskBudget,
   TaskRecord,
 } from "./types.ts";
+import { parseCapabilityModule, runCapabilityModule } from "./capability.ts";
 
 export interface TaskSubmission {
   requestedBy: string;
@@ -52,6 +59,21 @@ export function capabilitySlot(name: string): string {
 }
 
 export const DEFAULT_MISSING_CAPABILITY_WAIT_SECONDS = 3600;
+
+/**
+ * 提交选项（M2）：评估 Run 的显式授权入口（docs/runtime.md §1）。
+ * 指定 snapshotId 绑定候选/基线快照且不改变 activeGenome；
+ * evaluatorVersionId 仅评估用途允许——评估计划固定裁判，候选不能替换本轮裁判。
+ */
+export interface SubmitOptions {
+  purpose?: RunPurpose;
+  /** 显式绑定的快照（已注册但未激活的候选/基线/构建器快照） */
+  snapshotId?: string;
+  /** 接替的 Run（R2 接替 R1）；运行与经验记录保留接替关系 */
+  supersedesRunId?: string;
+  /** 评估计划固定的裁判版本；仅 purpose=evaluation 允许 */
+  evaluatorVersionId?: string;
+}
 
 export type RuntimeErrorCode =
   | "unknown_run"
@@ -137,15 +159,25 @@ export class Runtime {
     this.deps = deps;
   }
 
-  /** 提交任务并内联执行到终态 */
-  async submitTask(input: TaskSubmission): Promise<RunSummary> {
+  /** 提交任务并内联执行到终态；options 提供评估 Run 的显式授权入口（M2） */
+  async submitTask(input: TaskSubmission, options: SubmitOptions = {}): Promise<RunSummary> {
     for (const p of input.inputs) {
       assertInputPath(p);
     }
     assertInputPath(input.acceptance.outputSchema);
+    if (options.evaluatorVersionId && options.purpose !== "evaluation") {
+      throw new RuntimeError(
+        "run_not_pending",
+        "evaluatorVersionId 仅评估用途（purpose=evaluation）允许指定：普通 Run 的裁判由快照槽位固定",
+      );
+    }
+    if (options.supersedesRunId && !this.deps.storage.getRun(options.supersedesRunId)) {
+      throw new RuntimeError("unknown_run", `被接替的 run ${options.supersedesRunId} 不存在`);
+    }
 
     const runId = this.deps.ids.next();
     const taskId = this.deps.ids.next();
+    const purpose: RunPurpose = options.purpose ?? "normal";
     let missingPending: string[] = [];
 
     this.deps.storage.tx(() => {
@@ -159,9 +191,15 @@ export class Runtime {
       // Organism 级预算在准入事务内原子检查：单 writer + BEGIN IMMEDIATE
       // 保证并发（含跨进程）提交不会各自读取同一余额后重复花费
       this.assertOrganismBudget(input.budget);
-      // 原子读取 active 指针并固定解析后的快照（docs/runtime.md §1）
-      const { snapshot, versions } = this.deps.kernel.resolveSnapshot(organism.activeGenomeId);
-      this.assertVerifierBinding(versions, input.acceptance.verifier);
+      // 原子固定快照：评估 Run 可显式绑定候选/基线快照，不读也不改 activeGenome
+      const boundSnapshotId = options.snapshotId ?? organism.activeGenomeId;
+      const { snapshot, versions } = this.deps.kernel.resolveSnapshot(boundSnapshotId);
+      // 生效裁判：评估计划可钉住版本；普通 Run 用快照槽位
+      const effectiveEvaluator = this.resolveEvaluator(
+        versions,
+        options.evaluatorVersionId ?? null,
+      );
+      this.assertVerifierBinding(effectiveEvaluator, input.acceptance.verifier);
       const graphVersion = versions.get("task-graph");
       if (!graphVersion) throw new RuntimeError("missing_binding", "快照缺少 task-graph 槽位");
 
@@ -197,15 +235,16 @@ export class Runtime {
         taskId,
         taskRevision: 1,
         organismId: this.deps.organismId,
-        purpose: "normal",
+        purpose,
         snapshotId: snapshot.id,
         graphDigest: digestOf(graphContent),
         state: missing.length > 0 ? "waiting" : "pending",
-        supersedesRunId: null,
+        supersedesRunId: options.supersedesRunId ?? null,
         budget: { ...input.budget },
         failureReason: null,
         missingCapabilities: missing.length > 0 ? missing : null,
         waitingUntil: missing.length > 0 ? now + waitSeconds * 1000 : null,
+        evaluatorVersionId: options.evaluatorVersionId ?? null,
         createdAt: now,
         updatedAt: now,
       });
@@ -231,8 +270,10 @@ export class Runtime {
         payload: {
           taskId,
           snapshotId: snapshot.id,
-          purpose: "normal",
+          purpose,
           requires,
+          supersedesRunId: options.supersedesRunId ?? null,
+          ...(options.evaluatorVersionId ? { evaluatorVersionId: options.evaluatorVersionId } : {}),
           ...(missing.length > 0
             ? { missingCapabilities: missing, waitingUntil: now + waitSeconds * 1000 }
             : {}),
@@ -323,9 +364,10 @@ export class Runtime {
     const task = this.deps.storage.getTask(run.taskId);
     if (!task) throw new RuntimeError("unknown_run", `run ${runId} 的 task ${run.taskId} 缺失`);
 
-    // verify 节点的裁判必须等于快照绑定的验收器（候选不能替换本轮裁判）
-    const evaluator = versions.get("acceptance-evaluator")!;
-    const evaluatorArtifactId = this.deps.storage.getArtifact(evaluator.artifactId)!.id;
+    // verify 节点的裁判必须等于生效验收器（候选不能替换本轮裁判）；
+    // 评估 Run 的裁判由评估计划钉住（run.evaluatorVersionId），与快照槽位无关
+    const evaluator = this.resolveEvaluator(versions, run.evaluatorVersionId);
+    const evaluatorArtifactId = evaluator.artifactId;
     for (const node of dag.nodes) {
       if (node.type === "verify" && node.verifier !== evaluatorArtifactId) {
         return this.finalize(runId, "failed", "verifier_mismatch", [], null, {
@@ -411,9 +453,9 @@ export class Runtime {
 
       try {
         if (node.type === "decision") {
-          decisions.push(await this.runDecision(runId, run, node, policy!));
+          decisions.push(await this.runDecision(runId, run, task, node, policy!));
         } else if (node.type === "execute") {
-          outputs.set(node.id, await this.runExecute(runId, run, task, node, decisions));
+          outputs.set(node.id, await this.runExecute(runId, run, task, node, decisions, versions));
         } else {
           const inputNode = dag.nodes.find((n) => n.id === node.inputFrom);
           const inputWorkspace = inputNode ? this.nodeWorkspace(runId, inputNode) : "";
@@ -712,6 +754,7 @@ export class Runtime {
   private async runDecision(
     runId: string,
     run: RunRecord,
+    task: TaskRecord,
     node: NormalizedNode,
     policy: { versionId: string; content: unknown },
   ): Promise<RunSummaryDecision> {
@@ -728,7 +771,9 @@ export class Runtime {
     const result = await provider.decide({
       problem: node.problem!,
       options: node.options!,
-      context: node.context ?? {},
+      // 任务声明的能力展开为布尔键（capability:<name>: true），
+      // routing-policy 据此把声明该能力的任务路由到 capability/<name> 执行器
+      context: { ...node.context, ...capabilityContext(task.requires) },
       policy,
       deadlineMs: run.budget.maxWallClockSeconds * 1000,
       remainingAttempts: Math.max(0, run.budget.maxAttempts - this.listRunAttempts(runId).length),
@@ -767,18 +812,19 @@ export class Runtime {
     task: TaskRecord,
     node: NormalizedNode,
     decisions: RunSummaryDecision[],
+    versions: Map<string, ArtifactVersion>,
   ): Promise<string> {
     const executorName =
       node.executor ?? decisions.find((d) => d.nodeId === node.executorFrom)?.value ?? undefined;
     if (!executorName) {
       throw new NodeFailure("unknown_executor", `execute ${node.id} 无法解析执行器`);
     }
-    const executor = this.deps.executors.get(executorName);
+    const executor = this.resolveExecutor(executorName, versions);
     if (!executor) {
-      throw new NodeFailure(
-        "unknown_executor",
-        `执行器 ${executorName} 未装配（可用：${[...this.deps.executors.keys()].join(", ")}）`,
-      );
+      const detail = executorName.startsWith("capability/")
+        ? `快照缺少槽位 ${executorName}（图引用了能力，但 Task 未声明或快照未绑定）`
+        : `执行器 ${executorName} 未装配（可用：${[...this.deps.executors.keys()].join(", ")}）`;
+      throw new NodeFailure("unknown_executor", detail);
     }
 
     const attemptId = this.deps.ids.next();
@@ -912,7 +958,7 @@ export class Runtime {
     evaluatorContent: unknown,
     inputWorkspace: string,
   ): string {
-    // 裁判按快照绑定的验收器产物内容分发：候选不能替换本轮裁判（docs/evolution.md §6）
+    // 裁判按生效验收器产物内容分发：候选不能替换本轮裁判（docs/evolution.md §6）
     const kind = readEvaluatorKind(evaluatorContent);
     let evaluation: { passed: boolean; checks: OutcomeCheck[] };
     let outputDigest: string | null = null;
@@ -937,7 +983,10 @@ export class Runtime {
       } catch {
         throw new NodeFailure("invalid_output", `verify ${node.id} 无法读取或解析输出`);
       }
-      evaluation = evaluateStatsOutput(output, schema);
+      evaluation =
+        kind === "hybrid-acceptance-v1"
+          ? evaluateHybridOutput(output, schema)
+          : evaluateStatsOutput(output, schema);
       outputDigest = digestOf(outputRaw);
     }
     checks.push(...evaluation.checks);
@@ -990,6 +1039,77 @@ export class Runtime {
   // ---- 内部 ----
 
   /**
+   * 解析执行器：实例注册表，或 capability/<name> 前缀的快照槽位产物——
+   * 能力代码经独立子进程协议加载，不热加载进 kernel（roadmap M2）
+   */
+  private resolveExecutor(
+    name: string,
+    versions: Map<string, ArtifactVersion>,
+  ): ExecutorProvider | undefined {
+    if (!name.startsWith("capability/")) {
+      return this.deps.executors.get(name);
+    }
+    const version = versions.get(name);
+    if (!version) return undefined;
+    return {
+      name,
+      start: async (req) => {
+        let parsed: ReturnType<typeof parseCapabilityModule>;
+        try {
+          parsed = parseCapabilityModule(JSON.parse(this.deps.blobs.read(version.contentRef)));
+        } catch {
+          return {
+            ok: false,
+            exitCode: null,
+            stdout: "",
+            stderr: `能力槽位 ${name} 的产物内容无法解析`,
+            durationMs: 0,
+            outputRef: null,
+          };
+        }
+        if (!parsed.ok) {
+          return {
+            ok: false,
+            exitCode: null,
+            stdout: "",
+            stderr: `能力槽位 ${name} 产物不合法：${parsed.error}`,
+            durationMs: 0,
+            outputRef: null,
+          };
+        }
+        return runCapabilityModule(parsed.module, req.workspaceDir, req.timeoutMs);
+      },
+    };
+  }
+
+  /** 生效裁判版本：评估 Run 钉住的版本优先，否则快照 acceptance-evaluator 槽位 */
+  private resolveEvaluator(
+    versions: Map<string, ArtifactVersion>,
+    evaluatorVersionId: string | null,
+  ): ArtifactVersion {
+    if (evaluatorVersionId) {
+      const version = this.deps.storage.getArtifactVersion(evaluatorVersionId);
+      if (!version) {
+        throw new RuntimeError(
+          "missing_binding",
+          `评估计划指定的裁判版本 ${evaluatorVersionId} 不存在`,
+        );
+      }
+      const artifact = this.deps.storage.getArtifact(version.artifactId);
+      if (!artifact || artifact.kind !== "acceptance-evaluator") {
+        throw new RuntimeError(
+          "missing_binding",
+          `评估计划指定的 ${evaluatorVersionId} 不是 acceptance-evaluator 产物`,
+        );
+      }
+      return version;
+    }
+    const bound = versions.get("acceptance-evaluator");
+    if (!bound) throw new RuntimeError("missing_binding", "快照缺少 acceptance-evaluator 槽位");
+    return bound;
+  }
+
+  /**
    * Organism 级预算准入检查（必须在准入事务内调用）。
    * 无法施加约束时拒绝准入，而不是放行后超支（docs/runtime.md §2）。
    */
@@ -1017,16 +1137,11 @@ export class Runtime {
     }
   }
 
-  private assertVerifierBinding(
-    versions: Map<string, { artifactId: string }>,
-    verifier: string,
-  ): void {
-    const evaluator = versions.get("acceptance-evaluator");
-    if (!evaluator) throw new RuntimeError("missing_binding", "快照缺少 acceptance-evaluator 槽位");
+  private assertVerifierBinding(evaluator: ArtifactVersion, verifier: string): void {
     if (evaluator.artifactId !== verifier) {
       throw new RuntimeError(
         "verifier_mismatch",
-        `task.verifier=${verifier} 与快照绑定的验收器 ${evaluator.artifactId} 不一致，拒绝执行`,
+        `task.verifier=${verifier} 与生效验收器 ${evaluator.artifactId} 不一致，拒绝执行`,
       );
     }
   }
@@ -1162,6 +1277,15 @@ export class Runtime {
 
 export function isTerminal(state: RunState): boolean {
   return state === "succeeded" || state === "failed" || state === "cancelled";
+}
+
+/** 任务声明的能力 → 决策上下文布尔键（rule-v1 严格匹配，零扩展） */
+function capabilityContext(requires: string[]): Record<string, true> {
+  const context: Record<string, true> = {};
+  for (const c of requires) {
+    context[`capability:${c}`] = true;
+  }
+  return context;
 }
 
 function assertInputPath(p: string): void {

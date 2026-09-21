@@ -1,0 +1,9 @@
+{
+  "changes": [
+    { "path": "src/index.ts", "changeType": "modified" },
+    { "path": "src/wordcount.test.mjs", "changeType": "added" },
+    { "path": "docs/guide.md", "changeType": "modified" },
+    { "path": "package.json", "changeType": "modified" },
+    { "path": "LICENSE", "changeType": "added" }
+  ]
+}

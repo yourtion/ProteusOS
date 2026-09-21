@@ -1,7 +1,11 @@
 import type { Clock, Kernel } from "../kernel/index.ts";
 import { snapshotDigest } from "../kernel/index.ts";
 import type { BlobStore } from "../storage/blobs.ts";
+import { canonicalJson } from "../storage/blobs.ts";
 import type { Storage } from "../storage/store.ts";
+
+// canonicalJson 已下沉至 storage/blobs.ts（evolution 等领域模块共用，避免反向依赖 app 层）
+export { canonicalJson };
 
 /** M0 seed：固定身份、三个产物版本与首个 GenomeSnapshot（G0）。 */
 
@@ -176,16 +180,4 @@ export function installSeed(deps: SeedDeps): SeedResult {
       versions,
     };
   });
-}
-
-/** 稳定序列化：键排序，保证同内容同摘要 */
-export function canonicalJson(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
-  if (value !== null && typeof value === "object") {
-    const entries = Object.entries(value as Record<string, unknown>)
-      .filter(([, v]) => v !== undefined)
-      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
-    return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${canonicalJson(v)}`).join(",")}}`;
-  }
-  return JSON.stringify(value);
 }

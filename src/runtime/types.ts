@@ -56,6 +56,11 @@ export interface RunRecord {
   missingCapabilities: string[] | null;
   /** 缺口等待截止时刻（epoch ms）；到时 advance 结案 failed/missing_capability */
   waitingUntil: number | null;
+  /**
+   * 评估 Run 的固定裁判版本（评估计划钉住，docs/runtime.md §1）；
+   * null 表示使用快照 acceptance-evaluator 槽位
+   */
+  evaluatorVersionId: string | null;
   createdAt: number;
   updatedAt: number;
 }

@@ -249,8 +249,8 @@ export class Storage implements KernelStore, RuntimeStore {
 
   insertRun(r: RunRecord): void {
     this.db.run(
-      `INSERT INTO runs (id, task_id, task_revision, organism_id, purpose, snapshot_id, graph_digest, state, supersedes_run_id, budget, failure_reason, missing_capabilities, waiting_until, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO runs (id, task_id, task_revision, organism_id, purpose, snapshot_id, graph_digest, state, supersedes_run_id, budget, failure_reason, missing_capabilities, waiting_until, evaluator_version_id, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       r.id,
       r.taskId,
       r.taskRevision,
@@ -264,6 +264,7 @@ export class Storage implements KernelStore, RuntimeStore {
       r.failureReason,
       r.missingCapabilities ? JSON.stringify(r.missingCapabilities) : null,
       r.waitingUntil,
+      r.evaluatorVersionId,
       r.createdAt,
       r.updatedAt,
     );
@@ -601,6 +602,7 @@ function mapRun(row: RunRow): RunRecord {
       ? (JSON.parse(row.missing_capabilities) as string[])
       : null,
     waitingUntil: row.waiting_until,
+    evaluatorVersionId: row.evaluator_version_id,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };

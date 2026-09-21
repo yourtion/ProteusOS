@@ -47,3 +47,15 @@ export class BlobStore {
 export function digestOf(content: string): string {
   return createHash("sha256").update(content, "utf8").digest("hex");
 }
+
+/** 稳定序列化：键排序，保证同内容同摘要（版本与快照幂等的基石） */
+export function canonicalJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
+  if (value !== null && typeof value === "object") {
+    const entries = Object.entries(value as Record<string, unknown>)
+      .filter(([, v]) => v !== undefined)
+      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+    return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${canonicalJson(v)}`).join(",")}}`;
+  }
+  return JSON.stringify(value);
+}

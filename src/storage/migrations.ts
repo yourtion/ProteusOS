@@ -230,4 +230,13 @@ CREATE TABLE promotions (
 CREATE INDEX idx_promotions_organism ON promotions(organism_id);
 `,
   },
+  {
+    // M2 切片②：评估 Run 的固定裁判版本（评估计划钉住，候选不能替换本轮裁判）。
+    // null 表示用快照 acceptance-evaluator 槽位；恢复/续跑路径按此列还原裁判。
+    version: 4,
+    name: "m2-evaluation-evaluator",
+    sql: `
+ALTER TABLE runs ADD COLUMN evaluator_version_id TEXT;
+`,
+  },
 ];

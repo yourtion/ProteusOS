@@ -77,6 +77,7 @@ export interface RunRow {
   failure_reason: string | null;
   missing_capabilities: string | null;
   waiting_until: number | null;
+  evaluator_version_id: string | null;
   created_at: number;
   updated_at: number;
 }

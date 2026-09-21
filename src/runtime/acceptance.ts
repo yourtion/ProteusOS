@@ -7,14 +7,23 @@ import { validateSchema } from "./schema-validator.ts";
  * - stats-acceptance-v1：JSON Schema 校验 + totals 一致性（M0 seed）
  * - test-runner-v1：在产出工作区运行固定测试命令，退出码即判据
  *   ——执行器自报完成不构成验收，测试失败不能标为任务成功（roadmap M1）
+ * - hybrid-acceptance-v1（M2 预注册）：stats 形态输出走 stats 校验（与 v1 判定
+ *   等价，等价性由 tests/evals 覆盖），其余输出走纯 JSON Schema 校验；
+ *   用于新能力任务（如 ChangedFileSummary）的运行时验收
  */
 
-export type EvaluatorKind = "stats-acceptance-v1" | "test-runner-v1";
+export type EvaluatorKind = "stats-acceptance-v1" | "test-runner-v1" | "hybrid-acceptance-v1";
 
 export function readEvaluatorKind(content: unknown): EvaluatorKind {
   if (typeof content === "object" && content !== null) {
     const kind = (content as { kind?: unknown }).kind;
-    if (kind === "test-runner-v1" || kind === "stats-acceptance-v1") return kind;
+    if (
+      kind === "test-runner-v1" ||
+      kind === "stats-acceptance-v1" ||
+      kind === "hybrid-acceptance-v1"
+    ) {
+      return kind;
+    }
   }
   return "stats-acceptance-v1";
 }
@@ -89,6 +98,39 @@ export function evaluateStatsOutput(
   });
   checks.push(checkTotalsConsistency(output));
 
+  return { passed: checks.every((c) => c.passed), checks };
+}
+
+/** 输出呈 stats 形态（files 数组 + totals 对象）时才适用 totals 校验 */
+function looksLikeStatsOutput(output: unknown): boolean {
+  if (typeof output !== "object" || output === null) return false;
+  const { files, totals } = output as Record<string, unknown>;
+  return Array.isArray(files) && typeof totals === "object" && totals !== null;
+}
+
+/**
+ * hybrid-acceptance-v1：stats 形态走 stats 校验（与 v1 等价），
+ * 其余走纯 JSON Schema 校验（schema 来自 Task，不由候选提供）。
+ */
+export function evaluateHybridOutput(
+  output: unknown,
+  schema: unknown,
+): { passed: boolean; checks: OutcomeCheck[] } {
+  if (looksLikeStatsOutput(output)) {
+    return evaluateStatsOutput(output, schema);
+  }
+  const schemaErrors = validateSchema(output, schema);
+  const checks: OutcomeCheck[] = [
+    {
+      name: "json-schema",
+      passed: schemaErrors.length === 0,
+      detail:
+        schemaErrors
+          .slice(0, 5)
+          .map((e) => `${e.path}: ${e.message}`)
+          .join("; ") || undefined,
+    },
+  ];
   return { passed: checks.every((c) => c.passed), checks };
 }
 

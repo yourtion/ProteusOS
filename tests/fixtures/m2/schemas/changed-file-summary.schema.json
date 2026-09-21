@@ -1,0 +1,31 @@
+{
+  "type": "object",
+  "required": ["summary"],
+  "additionalProperties": false,
+  "properties": {
+    "summary": {
+      "type": "object",
+      "required": ["total", "files"],
+      "additionalProperties": false,
+      "properties": {
+        "total": { "type": "number", "minimum": 0 },
+        "files": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["path", "category"],
+            "additionalProperties": false,
+            "properties": {
+              "path": { "type": "string" },
+              "category": {
+                "type": "string",
+                "enum": ["source", "test", "docs", "config", "other"]
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
