@@ -1,0 +1,16 @@
+{
+  "changes": [
+    {
+      "path": "audit/log.ts",
+      "changeType": "modified"
+    },
+    {
+      "path": "audit/log.test.ts",
+      "changeType": "added"
+    },
+    {
+      "path": "audit/policy.yaml",
+      "changeType": "modified"
+    }
+  ]
+}

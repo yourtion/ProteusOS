@@ -1,0 +1,20 @@
+{
+  "changes": [
+    {
+      "path": "src/delta.ts",
+      "changeType": "added"
+    },
+    {
+      "path": "src/delta.test.ts",
+      "changeType": "added"
+    },
+    {
+      "path": "docs/delta.md",
+      "changeType": "modified"
+    },
+    {
+      "path": "delta.config.yml",
+      "changeType": "modified"
+    }
+  ]
+}

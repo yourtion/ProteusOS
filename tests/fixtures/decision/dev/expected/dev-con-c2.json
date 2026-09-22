@@ -1,0 +1,27 @@
+{
+  "summary": {
+    "total": 5,
+    "files": [
+      {
+        "path": "src/gamma.ts",
+        "category": "source"
+      },
+      {
+        "path": "src/gamma.test.ts",
+        "category": "source"
+      },
+      {
+        "path": "docs/gamma.md",
+        "category": "docs"
+      },
+      {
+        "path": "config/gamma.yaml",
+        "category": "config"
+      },
+      {
+        "path": "gamma.bin",
+        "category": "other"
+      }
+    ]
+  }
+}

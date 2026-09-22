@@ -1,0 +1,16 @@
+{
+  "changes": [
+    {
+      "path": "io/reader.ts",
+      "changeType": "modified"
+    },
+    {
+      "path": "io/writer.ts",
+      "changeType": "modified"
+    },
+    {
+      "path": "io/reader.test.ts",
+      "changeType": "deleted"
+    }
+  ]
+}

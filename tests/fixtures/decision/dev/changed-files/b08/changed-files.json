@@ -1,0 +1,24 @@
+{
+  "changes": [
+    {
+      "path": "web/src/app.tsx",
+      "changeType": "modified"
+    },
+    {
+      "path": "web/src/tests/render.test.tsx",
+      "changeType": "added"
+    },
+    {
+      "path": "web/README.md",
+      "changeType": "modified"
+    },
+    {
+      "path": "web/vite.config.ts",
+      "changeType": "modified"
+    },
+    {
+      "path": "assets/font.woff2",
+      "changeType": "added"
+    }
+  ]
+}

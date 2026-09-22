@@ -1,0 +1,20 @@
+{
+  "changes": [
+    {
+      "path": "src/server/handler.ts",
+      "changeType": "modified"
+    },
+    {
+      "path": "tests/e2e/handler.test.ts",
+      "changeType": "added"
+    },
+    {
+      "path": "CONTRIBUTING.md",
+      "changeType": "modified"
+    },
+    {
+      "path": "pyproject.toml",
+      "changeType": "modified"
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "changes": [
+    {
+      "path": "net/client.ts",
+      "changeType": "modified"
+    },
+    {
+      "path": "docs/net.md",
+      "changeType": "deleted"
+    },
+    {
+      "path": "config/net.toml",
+      "changeType": "modified"
+    }
+  ]
+}

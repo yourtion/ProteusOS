@@ -1,0 +1,6 @@
+# oxfmt（与 prettier 共用忽略清单）：fixture 是实验数据，不是源码，禁止格式化改写字节
+tests/fixtures/decision/dev/bundles/
+tests/fixtures/decision/dev/changed-files/
+tests/fixtures/decision/dev/expected/
+tests/fixtures/decision/dev/schemas/
+tests/fixtures/decision/capability/

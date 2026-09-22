@@ -1,0 +1,24 @@
+{
+  "changes": [
+    {
+      "path": "gen/seed.ts",
+      "changeType": "added"
+    },
+    {
+      "path": "gen/seed.test.mjs",
+      "changeType": "added"
+    },
+    {
+      "path": "docs/gen.md",
+      "changeType": "modified"
+    },
+    {
+      "path": "config/gen.yml",
+      "changeType": "modified"
+    },
+    {
+      "path": "gen/out.lock",
+      "changeType": "added"
+    }
+  ]
+}

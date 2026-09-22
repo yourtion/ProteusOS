@@ -1,0 +1,20 @@
+{
+  "changes": [
+    {
+      "path": "src/beta.ts",
+      "changeType": "modified"
+    },
+    {
+      "path": "src/beta.spec.mjs",
+      "changeType": "added"
+    },
+    {
+      "path": "docs/beta.md",
+      "changeType": "added"
+    },
+    {
+      "path": "beta.settings.toml",
+      "changeType": "modified"
+    }
+  ]
+}

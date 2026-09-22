@@ -1,0 +1,23 @@
+{
+  "summary": {
+    "total": 4,
+    "files": [
+      {
+        "path": "src/delta.ts",
+        "category": "source"
+      },
+      {
+        "path": "src/delta.test.ts",
+        "category": "source"
+      },
+      {
+        "path": "docs/delta.md",
+        "category": "docs"
+      },
+      {
+        "path": "delta.config.yml",
+        "category": "config"
+      }
+    ]
+  }
+}

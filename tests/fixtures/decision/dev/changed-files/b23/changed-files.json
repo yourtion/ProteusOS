@@ -1,0 +1,20 @@
+{
+  "changes": [
+    {
+      "path": "core/a.mjs",
+      "changeType": "modified"
+    },
+    {
+      "path": "core/a.test.mjs",
+      "changeType": "modified"
+    },
+    {
+      "path": "core/b.cjs",
+      "changeType": "added"
+    },
+    {
+      "path": "README.md",
+      "changeType": "modified"
+    }
+  ]
+}

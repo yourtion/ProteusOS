@@ -78,6 +78,8 @@ export interface RunRow {
   missing_capabilities: string | null;
   waiting_until: number | null;
   evaluator_version_id: string | null;
+  deadline_at: number | null;
+  experiment_id: string | null;
   created_at: number;
   updated_at: number;
 }
@@ -178,5 +180,38 @@ export interface PromotionRow {
   authorization_ref: string | null;
   actor: string;
   note: string | null;
+  created_at: number;
+}
+
+export interface DecisionCallRow {
+  id: string;
+  experiment_id: string | null;
+  run_id: string;
+  node_id: string;
+  snapshot_id: string;
+  kind: string;
+  state: string;
+  sent: number;
+  provider: string;
+  policy_version_id: string;
+  view_version_id: string | null;
+  request_ref: string | null;
+  request_digest: string | null;
+  response_ref: string | null;
+  response_digest: string | null;
+  provenance: string;
+  usage: string | null;
+  error_class: string | null;
+  started_at: number | null;
+  ended_at: number | null;
+  duration_ms: number | null;
+  late_arrival: number;
+  created_at: number;
+  updated_at: number;
+}
+
+export interface DecisionCallLimitRow {
+  scope: string;
+  max_calls: number;
   created_at: number;
 }

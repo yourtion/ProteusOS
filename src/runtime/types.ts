@@ -1,3 +1,5 @@
+import type { DecisionCallRecord } from "../decision/call.ts";
+
 /**
  * Runtime 领域类型与持久化 port。
  * 状态机语义见 docs/runtime.md；M0 切片① 只覆盖单节点 pipeline。
@@ -63,6 +65,10 @@ export interface RunRecord {
    * null 表示使用快照 acceptance-evaluator 槽位
    */
   evaluatorVersionId: string | null;
+  /** Run 截止点（epoch ms，createdAt + budget.maxWallClockSeconds）；剩余时间由此计算 */
+  deadlineAt: number;
+  /** 实验 Run 归属（organism-decision-v1）；普通 Run 为 null */
+  experimentId: string | null;
   createdAt: number;
   updatedAt: number;
 }
@@ -100,6 +106,8 @@ export interface ExperienceOutcome {
   outputDigest: string | null;
   attemptCount: number;
   durationMs: number;
+  /** 关联的决策调用账本（ADR 0007 §4.4：决策证据与 Experience 通过 runId 关联） */
+  decisionCallIds: string[];
 }
 
 export interface ExperienceRecord {
@@ -250,6 +258,44 @@ export interface RuntimeStore {
   getDispatch(dispatchId: string): DispatchRecord | undefined;
   markDispatched(dispatchId: string, handle: string, at: number): void;
   completeDispatch(dispatchId: string, at: number): void;
+
+  // ---- 本体决策实验：决策调用账本与额度（ADR 0007）----
+
+  insertDecisionCall(call: DecisionCallRecord): void;
+  getDecisionCall(id: string): DecisionCallRecord | undefined;
+  /** 同一 Run 同一节点的最新决策调用（恢复路径） */
+  findDecisionCall(runId: string, nodeId: string): DecisionCallRecord | undefined;
+  listDecisionCalls(runId: string): DecisionCallRecord[];
+  updateDecisionCall(
+    id: string,
+    patch: Partial<
+      Pick<
+        DecisionCallRecord,
+        | "state"
+        | "sent"
+        | "responseRef"
+        | "responseDigest"
+        | "usage"
+        | "errorClass"
+        | "startedAt"
+        | "endedAt"
+        | "durationMs"
+        | "lateArrival"
+      >
+    >,
+    opts: { updatedAt: number },
+  ): void;
+  /** 额度计数：已发送（sent）或仍处 prepared 预留的远端调用数（D06） */
+  countDecisionQuotaCalls(scope: { organismId: string; experimentId?: string | null }): number;
+  setDecisionCallLimit(
+    scope: { organismId: string; experimentId?: string | null },
+    maxCalls: number,
+    at: number,
+  ): void;
+  getDecisionCallLimit(scope: {
+    organismId: string;
+    experimentId?: string | null;
+  }): number | undefined;
 }
 
 /**

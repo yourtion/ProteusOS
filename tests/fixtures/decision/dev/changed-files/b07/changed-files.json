@@ -1,0 +1,20 @@
+{
+  "changes": [
+    {
+      "path": "src/util.ts",
+      "changeType": "modified"
+    },
+    {
+      "path": "src/util.spec.ts",
+      "changeType": "added"
+    },
+    {
+      "path": "docs/api.md",
+      "changeType": "deleted"
+    },
+    {
+      "path": "config/settings.yml",
+      "changeType": "modified"
+    }
+  ]
+}

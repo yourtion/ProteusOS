@@ -1,0 +1,16 @@
+{
+  "changes": [
+    {
+      "path": "src/text.ts",
+      "changeType": "modified"
+    },
+    {
+      "path": "docs/text.md",
+      "changeType": "modified"
+    },
+    {
+      "path": "package.json",
+      "changeType": "modified"
+    }
+  ]
+}

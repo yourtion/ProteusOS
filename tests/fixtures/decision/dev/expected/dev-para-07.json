@@ -1,0 +1,27 @@
+{
+  "summary": {
+    "total": 5,
+    "files": [
+      {
+        "path": "src/graph.ts",
+        "category": "source"
+      },
+      {
+        "path": "src/graph.test.ts",
+        "category": "source"
+      },
+      {
+        "path": "docs/graph.md",
+        "category": "docs"
+      },
+      {
+        "path": "config/graph.yaml",
+        "category": "config"
+      },
+      {
+        "path": "graph.dump",
+        "category": "other"
+      }
+    ]
+  }
+}

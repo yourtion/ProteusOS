@@ -1,0 +1,24 @@
+{
+  "changes": [
+    {
+      "path": "src/kernel/index.ts",
+      "changeType": "modified"
+    },
+    {
+      "path": "src/kernel/kernel.test.ts",
+      "changeType": "added"
+    },
+    {
+      "path": "docs/notes.md",
+      "changeType": "modified"
+    },
+    {
+      "path": "package.json",
+      "changeType": "modified"
+    },
+    {
+      "path": "Makefile",
+      "changeType": "added"
+    }
+  ]
+}

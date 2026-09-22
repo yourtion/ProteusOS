@@ -1,0 +1,27 @@
+{
+  "summary": {
+    "total": 5,
+    "files": [
+      {
+        "path": "db/schema.ts",
+        "category": "source"
+      },
+      {
+        "path": "db/schema.test.ts",
+        "category": "source"
+      },
+      {
+        "path": "docs/schema.md",
+        "category": "docs"
+      },
+      {
+        "path": "config/schema.prisma",
+        "category": "other"
+      },
+      {
+        "path": "dump.sqlite",
+        "category": "other"
+      }
+    ]
+  }
+}

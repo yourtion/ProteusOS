@@ -1,0 +1,20 @@
+{
+  "changes": [
+    {
+      "path": "srv/main.ts",
+      "changeType": "modified"
+    },
+    {
+      "path": "srv/main.test.mjs",
+      "changeType": "modified"
+    },
+    {
+      "path": "docs/deploy.md",
+      "changeType": "added"
+    },
+    {
+      "path": "deploy.env",
+      "changeType": "added"
+    }
+  ]
+}

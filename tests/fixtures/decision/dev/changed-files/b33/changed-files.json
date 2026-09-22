@@ -1,0 +1,24 @@
+{
+  "changes": [
+    {
+      "path": "src/alpha.ts",
+      "changeType": "modified"
+    },
+    {
+      "path": "src/alpha.test.ts",
+      "changeType": "added"
+    },
+    {
+      "path": "docs/alpha.md",
+      "changeType": "modified"
+    },
+    {
+      "path": "alpha.config.json",
+      "changeType": "added"
+    },
+    {
+      "path": "alpha.lock",
+      "changeType": "added"
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "changes": [
+    {
+      "path": "kv/store.ts",
+      "changeType": "modified"
+    },
+    {
+      "path": "kv/store.test.tsx",
+      "changeType": "added"
+    },
+    {
+      "path": "kv/README.md",
+      "changeType": "modified"
+    },
+    {
+      "path": "kv/store.config.yml",
+      "changeType": "modified"
+    }
+  ]
+}

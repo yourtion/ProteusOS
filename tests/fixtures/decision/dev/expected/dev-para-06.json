@@ -1,0 +1,23 @@
+{
+  "summary": {
+    "total": 4,
+    "files": [
+      {
+        "path": "lib/http.ts",
+        "category": "source"
+      },
+      {
+        "path": "docs/http.md",
+        "category": "docs"
+      },
+      {
+        "path": "lib/native.node",
+        "category": "other"
+      },
+      {
+        "path": "config/http.yaml",
+        "category": "config"
+      }
+    ]
+  }
+}

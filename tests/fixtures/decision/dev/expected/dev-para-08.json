@@ -1,0 +1,19 @@
+{
+  "summary": {
+    "total": 3,
+    "files": [
+      {
+        "path": "src/text.ts",
+        "category": "source"
+      },
+      {
+        "path": "docs/text.md",
+        "category": "docs"
+      },
+      {
+        "path": "package.json",
+        "category": "config"
+      }
+    ]
+  }
+}

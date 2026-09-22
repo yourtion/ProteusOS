@@ -14,6 +14,8 @@ export const DecisionNodeSchema = z.object({
   options: z.array(z.string().min(1)).min(1),
   context: z.record(z.string(), z.unknown()),
   dependsOn: z.array(z.string().min(1)).default([]),
+  /** 声明消费 decision-view-v1（实验图）：快照须含 decision-view 槽位，缺失拒绝准入 */
+  view: z.literal("decision-view-v1").optional(),
 });
 
 export const ExecuteNodeSchema = z
@@ -77,6 +79,8 @@ export interface NormalizedNode {
   problem?: "choice";
   options?: string[];
   context?: Record<string, unknown>;
+  /** decision：消费 decision-view-v1（实验图）；旧图无此字段走静态上下文 */
+  view?: "decision-view-v1";
   /** execute */
   executor?: string;
   executorFrom?: string;

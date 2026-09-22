@@ -1,0 +1,19 @@
+{
+  "summary": {
+    "total": 3,
+    "files": [
+      {
+        "path": "net/client.ts",
+        "category": "source"
+      },
+      {
+        "path": "docs/net.md",
+        "category": "docs"
+      },
+      {
+        "path": "config/net.toml",
+        "category": "config"
+      }
+    ]
+  }
+}

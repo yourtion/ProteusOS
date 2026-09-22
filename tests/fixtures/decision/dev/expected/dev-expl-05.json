@@ -1,0 +1,23 @@
+{
+  "summary": {
+    "total": 4,
+    "files": [
+      {
+        "path": "src/server/handler.ts",
+        "category": "source"
+      },
+      {
+        "path": "tests/e2e/handler.test.ts",
+        "category": "source"
+      },
+      {
+        "path": "CONTRIBUTING.md",
+        "category": "docs"
+      },
+      {
+        "path": "pyproject.toml",
+        "category": "config"
+      }
+    ]
+  }
+}

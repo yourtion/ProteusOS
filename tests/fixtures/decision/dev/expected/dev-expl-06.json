@@ -1,0 +1,27 @@
+{
+  "summary": {
+    "total": 5,
+    "files": [
+      {
+        "path": "scripts/build.js",
+        "category": "source"
+      },
+      {
+        "path": "scripts/build.test.cjs",
+        "category": "test"
+      },
+      {
+        "path": "SECURITY.md",
+        "category": "docs"
+      },
+      {
+        "path": "jest.config.json",
+        "category": "config"
+      },
+      {
+        "path": "snap.bin",
+        "category": "other"
+      }
+    ]
+  }
+}

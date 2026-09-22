@@ -1,0 +1,24 @@
+{
+  "changes": [
+    {
+      "path": "src/cli.ts",
+      "changeType": "modified"
+    },
+    {
+      "path": "src/cli.test.ts",
+      "changeType": "modified"
+    },
+    {
+      "path": "CHANGELOG.md",
+      "changeType": "modified"
+    },
+    {
+      "path": "pnpm-lock.yaml",
+      "changeType": "modified"
+    },
+    {
+      "path": "banner.txt",
+      "changeType": "added"
+    }
+  ]
+}

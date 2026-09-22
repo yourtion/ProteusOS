@@ -1,0 +1,24 @@
+{
+  "changes": [
+    {
+      "path": "app/main.tsx",
+      "changeType": "modified"
+    },
+    {
+      "path": "app/components/button.jsx",
+      "changeType": "added"
+    },
+    {
+      "path": "README.md",
+      "changeType": "modified"
+    },
+    {
+      "path": "tsconfig.json",
+      "changeType": "modified"
+    },
+    {
+      "path": "logo.svg",
+      "changeType": "added"
+    }
+  ]
+}

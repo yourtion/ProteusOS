@@ -1,9 +1,22 @@
 import { cpSync, existsSync, mkdirSync, readFileSync, statSync } from "node:fs";
 import { basename, join } from "node:path";
-import type { DecisionProvider } from "../decision/index.ts";
-import { validateChoice } from "../decision/index.ts";
+import type { DecisionProvider, DecisionRequest, DecisionResult } from "../decision/index.ts";
+import {
+  DecisionViewError,
+  RESPONSE_SCHEMA_DIGEST_TARGET,
+  buildDecisionView,
+  parseDecisionViewContent,
+  validateChoice,
+  type DecisionView,
+} from "../decision/index.ts";
+import type {
+  DecisionCallKind,
+  DecisionCallProvenance,
+  DecisionCallRecord,
+  DecisionCallState,
+} from "../decision/call.ts";
 import type { ArtifactVersion, Clock, IdGen, Kernel } from "../kernel/index.ts";
-import { digestOf, type BlobStore } from "../storage/blobs.ts";
+import { canonicalJson, digestOf, type BlobStore } from "../storage/blobs.ts";
 import type { Storage } from "../storage/store.ts";
 import {
   evaluateExpectedOutput,
@@ -78,6 +91,8 @@ export interface SubmitOptions {
   evaluatorVersionId?: string;
   /** Task 修订号（接替场景为原 Task revision+1）；默认 1 */
   taskRevision?: number;
+  /** 实验 Run 归属（ADR 0007）：决策调用额度按 experiment 域记账 */
+  experimentId?: string;
 }
 
 export type RuntimeErrorCode =
@@ -91,7 +106,8 @@ export type RuntimeErrorCode =
   | "missing_binding"
   | "run_not_pending"
   | "budget_exhausted"
-  | "organism_budget_exceeded";
+  | "organism_budget_exceeded"
+  | "decision_call_not_pending";
 
 export class RuntimeError extends Error {
   readonly code: RuntimeErrorCode;
@@ -108,13 +124,19 @@ export interface RuntimeDeps {
   organismId: string;
   /** 图节点 executor 名 → 执行器实例（local-process / claude-code-acp / codex-acp / pi） */
   executors: ReadonlyMap<string, ExecutorProvider>;
-  decision: DecisionProvider;
+  /** 图节点 provider 名 → 决策实例（app 决策注册表；未装配名得到明确 unknown_decision_provider） */
+  decisions: ReadonlyMap<string, DecisionProvider>;
   blobs: BlobStore;
   instanceRoot: string;
   clock: Clock;
   ids: IdGen;
   organismBudget: OrganismBudget;
+  /** 单次决策调用超时上限（默认 15s）；实际超时取此值与 Run 剩余时间的较小值 */
+  decisionCallTimeoutMs?: number;
 }
+
+/** 实验协议 organism-decision-v1 的单次模型调用超时默认值（§4.2） */
+export const DEFAULT_DECISION_CALL_TIMEOUT_MS = 15_000;
 
 type NodeState = "succeeded" | "failed" | "skipped";
 
@@ -128,9 +150,62 @@ class NodeFailure extends Error {
   }
 }
 
+/** 决策调用进入 unknown（可能已计费）：Run 保持 waiting，等待显式结案（§4.3） */
+class DecisionPendingUnknown extends Error {
+  readonly decisionId: string;
+
+  constructor(decisionId: string, detail: string) {
+    super(detail);
+    this.decisionId = decisionId;
+  }
+}
+
+/** invokeDecision 的四种可观察结局（provider 结果 / 超时 / 取消 / 传输错误） */
+type DecisionOutcome =
+  | { type: "result"; result: DecisionResult; durationMs: number }
+  | { type: "timeout"; durationMs: number }
+  | { type: "cancelled"; durationMs: number }
+  | { type: "transport_error"; error: unknown; durationMs: number };
+
+/** 决策调用失败终态 → 节点失败原因（恢复沿用，不重调） */
+function decisionFailureReason(state: DecisionCallState): string {
+  switch (state) {
+    case "abstain":
+      return "decision_abstained";
+    case "invalid_output":
+      return "decision_invalid_output";
+    case "transport_error":
+      return "decision_transport_error";
+    case "timeout":
+      return "decision_timeout";
+    case "cancelled":
+      return "decision_cancelled";
+    default:
+      return `decision_${state}`;
+  }
+}
+
+/** 从 provider 结果提取用量提示（缺失落 null，不按零计） */
+function evidenceUsage(result: DecisionResult): DecisionCallRecord["usage"] {
+  const e = result.evidence;
+  if (!e) return null;
+  return {
+    inputTokens: e.inputTokens ?? null,
+    outputTokens: e.outputTokens ?? null,
+    costAmount: e.costAmount ?? null,
+    costCurrency: e.costCurrency ?? null,
+    priceRef: e.priceRef ?? null,
+  };
+}
+
 export interface RecoveryAction {
   runId: string;
-  action: "resumed" | "needs_reconciliation" | "already_terminal" | "waiting_capability";
+  action:
+    | "resumed"
+    | "needs_reconciliation"
+    | "already_terminal"
+    | "waiting_capability"
+    | "waiting_decision";
   unknownAttempts: Array<{ attemptId: string; ordinal: number }>;
   summary: RunSummary | null;
 }
@@ -160,6 +235,9 @@ interface ExecContext {
  */
 export class Runtime {
   private readonly deps: RuntimeDeps;
+  /** 进行中的决策调用 AbortController（runId → 集合）：cancel 时中止底层请求 */
+  private readonly activeDecisionAborts = new Map<string, Set<AbortController>>();
+  private readonly activeDecisionHooks = new Map<AbortController, () => void>();
 
   constructor(deps: RuntimeDeps) {
     this.deps = deps;
@@ -222,10 +300,21 @@ export class Runtime {
       missingPending = missing;
 
       const graphContent = this.deps.blobs.read(graphVersion.contentRef);
+      const dag = normalizeDag(parseGraph(graphContent));
       try {
-        validateDag(normalizeDag(parseGraph(graphContent)));
+        validateDag(dag);
       } catch (err) {
         throw new RuntimeError("invalid_graph", `task-graph 产物内容无效：${String(err)}`);
+      }
+      // 实验图准入（ADR 0007 §4.1）：声明 decision-view 的图必须有该槽位，缺失拒绝准入
+      if (
+        dag.nodes.some((n) => n.type === "decision" && n.view) &&
+        !versions.has("decision-view")
+      ) {
+        throw new RuntimeError(
+          "missing_binding",
+          "图声明 decision-view-v1，但快照缺少 decision-view 槽位，拒绝准入",
+        );
       }
 
       const now = this.deps.clock.now();
@@ -258,6 +347,9 @@ export class Runtime {
         missingCapabilities: missing.length > 0 ? missing : null,
         waitingUntil: missing.length > 0 ? now + waitSeconds * 1000 : null,
         evaluatorVersionId: options.evaluatorVersionId ?? null,
+        // 截止点持久化：剩余时间由此计算，不能每个节点重新给足总时限（§4.2）
+        deadlineAt: now + input.budget.maxWallClockSeconds * 1000,
+        experimentId: options.experimentId ?? null,
         createdAt: now,
         updatedAt: now,
       });
@@ -286,6 +378,8 @@ export class Runtime {
           purpose,
           requires,
           supersedesRunId: options.supersedesRunId ?? null,
+          deadlineAt: now + input.budget.maxWallClockSeconds * 1000,
+          ...(options.experimentId ? { experimentId: options.experimentId } : {}),
           ...(options.evaluatorVersionId ? { evaluatorVersionId: options.evaluatorVersionId } : {}),
           ...(missing.length > 0
             ? { missingCapabilities: missing, waitingUntil: now + waitSeconds * 1000 }
@@ -377,6 +471,16 @@ export class Runtime {
 
     if (initial.state !== "running") {
       this.transition(runId, initial.state, "running", null);
+    }
+
+    // 未结决策调用守卫（§4.3）：普通 execute/recover 入口都必须尊重——
+    // started/unknown 的 model 调用可能已计费，不自动重发、不派发 worker
+    const unresolvedCall = this.deps.storage
+      .listDecisionCalls(runId)
+      .find((c) => c.kind === "model" && (c.state === "started" || c.state === "unknown"));
+    if (unresolvedCall) {
+      this.transition(runId, "running", "waiting", "decision_call_unknown");
+      return this.getRunSummary(runId);
     }
 
     const run = this.mustGetRun(runId);
@@ -482,11 +586,22 @@ export class Runtime {
         this.markNode(runId, node, "skipped", "dependency_not_succeeded", nodeStates);
         continue;
       }
+      // 旧崩溃窗口修复（D07）：choice 已记录（decision.recorded）但节点完成未存——
+      // 恢复使用已持久化的选择，不再次推断、不重复调用 provider
+      if (node.type === "decision" && decisions.some((d) => d.nodeId === node.id)) {
+        this.markNode(runId, node, "succeeded", "recovered_recorded_choice", nodeStates);
+        continue;
+      }
 
       try {
         if (node.type === "decision") {
-          decisions.push(await this.runDecision(runId, run, task, node, policy!));
-        } else if (node.type === "execute") {
+          // runDecision 在同一事务提交 value 终态、decision.recorded 与 node.completed
+          decisions.push(
+            await this.runDecision(runId, run, task, node, policy!, versions, nodeStates),
+          );
+          continue;
+        }
+        if (node.type === "execute") {
           outputs.set(node.id, await this.runExecute(runId, run, task, node, decisions, versions));
         } else {
           const inputNode = dag.nodes.find((n) => n.id === node.inputFrom);
@@ -504,8 +619,16 @@ export class Runtime {
         }
         this.markNode(runId, node, "succeeded", null, nodeStates);
       } catch (err) {
+        if (err instanceof DecisionPendingUnknown) {
+          // 决策调用结果不明（可能已计费）：保留 unknown 证据，Run 置 waiting，
+          // 不自动重发、不派发 worker，等待显式结案（settleDecisionCall）
+          this.transition(runId, "running", "waiting", "decision_call_unknown");
+          return this.getRunSummary(runId);
+        }
         if (!(err instanceof NodeFailure)) throw err;
-        this.markNode(runId, node, "failed", err.reason, nodeStates);
+        if (!nodeStates.has(node.id)) {
+          this.markNode(runId, node, "failed", err.reason, nodeStates);
+        }
         failure ??= { nodeId, reason: err.reason };
       }
     }
@@ -539,9 +662,13 @@ export class Runtime {
     }
 
     const allSucceeded = !failure && dag.nodes.every((n) => nodeStates.get(n.id) === "succeeded");
+    const cancelledByFailure =
+      failure?.reason === "cancel_requested" ||
+      failure?.reason === "decision_cancelled" ||
+      failure?.reason === "decision_call_cancelled";
     const state: "succeeded" | "failed" | "cancelled" = allSucceeded
       ? "succeeded"
-      : cancelObserved
+      : cancelObserved || cancelledByFailure
         ? "cancelled"
         : "failed";
     const reason =
@@ -572,6 +699,10 @@ export class Runtime {
         occurredAt: this.deps.clock.now(),
       });
     });
+    // 中止进行中的决策调用（结束本地等待；远端费用未知，调用按 cancelled 记录）
+    for (const controller of this.activeDecisionAborts.get(runId) ?? []) {
+      this.activeDecisionHooks.get(controller)?.();
+    }
     if (run.state === "pending") {
       this.finalize(runId, "cancelled", "cancelled_before_start", []);
       return { runId, state: "cancelled", note: "run 尚未开始，已直接取消" };
@@ -579,7 +710,7 @@ export class Runtime {
     return {
       runId,
       state: run.state,
-      note: "已持久化停止意图；将在下一个节点派发边界生效，执行中 Attempt 的结果仍会如实记录",
+      note: "已持久化停止意图并中止进行中的决策调用；将在下一个节点派发边界生效，执行中 Attempt 的结果仍会如实记录",
     };
   }
 
@@ -609,6 +740,42 @@ export class Runtime {
         actions.push({
           runId: run.id,
           action: "waiting_capability",
+          unknownAttempts: [],
+          summary: null,
+        });
+        continue;
+      }
+      // 决策调用结果不明（可能已计费）：started 固化为 unknown 证据，Run 保持
+      // waiting，等待显式结案（settleDecisionCall）或外部证据；不自动重发
+      const unknownCalls = this.deps.storage
+        .listDecisionCalls(run.id)
+        .filter((c) => (c.state === "started" || c.state === "unknown") && c.kind === "model");
+      if (unknownCalls.length > 0) {
+        const at = this.deps.clock.now();
+        this.deps.storage.tx(() => {
+          for (const call of unknownCalls) {
+            if (call.state !== "started") continue;
+            this.deps.storage.updateDecisionCall(
+              call.id,
+              { state: "unknown", errorClass: "recovered_after_crash" },
+              { updatedAt: at },
+            );
+            this.deps.storage.appendEvent({
+              streamId: `run-${run.id}`,
+              type: "decision.unknown",
+              payload: { decisionId: call.id, reason: "recovered_after_crash", sent: call.sent },
+              correlationId: run.id,
+              runId: run.id,
+              occurredAt: at,
+            });
+          }
+        });
+        if (run.state !== "waiting") {
+          this.transition(run.id, run.state, "waiting", "decision_call_unknown");
+        }
+        actions.push({
+          runId: run.id,
+          action: "waiting_decision",
           unknownAttempts: [],
           summary: null,
         });
@@ -816,59 +983,784 @@ export class Runtime {
 
   // ---- 节点执行 ----
 
+  /**
+   * 决策调用生命周期（ADR 0007 §4.3）：
+   * prepared（额度检查+预留同事务）→ started（先于网络发送）→ 终态；
+   * value、decision.recorded 与节点成功在同一事务提交，关闭崩溃窗口。
+   * 网络调用在数据库事务外执行；请求前、响应接受时与 worker 派发前检查取消与剩余时间。
+   */
   private async runDecision(
     runId: string,
     run: RunRecord,
     task: TaskRecord,
     node: NormalizedNode,
     policy: { versionId: string; content: unknown },
+    versions: Map<string, ArtifactVersion>,
+    nodeStates: Map<string, NodeState>,
   ): Promise<RunSummaryDecision> {
-    const provider = this.deps.decision;
-    if (node.provider !== provider.name) {
+    const provider = this.deps.decisions.get(node.provider!);
+    if (!provider) {
       throw new NodeFailure(
         "unknown_decision_provider",
-        `图声明的决策 provider ${node.provider} 未装配（当前：${provider.name}）`,
+        `图声明的决策 provider ${node.provider} 未装配（可用：${[...this.deps.decisions.keys()].join(", ")}）`,
       );
     }
     if (!provider.capabilities().problems.includes(node.problem!)) {
       throw new NodeFailure("decision_unsupported", `provider 不支持问题类型 ${node.problem}`);
     }
-    const result = await provider.decide({
-      problem: node.problem!,
-      options: node.options!,
-      // 任务声明的能力展开为布尔键（capability:<name>: true），
-      // routing-policy 据此把声明该能力的任务路由到 capability/<name> 执行器
-      context: { ...node.context, ...capabilityContext(task.requires) },
-      policy,
-      deadlineMs: run.budget.maxWallClockSeconds * 1000,
-      remainingAttempts: Math.max(0, run.budget.maxAttempts - this.listRunAttempts(runId).length),
+
+    // 剩余时间从持久化截止点计算（§4.2）；deadline 已过不再发起决策
+    const remainingMs = run.deadlineAt - this.deps.clock.now();
+    if (remainingMs <= 0) {
+      throw new NodeFailure(
+        "deadline_exceeded",
+        `Run 截止点已过（剩余 ${remainingMs}ms），不再发起决策调用`,
+      );
+    }
+
+    // 视图装配（decision-view 节点）：Runtime 构建受限视图并校验大小
+    let view: DecisionView | undefined;
+    let viewVersionId: string | null = null;
+    if (node.view) {
+      const version = versions.get("decision-view");
+      if (!version) {
+        throw new NodeFailure("missing_binding", "快照缺少 decision-view 槽位（实验图）");
+      }
+      viewVersionId = version.id;
+      let content;
+      try {
+        content = parseDecisionViewContent(JSON.parse(this.deps.blobs.read(version.contentRef)));
+      } catch (err) {
+        throw new NodeFailure("decision_view_invalid", `decision-view 产物不合法：${String(err)}`);
+      }
+      try {
+        view = buildDecisionView({
+          content,
+          goal: task.goal,
+          options: node.options!,
+          taskInputs: task.inputs,
+        });
+      } catch (err) {
+        if (err instanceof DecisionViewError && err.code === "input_too_large") {
+          this.deps.storage.tx(() => {
+            this.appendDecisionEvent(runId, node, "decision.rejected", {
+              reason: "input_too_large",
+              detail: err.message,
+            });
+          });
+          throw new NodeFailure("input_too_large", err.message);
+        }
+        throw new NodeFailure(
+          "decision_view_invalid",
+          `decision-view 构建失败：${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }
+
+    // 恢复路径：该节点已有决策调用记录（prepared/started/终态），按 §4.3 处置
+    const existing = this.deps.storage.findDecisionCall(runId, node.id);
+    if (existing) {
+      return this.resumeDecisionCall(existing, {
+        run,
+        node,
+        policy,
+        provider,
+        view,
+        viewVersionId,
+        remainingMs,
+        nodeStates,
+      });
+    }
+
+    // 新调用：请求内容写入受控 blob（实际发送视图与序列化消息的完整内容）
+    const requestCanonical = canonicalJson({
+      problem: node.problem,
+      options: node.options,
+      view: view ?? null,
+      context: node.context ?? {},
     });
-    // Runtime 独立校验：选项成员关系不依赖 provider 自述（docs/runtime.md §3）
+    const requestDigest = digestOf(requestCanonical);
+    const { ref: requestRef } = this.deps.blobs.write(requestCanonical);
+    const decisionId = this.deps.ids.next();
+    const kind: DecisionCallKind = provider.remote === true ? "model" : "local";
+    const request = this.buildDecisionRequest({
+      node,
+      policy,
+      run,
+      runId,
+      remainingMs,
+      view,
+      requires: task.requires,
+    });
+
+    // 事务一：额度检查与预留 + prepared 记录（远端调用才查额度；本地计算不消耗）
+    const now = this.deps.clock.now();
+    this.deps.storage.tx(() => {
+      if (kind === "model") {
+        const scopes: Array<{ organismId: string; experimentId?: string | null }> = [
+          { organismId: run.organismId },
+        ];
+        if (run.experimentId) {
+          scopes.push({ organismId: run.organismId, experimentId: run.experimentId });
+        }
+        for (const scope of scopes) {
+          const limit = this.deps.storage.getDecisionCallLimit(scope);
+          if (limit === undefined) continue;
+          const used = this.deps.storage.countDecisionQuotaCalls(scope);
+          if (used + 1 > limit) {
+            throw new NodeFailure(
+              "decision_budget_exhausted",
+              `决策调用额度已尽（${scope.experimentId ? `experiment ${scope.experimentId}` : `organism ${scope.organismId}`}：${used}/${limit}），拒绝发起第 ${used + 1} 次调用`,
+            );
+          }
+        }
+      }
+      this.deps.storage.insertDecisionCall({
+        id: decisionId,
+        experimentId: run.experimentId,
+        runId,
+        nodeId: node.id,
+        snapshotId: run.snapshotId,
+        kind,
+        state: "prepared",
+        sent: false,
+        provider: provider.name,
+        policyVersionId: policy.versionId,
+        viewVersionId,
+        requestRef,
+        requestDigest,
+        responseRef: null,
+        responseDigest: null,
+        provenance: this.buildProvenance(provider, { policy, viewVersionId, request }),
+        usage: null,
+        errorClass: null,
+        startedAt: null,
+        endedAt: null,
+        durationMs: null,
+        lateArrival: false,
+        createdAt: now,
+        updatedAt: now,
+      });
+      this.appendDecisionEvent(runId, node, "decision.prepared", {
+        decisionId,
+        kind,
+        provider: provider.name,
+        policyVersionId: policy.versionId,
+        requestDigest,
+      });
+    });
+
+    return this.sendDecisionCall(decisionId, {
+      run,
+      node,
+      provider,
+      request,
+      remainingMs,
+      nodeStates,
+    });
+  }
+
+  /** prepared → started（先于真正网络发送；取消在此检查）→ 调用 → 终态同事务提交 */
+  private async sendDecisionCall(
+    decisionId: string,
+    args: {
+      run: RunRecord;
+      node: NormalizedNode;
+      provider: DecisionProvider;
+      request: DecisionRequest;
+      remainingMs: number;
+      nodeStates: Map<string, NodeState>;
+    },
+  ): Promise<RunSummaryDecision> {
+    const { run, node, provider, request, remainingMs, nodeStates } = args;
+    const now = this.deps.clock.now();
+    // 事务二：started 先于网络发送（§4.3：标记后、发送前崩溃保守判 unknown 的依据）
+    this.deps.storage.tx(() => {
+      if (this.deps.storage.hasCancelIntent(run.id)) {
+        this.deps.storage.updateDecisionCall(
+          decisionId,
+          {
+            state: "cancelled",
+            sent: false,
+            endedAt: now,
+            errorClass: "cancel_before_send",
+          },
+          { updatedAt: now },
+        );
+        this.appendDecisionEvent(run.id, node, "decision.cancelled", {
+          decisionId,
+          phase: "before_send",
+        });
+        throw new NodeFailure(
+          "decision_cancelled",
+          `决策 ${node.id} 发送前收到取消请求，调用未发出（额度已释放）`,
+        );
+      }
+      this.deps.storage.updateDecisionCall(
+        decisionId,
+        { state: "started", sent: provider.remote === true, startedAt: now },
+        { updatedAt: now },
+      );
+      this.appendDecisionEvent(run.id, node, "decision.started", { decisionId });
+    });
+
+    // 网络调用在数据库事务外执行；超时取单次上限与 Run 剩余时间的较小值
+    const startedAt = this.deps.clock.now();
+    const outcome = await this.invokeDecision(provider, request, run.id, {
+      timeoutMs: Math.min(
+        this.deps.decisionCallTimeoutMs ?? DEFAULT_DECISION_CALL_TIMEOUT_MS,
+        remainingMs,
+      ),
+      decisionId,
+    });
+    return this.commitDecisionOutcome(decisionId, {
+      run,
+      node,
+      options: node.options!,
+      outcome,
+      startedAt,
+      nodeStates,
+    });
+  }
+
+  /**
+   * 恢复既有决策调用（§4.3 表）：
+   * - value：直接使用记录（响应 blob 必须在且摘要匹配），不再次推断
+   * - 失败/abstain 终态：沿用失败原因，节点与 Run 状态补齐，不重调
+   * - prepared：确认未发送，使用原 decisionId 与预留额度允许首次发送
+   * - started/unknown（model）：可能已计费——保留 unknown、不重发、不派发，Run 置 waiting
+   * - started（local）：确定性本地计算无计费风险，安全重发
+   */
+  private async resumeDecisionCall(
+    existing: DecisionCallRecord,
+    args: {
+      run: RunRecord;
+      node: NormalizedNode;
+      policy: { versionId: string; content: unknown };
+      provider: DecisionProvider;
+      view: DecisionView | undefined;
+      viewVersionId: string | null;
+      remainingMs: number;
+      nodeStates: Map<string, NodeState>;
+    },
+  ): Promise<RunSummaryDecision> {
+    const { run, node, provider, view, nodeStates } = args;
+    if (existing.state === "value") {
+      const entry = this.decisionEntryFromCall(existing, node);
+      // 同事务写入可能缺失（防御）：补记 decision.recorded 与节点完成
+      this.deps.storage.tx(() => {
+        this.appendDecisionEvent(run.id, node, "decision.recorded", {
+          decisionId: existing.id,
+          nodeId: node.id,
+          value: entry.value,
+          provider: entry.provider,
+          policyVersion: entry.policyVersion,
+          problem: node.problem,
+          recovered: true,
+        });
+        this.appendNodeCompleted(run.id, node, "succeeded", "recovered_decision_call");
+      });
+      nodeStates.set(node.id, "succeeded");
+      return entry;
+    }
+    if (
+      existing.state === "abstain" ||
+      existing.state === "invalid_output" ||
+      existing.state === "transport_error" ||
+      existing.state === "timeout" ||
+      existing.state === "cancelled"
+    ) {
+      // 恢复沿用失败原因；不重调模型（§4.3）
+      throw new NodeFailure(
+        decisionFailureReason(existing.state),
+        `恢复：决策调用 ${existing.id} 已处终态 ${existing.state}（${existing.errorClass ?? "无细类"}），不重新调用`,
+      );
+    }
+    // prepared / started / unknown
+    if (
+      (existing.state === "started" || existing.state === "unknown") &&
+      existing.kind === "model"
+    ) {
+      throw new DecisionPendingUnknown(
+        existing.id,
+        `决策调用 ${existing.id} 结果不明（${existing.state}，可能已计费）：保留证据，Run 置 waiting，不自动重发`,
+      );
+    }
+    // 重发必须使用原请求内容：请求 blob 丢失或摘要不匹配 → 明确不可恢复（§4.3 末行）
+    if (!existing.requestRef || !this.deps.blobs.has(existing.requestRef)) {
+      throw new NodeFailure(
+        "decision_request_lost",
+        `决策调用 ${existing.id} 的请求 blob（${existing.requestRef ?? "null"}）丢失，明确不可恢复，不得用重建内容补发`,
+      );
+    }
+    const stored = this.deps.blobs.read(existing.requestRef);
+    if (digestOf(stored) !== existing.requestDigest) {
+      throw new NodeFailure(
+        "decision_request_drift",
+        `决策调用 ${existing.id} 的请求 blob 摘要不匹配，明确不可恢复`,
+      );
+    }
+    const parsedStored = JSON.parse(stored) as {
+      problem: DecisionRequest["problem"];
+      options: string[];
+      view: DecisionView | null;
+      context: Record<string, unknown>;
+    };
+    const request = this.buildDecisionRequest({
+      node,
+      policy: { versionId: existing.policyVersionId, content: args.policy.content },
+      run,
+      runId: run.id,
+      remainingMs: args.remainingMs,
+      view: parsedStored.view ?? view,
+      options: parsedStored.options,
+      context: parsedStored.context,
+    });
+    if (existing.policyVersionId !== args.policy.versionId) {
+      throw new NodeFailure(
+        "decision_policy_drift",
+        `决策调用 ${existing.id} 的策略版本 ${existing.policyVersionId} 与快照解析结果 ${args.policy.versionId} 不一致，拒绝恢复`,
+      );
+    }
+    return this.sendDecisionCall(existing.id, {
+      run,
+      node,
+      provider,
+      request,
+      remainingMs: args.remainingMs,
+      nodeStates,
+    });
+  }
+
+  /** 从调用记录还原决策条目（value 终态；响应 blob 为证据源） */
+  private decisionEntryFromCall(
+    call: DecisionCallRecord,
+    node: NormalizedNode,
+  ): RunSummaryDecision {
+    if (!call.responseRef || !this.deps.blobs.has(call.responseRef)) {
+      throw new NodeFailure(
+        "decision_evidence_lost",
+        `决策调用 ${call.id} 缺少响应证据 blob，不能恢复 value（明确不可恢复）`,
+      );
+    }
+    const raw = this.deps.blobs.read(call.responseRef);
+    if (digestOf(raw) !== call.responseDigest) {
+      throw new NodeFailure("decision_evidence_drift", `决策调用 ${call.id} 响应 blob 摘要不匹配`);
+    }
+    const result = JSON.parse(raw) as DecisionResult;
     const validation = validateChoice(result, node.options!);
     if (!validation.ok) {
       throw new NodeFailure(
-        validation.reason === "abstain" ? "decision_abstained" : "decision_invalid_output",
-        `decision ${node.id} ${validation.reason}: ${validation.detail}`,
+        "decision_invalid_output",
+        `恢复的 value 记录不再合法：${validation.detail}`,
       );
     }
-    const entry: RunSummaryDecision = {
+    return {
       nodeId: node.id,
       value: validation.value,
       provider: result.provenance.provider,
       policyVersion: result.provenance.policyVersion,
     };
+  }
+
+  /** 网络调用（事务外）：超时/取消竞速 + 迟到证据记录；永不 resolve 的 provider 也能结束等待 */
+  private async invokeDecision(
+    provider: DecisionProvider,
+    request: DecisionRequest,
+    runId: string,
+    opts: { timeoutMs: number; decisionId: string },
+  ): Promise<DecisionOutcome> {
+    const controller = new AbortController();
+    let timedOut = false;
+    let cancelled = false;
+    const startedAt = this.deps.clock.now();
+    const active = this.activeDecisionAborts.get(runId) ?? new Set<AbortController>();
+    active.add(controller);
+    this.activeDecisionAborts.set(runId, active);
+    request.signal = controller.signal;
+    const promise = provider.decide(request);
+    let raceReject: ((err: Error) => void) | null = null;
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      raceReject = reject;
+    });
+    const timer = setTimeout(
+      () => {
+        timedOut = true;
+        controller.abort("decision_timeout");
+        raceReject?.(new Error("decision timeout"));
+      },
+      Math.max(1, opts.timeoutMs),
+    );
+    const cancelHook = () => {
+      cancelled = true;
+      controller.abort("decision_cancelled");
+      raceReject?.(new Error("decision cancelled"));
+    };
+    this.activeDecisionHooks.set(controller, cancelHook);
+    try {
+      const result = await Promise.race([promise, timeoutPromise]);
+      return { type: "result", result, durationMs: this.deps.clock.now() - startedAt };
+    } catch (err) {
+      const durationMs = this.deps.clock.now() - startedAt;
+      if (
+        timedOut ||
+        (controller.signal.aborted && controller.signal.reason === "decision_timeout")
+      ) {
+        return { type: "timeout", durationMs };
+      }
+      if (
+        cancelled ||
+        (controller.signal.aborted && controller.signal.reason === "decision_cancelled")
+      ) {
+        return { type: "cancelled", durationMs };
+      }
+      return { type: "transport_error", error: err, durationMs };
+    } finally {
+      clearTimeout(timer);
+      this.activeDecisionHooks.delete(controller);
+      active.delete(controller);
+      if (active.size === 0) this.activeDecisionAborts.delete(runId);
+      // 迟到结果：关联原 decisionId 追加证据；不改终态、不派发 worker（§4.3）
+      void promise.then(
+        (late) =>
+          this.recordLateDecisionArrival(opts.decisionId, {
+            settled: true,
+            value: late.kind === "value" ? String(late.value) : late.kind,
+          }),
+        (late) =>
+          this.recordLateDecisionArrival(opts.decisionId, {
+            settled: false,
+            value:
+              late instanceof Error ? `${late.name}: ${late.message}`.slice(0, 300) : String(late),
+          }),
+      );
+    }
+  }
+
+  /** 终态提交（一个短事务）：全部状态可审计；value 与 decision.recorded、节点成功同事务 */
+  private commitDecisionOutcome(
+    decisionId: string,
+    args: {
+      run: RunRecord;
+      node: NormalizedNode;
+      options: string[];
+      outcome: DecisionOutcome;
+      startedAt: number;
+      nodeStates: Map<string, NodeState>;
+    },
+  ): RunSummaryDecision {
+    const { run, node, options, outcome, startedAt, nodeStates } = args;
+    const endedAt = this.deps.clock.now();
+    const durationMs = endedAt - startedAt;
+
+    type Committed =
+      | { kind: "value"; entry: RunSummaryDecision }
+      | { kind: "failed"; reason: string; detail: string };
+    const committed = this.deps.storage.tx((): Committed => {
+      const finish = (patch: {
+        state: DecisionCallState;
+        response?: string | null;
+        usage?: DecisionCallRecord["usage"];
+        errorClass?: string | null;
+      }) => {
+        let responseRef: string | null = null;
+        let responseDigest: string | null = null;
+        if (patch.response !== null && patch.response !== undefined) {
+          const written = this.deps.blobs.write(patch.response);
+          responseRef = written.ref;
+          responseDigest = written.digest;
+        }
+        this.deps.storage.updateDecisionCall(
+          decisionId,
+          {
+            state: patch.state,
+            responseRef,
+            responseDigest,
+            usage: patch.usage ?? null,
+            errorClass: patch.errorClass ?? null,
+            endedAt,
+            durationMs,
+          },
+          { updatedAt: endedAt },
+        );
+        return responseRef;
+      };
+
+      if (outcome.type === "result") {
+        const result = outcome.result;
+        const usage = evidenceUsage(result);
+        if (result.kind === "abstain") {
+          finish({
+            state: "abstain",
+            response: result.raw ?? canonicalJson({ kind: result.kind, reason: result.reason }),
+            usage,
+          });
+          this.appendDecisionEvent(run.id, node, "decision.abstained", {
+            decisionId,
+            reason: result.reason.slice(0, 512),
+            origin: result.origin ?? "model",
+          });
+          return {
+            kind: "failed",
+            reason: "decision_abstained",
+            detail: `decision ${node.id} abstain（${result.origin ?? "model"}）: ${result.reason}`,
+          };
+        }
+        const validation = validateChoice(result, options);
+        if (!validation.ok) {
+          finish({
+            state: "invalid_output",
+            response: result.raw ?? canonicalJson({ kind: result.kind, detail: validation.detail }),
+            usage,
+          });
+          this.appendDecisionEvent(run.id, node, "decision.invalid_output", {
+            decisionId,
+            detail: validation.detail.slice(0, 512),
+          });
+          return {
+            kind: "failed",
+            reason: "decision_invalid_output",
+            detail: `decision ${node.id} invalid_output: ${validation.detail}`,
+          };
+        }
+        // 成功选择：value 终态 + decision.recorded + 节点成功同事务（关闭 D07 崩溃窗口）
+        finish({
+          state: "value",
+          response: result.raw ?? canonicalJson(result),
+          usage,
+        });
+        const entry: RunSummaryDecision = {
+          nodeId: node.id,
+          value: validation.value,
+          provider: result.provenance.provider,
+          policyVersion: result.provenance.policyVersion,
+        };
+        this.appendDecisionEvent(run.id, node, "decision.recorded", {
+          decisionId,
+          ...entry,
+          problem: node.problem,
+        });
+        this.appendNodeCompleted(run.id, node, "succeeded", null);
+        return { kind: "value", entry };
+      }
+      if (outcome.type === "timeout") {
+        finish({ state: "timeout", errorClass: "timeout", response: null });
+        this.appendDecisionEvent(run.id, node, "decision.timeout", { decisionId, durationMs });
+        return {
+          kind: "failed",
+          reason: "decision_timeout",
+          detail: `decision ${node.id} 超时（${durationMs}ms，上限内含 Run 剩余时间）`,
+        };
+      }
+      if (outcome.type === "cancelled") {
+        finish({ state: "cancelled", errorClass: "cancelled_during_call", response: null });
+        this.appendDecisionEvent(run.id, node, "decision.cancelled", {
+          decisionId,
+          phase: "during_call",
+        });
+        return {
+          kind: "failed",
+          reason: "decision_call_cancelled",
+          detail: `decision ${node.id} 调用中被取消；本地等待已结束，远端费用未知`,
+        };
+      }
+      const err = outcome.error;
+      const errorClass = err instanceof Error ? err.name : "Error";
+      const detail = err instanceof Error ? err.message : String(err);
+      finish({
+        state: "transport_error",
+        errorClass,
+        response: canonicalJson({ error: errorClass, message: detail.slice(0, 2000) }),
+      });
+      this.appendDecisionEvent(run.id, node, "decision.transport_error", {
+        decisionId,
+        errorClass,
+        detail: detail.slice(0, 512),
+      });
+      return {
+        kind: "failed",
+        reason: "decision_transport_error",
+        detail: `decision ${node.id} 传输/服务错误（${errorClass}）：${detail.slice(0, 300)}`,
+      };
+    });
+
+    if (committed.kind === "failed") {
+      throw new NodeFailure(committed.reason, committed.detail);
+    }
+    nodeStates.set(node.id, "succeeded");
+    return committed.entry;
+  }
+
+  /** 迟到证据：仅在 timeout/cancelled 终态上追加 lateArrival 标记与事件，不改终态 */
+  private recordLateDecisionArrival(
+    decisionId: string,
+    evidence: { settled: boolean; value: string },
+  ): void {
+    try {
+      this.deps.storage.tx(() => {
+        const call = this.deps.storage.getDecisionCall(decisionId);
+        if (!call || call.lateArrival) return;
+        if (call.state !== "timeout" && call.state !== "cancelled") return;
+        this.deps.storage.updateDecisionCall(
+          decisionId,
+          { lateArrival: true },
+          { updatedAt: this.deps.clock.now() },
+        );
+        this.deps.storage.appendEvent({
+          streamId: `run-${call.runId}`,
+          type: "decision.late_arrival",
+          payload: { decisionId, originalState: call.state, evidence },
+          correlationId: call.runId,
+          runId: call.runId,
+          occurredAt: this.deps.clock.now(),
+        });
+      });
+    } catch {
+      // 迟到证据是尽力记录：记录失败不改变已提交终态，也不抛出
+    }
+  }
+
+  /**
+   * 显式结案 unknown 决策调用（operator 入口，§4.3）：
+   * 保留 unknown 证据与未结算费用，Run 以 failed/decision_unknown 结案；
+   * 不证明远端费用为零，也不改写调用终态。
+   */
+  settleDecisionCall(
+    decisionId: string,
+    opts: { note?: string } = {},
+  ): { decisionId: string; runId: string; state: RunState; note: string } {
+    const call = this.deps.storage.getDecisionCall(decisionId);
+    if (!call) throw new RuntimeError("unknown_run", `决策调用 ${decisionId} 不存在`);
+    if (call.state !== "unknown" && call.state !== "started") {
+      throw new RuntimeError(
+        "decision_call_not_pending",
+        `决策调用 ${decisionId} 状态为 ${call.state}，无需结案`,
+      );
+    }
+    const run = this.mustGetRun(call.runId);
+    if (isTerminal(run.state)) {
+      throw new RuntimeError(
+        "decision_call_not_pending",
+        `run ${call.runId} 已终态（${run.state}），仅补充结案事件`,
+      );
+    }
+    const at = this.deps.clock.now();
     this.deps.storage.tx(() => {
       this.deps.storage.appendEvent({
-        streamId: `run-${runId}`,
-        type: "decision.recorded",
-        payload: { ...entry, problem: node.problem },
-        correlationId: runId,
-        runId,
-        organismId: this.deps.organismId,
-        occurredAt: this.deps.clock.now(),
+        streamId: `run-${call.runId}`,
+        type: "decision.settled",
+        payload: { decisionId, note: opts.note ?? null, evidenceState: call.state },
+        correlationId: call.runId,
+        runId: call.runId,
+        occurredAt: at,
       });
     });
-    return entry;
+    const summary = this.finalize(call.runId, "failed", "decision_unknown", [], null, undefined);
+    return {
+      decisionId,
+      runId: call.runId,
+      state: summary.state,
+      note: `决策调用 ${decisionId} 保持 unknown 证据；run 以 failed/decision_unknown 结案（未结算费用不视为零）`,
+    };
+  }
+
+  private buildDecisionRequest(args: {
+    node: NormalizedNode;
+    policy: { versionId: string; content: unknown };
+    run: RunRecord;
+    runId: string;
+    remainingMs: number;
+    view?: DecisionView;
+    options?: string[];
+    context?: Record<string, unknown>;
+    requires?: string[];
+  }): DecisionRequest {
+    return {
+      problem: args.node.problem!,
+      options: [...(args.options ?? args.node.options!)],
+      // 任务声明的能力展开为布尔键（capability:<name>: true）——M2 rule-v1
+      // 路由语义保持不变；view 节点的决策依据来自受限视图而非 context
+      context: {
+        ...(args.context ?? args.node.context),
+        ...capabilityContext(args.requires ?? []),
+      },
+      policy: args.policy,
+      deadlineMs: Math.max(
+        1,
+        Math.min(
+          this.deps.decisionCallTimeoutMs ?? DEFAULT_DECISION_CALL_TIMEOUT_MS,
+          args.remainingMs,
+        ),
+      ),
+      remainingAttempts: Math.max(
+        0,
+        args.run.budget.maxAttempts - this.listRunAttempts(args.runId).length,
+      ),
+      ...(args.view ? { view: args.view } : {}),
+    };
+  }
+
+  /** 受信装配的调用来源：Adapter 填充服务/模型/采样/提示摘要，不信模型自报 */
+  private buildProvenance(
+    provider: DecisionProvider,
+    args: {
+      policy: { versionId: string; content: unknown };
+      viewVersionId: string | null;
+      request: DecisionRequest;
+    },
+  ): DecisionCallProvenance {
+    const adapter = provider.callProvenance?.(args.request) ?? {
+      adapter: `${provider.name}@in-process`,
+    };
+    return {
+      provider: provider.name,
+      adapter: adapter.adapter,
+      policyVersionId: args.policy.versionId,
+      viewVersionId: args.viewVersionId,
+      serviceId: adapter.serviceId ?? null,
+      requestedModel: adapter.requestedModel ?? null,
+      servedModel: null,
+      sampling: adapter.sampling ?? null,
+      promptDigest: adapter.promptDigest ?? null,
+      responseSchemaDigest: digestOf(RESPONSE_SCHEMA_DIGEST_TARGET),
+      commit: process.env.PROTEUS_COMMIT ?? null,
+      reproducibility:
+        adapter.reproducibility ?? (provider.remote === true ? "recorded-inputs-only" : "pinned"),
+    };
+  }
+
+  private appendDecisionEvent(
+    runId: string,
+    node: NormalizedNode,
+    type: string,
+    payload: Record<string, unknown>,
+  ): { eventId: string; seq: number } {
+    return this.deps.storage.appendEvent({
+      streamId: `run-${runId}`,
+      type,
+      payload: { nodeId: node.id, ...payload },
+      correlationId: runId,
+      runId,
+      organismId: this.deps.organismId,
+      occurredAt: this.deps.clock.now(),
+    });
+  }
+
+  private appendNodeCompleted(
+    runId: string,
+    node: NormalizedNode,
+    state: NodeState,
+    reason: string | null,
+  ): void {
+    this.deps.storage.appendEvent({
+      streamId: `run-${runId}`,
+      type: "node.completed",
+      payload: { nodeId: node.id, type: node.type, state, reason },
+      correlationId: runId,
+      runId,
+      organismId: this.deps.organismId,
+      occurredAt: this.deps.clock.now(),
+    });
   }
 
   private async runExecute(
@@ -895,10 +1787,31 @@ export class Runtime {
     const attemptId = this.deps.ids.next();
     const dispatchId = this.deps.ids.next();
     const startedAt = this.deps.clock.now();
+    // worker 执行时限 = Run 剩余时间（持久化截止点计算，不重新给足总时限）
+    const remainingMs = run.deadlineAt - startedAt;
+    if (remainingMs <= 0) {
+      throw new NodeFailure(
+        "deadline_exceeded",
+        `Run 截止点已过（剩余 ${remainingMs}ms），不再派发 worker`,
+      );
+    }
 
     // Attempt 配额检查与创建必须在同一事务内：并发派发不会重复花费同一余额。
     // 重试沿用 Process 身份并创建新 Attempt（docs/runtime.md §1）。
     const processId = this.deps.storage.tx((): string => {
+      // worker 派发前检查取消与未结决策调用（§4.3：不能只在实验 runner 内阻止）
+      if (this.deps.storage.hasCancelIntent(runId)) {
+        throw new NodeFailure("cancel_requested", `execute ${node.id} 派发前收到取消请求`);
+      }
+      const unresolved = this.deps.storage
+        .listDecisionCalls(runId)
+        .find((c) => c.state === "started" || c.state === "unknown");
+      if (unresolved) {
+        throw new NodeFailure(
+          "decision_call_unresolved",
+          `存在未结决策调用 ${unresolved.id}（${unresolved.state}），禁止派发 worker`,
+        );
+      }
       const previousAttempts = this.listRunAttempts(runId);
       if (previousAttempts.length >= run.budget.maxAttempts) {
         throw new NodeFailure("budget_exhausted", `Attempt 数已达上限 ${run.budget.maxAttempts}`);
@@ -976,7 +1889,7 @@ export class Runtime {
       attemptId,
       workspaceDir: workspace,
       prompt: task.goal,
-      timeoutMs: run.budget.maxWallClockSeconds * 1000,
+      timeoutMs: remainingMs,
     });
 
     const handle = `${executorName}:${dispatchId}`;
@@ -1289,6 +2202,7 @@ export class Runtime {
           outputDigest,
           attemptCount: attempts.length,
           durationMs,
+          decisionCallIds: this.deps.storage.listDecisionCalls(runId).map((c) => c.id),
         },
         createdAt: endedAt,
       });

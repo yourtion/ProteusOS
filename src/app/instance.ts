@@ -3,6 +3,7 @@ import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { v7 as uuidv7 } from "uuid";
+import type { DecisionProvider } from "../decision/index.ts";
 import { RuleDecisionProvider } from "../adapters/decision-rule/index.ts";
 import { AcpExecutor } from "../adapters/executor-acp/index.ts";
 import { LocalProcessExecutor } from "../adapters/executor-process/index.ts";
@@ -93,6 +94,19 @@ export function buildExecutors(): Map<string, ExecutorProvider> {
   return executors;
 }
 
+/** 默认决策注册表：规则路由（M0 语义）。实验实例按名称注入 LLM/oracle Provider */
+export function buildDecisions(
+  extra?: ReadonlyMap<string, DecisionProvider>,
+): Map<string, DecisionProvider> {
+  const decisions = new Map<string, DecisionProvider>([
+    ["decision-rule", new RuleDecisionProvider()],
+  ]);
+  for (const [name, provider] of extra ?? []) {
+    decisions.set(name, provider);
+  }
+  return decisions;
+}
+
 /** 组装依赖：领域模块不自行创建外部客户端（docs/architecture.md §Persistence） */
 export function openInstance(
   root: string,
@@ -100,6 +114,10 @@ export function openInstance(
     logger?: Logger;
     organismBudget?: OrganismBudget;
     executors?: Map<string, ExecutorProvider>;
+    /** 追加按名称查找的 DecisionProvider（实验显式装配 LLM；默认仍只有规则） */
+    decisions?: ReadonlyMap<string, DecisionProvider>;
+    /** 单次决策调用超时上限（默认 15s，实验协议 §4.2） */
+    decisionCallTimeoutMs?: number;
   } = {},
 ): AppInstance {
   for (const dir of [root, join(root, "blobs"), join(root, "workspaces"), join(root, "tmp")]) {
@@ -118,12 +136,13 @@ export function openInstance(
     kernel,
     organismId: ORGANISM_ID,
     executors: options.executors ?? buildExecutors(),
-    decision: new RuleDecisionProvider(),
+    decisions: buildDecisions(options.decisions),
     blobs,
     instanceRoot: root,
     clock,
     ids,
     organismBudget: options.organismBudget ?? DEFAULT_ORGANISM_BUDGET,
+    decisionCallTimeoutMs: options.decisionCallTimeoutMs,
   });
   const evolution = new Evolution({
     kernel,

@@ -1,0 +1,24 @@
+{
+  "changes": [
+    {
+      "path": "api/routes.py",
+      "changeType": "modified"
+    },
+    {
+      "path": "tests/test_routes.py",
+      "changeType": "modified"
+    },
+    {
+      "path": "README.md",
+      "changeType": "modified"
+    },
+    {
+      "path": "requirements.toml",
+      "changeType": "added"
+    },
+    {
+      "path": "sample.json",
+      "changeType": "deleted"
+    }
+  ]
+}

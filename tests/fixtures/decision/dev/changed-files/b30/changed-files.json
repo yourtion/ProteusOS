@@ -1,0 +1,16 @@
+{
+  "changes": [
+    {
+      "path": "shell/run.ts",
+      "changeType": "added"
+    },
+    {
+      "path": "docs/run.md",
+      "changeType": "modified"
+    },
+    {
+      "path": "config/run.json",
+      "changeType": "added"
+    }
+  ]
+}

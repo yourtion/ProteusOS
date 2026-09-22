@@ -57,7 +57,7 @@ function runtimeWithExecutors(executors: Array<[string, ExecutorProvider]>): Run
     kernel: app.kernel,
     organismId: "organism-default",
     executors: new Map(executors),
-    decision: new RuleDecisionProvider(),
+    decisions: new Map([["decision-rule", new RuleDecisionProvider()]]),
     blobs: app.blobs,
     instanceRoot: app.root,
     clock: { now: Date.now },

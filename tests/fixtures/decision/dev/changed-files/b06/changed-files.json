@@ -1,0 +1,24 @@
+{
+  "changes": [
+    {
+      "path": "scripts/build.js",
+      "changeType": "modified"
+    },
+    {
+      "path": "scripts/build.test.cjs",
+      "changeType": "added"
+    },
+    {
+      "path": "SECURITY.md",
+      "changeType": "added"
+    },
+    {
+      "path": "jest.config.json",
+      "changeType": "modified"
+    },
+    {
+      "path": "snap.bin",
+      "changeType": "modified"
+    }
+  ]
+}

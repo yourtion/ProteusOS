@@ -1,0 +1,16 @@
+{
+  "changes": [
+    {
+      "path": "src/store.ts",
+      "changeType": "modified"
+    },
+    {
+      "path": "src/store.test.mjs",
+      "changeType": "added"
+    },
+    {
+      "path": "config/store.json",
+      "changeType": "modified"
+    }
+  ]
+}

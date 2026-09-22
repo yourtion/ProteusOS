@@ -18,11 +18,14 @@ import type {
   TaskBudget,
   TaskRecord,
 } from "../runtime/types.ts";
+import type { DecisionCallRecord } from "../decision/call.ts";
 import type { SqliteDb } from "./sqlite.ts";
 import type {
   ArtifactRow,
   AttemptRow,
   CandidateRow,
+  DecisionCallLimitRow,
+  DecisionCallRow,
   DispatchRow,
   EvaluationRow,
   EventRow,
@@ -254,8 +257,8 @@ export class Storage implements KernelStore, RuntimeStore {
 
   insertRun(r: RunRecord): void {
     this.db.run(
-      `INSERT INTO runs (id, task_id, task_revision, organism_id, purpose, snapshot_id, graph_digest, state, supersedes_run_id, budget, failure_reason, missing_capabilities, waiting_until, evaluator_version_id, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO runs (id, task_id, task_revision, organism_id, purpose, snapshot_id, graph_digest, state, supersedes_run_id, budget, failure_reason, missing_capabilities, waiting_until, evaluator_version_id, deadline_at, experiment_id, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       r.id,
       r.taskId,
       r.taskRevision,
@@ -270,6 +273,8 @@ export class Storage implements KernelStore, RuntimeStore {
       r.missingCapabilities ? JSON.stringify(r.missingCapabilities) : null,
       r.waitingUntil,
       r.evaluatorVersionId,
+      r.deadlineAt,
+      r.experimentId,
       r.createdAt,
       r.updatedAt,
     );
@@ -405,8 +410,11 @@ export class Storage implements KernelStore, RuntimeStore {
   // ---- RuntimeStore：experience / budget / events / outbox ----
 
   insertExperience(e: ExperienceRecord): void {
+    // 一个 Run 一条经验（run_id 唯一）；operator 回退后重新结案时覆盖投影，
+    // 原始过程仍完整保留在事件流中
     this.db.run(
-      "INSERT INTO experiences (id, run_id, outcome, created_at) VALUES (?, ?, ?, ?)",
+      `INSERT INTO experiences (id, run_id, outcome, created_at) VALUES (?, ?, ?, ?)
+       ON CONFLICT(run_id) DO UPDATE SET outcome = excluded.outcome, created_at = excluded.created_at`,
       e.id,
       e.runId,
       JSON.stringify(e.outcome),
@@ -565,6 +573,154 @@ export class Storage implements KernelStore, RuntimeStore {
     return state
       ? this.db.all<DispatchRow>("SELECT * FROM outbox WHERE state = ?", state).map(mapDispatch)
       : this.db.all<DispatchRow>("SELECT * FROM outbox").map(mapDispatch);
+  }
+
+  // ---- 本体决策实验：决策调用账本与额度（ADR 0007 §4.2/§4.3）----
+
+  insertDecisionCall(call: DecisionCallRecord): void {
+    this.db.run(
+      `INSERT INTO decision_calls (id, experiment_id, run_id, node_id, snapshot_id, kind, state, sent, provider, policy_version_id, view_version_id, request_ref, request_digest, response_ref, response_digest, provenance, usage, error_class, started_at, ended_at, duration_ms, late_arrival, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      call.id,
+      call.experimentId,
+      call.runId,
+      call.nodeId,
+      call.snapshotId,
+      call.kind,
+      call.state,
+      call.sent ? 1 : 0,
+      call.provider,
+      call.policyVersionId,
+      call.viewVersionId,
+      call.requestRef,
+      call.requestDigest,
+      call.responseRef,
+      call.responseDigest,
+      JSON.stringify(call.provenance),
+      call.usage === null ? null : JSON.stringify(call.usage),
+      call.errorClass,
+      call.startedAt,
+      call.endedAt,
+      call.durationMs,
+      call.lateArrival ? 1 : 0,
+      call.createdAt,
+      call.updatedAt,
+    );
+  }
+
+  getDecisionCall(id: string): DecisionCallRecord | undefined {
+    const row = this.db.get<DecisionCallRow>("SELECT * FROM decision_calls WHERE id = ?", id);
+    return row ? mapDecisionCall(row) : undefined;
+  }
+
+  findDecisionCall(runId: string, nodeId: string): DecisionCallRecord | undefined {
+    const row = this.db.get<DecisionCallRow>(
+      "SELECT * FROM decision_calls WHERE run_id = ? AND node_id = ? ORDER BY created_at DESC LIMIT 1",
+      runId,
+      nodeId,
+    );
+    return row ? mapDecisionCall(row) : undefined;
+  }
+
+  listDecisionCalls(runId: string): DecisionCallRecord[] {
+    return this.db
+      .all<DecisionCallRow>(
+        "SELECT * FROM decision_calls WHERE run_id = ? ORDER BY created_at",
+        runId,
+      )
+      .map(mapDecisionCall);
+  }
+
+  updateDecisionCall(
+    id: string,
+    patch: Partial<
+      Pick<
+        DecisionCallRecord,
+        | "state"
+        | "sent"
+        | "responseRef"
+        | "responseDigest"
+        | "usage"
+        | "errorClass"
+        | "startedAt"
+        | "endedAt"
+        | "durationMs"
+        | "lateArrival"
+      >
+    >,
+    opts: { updatedAt: number },
+  ): void {
+    const columns: Array<[string, unknown]> = [
+      ["state", patch.state],
+      ["sent", patch.sent === undefined ? undefined : patch.sent ? 1 : 0],
+      ["response_ref", patch.responseRef],
+      ["response_digest", patch.responseDigest],
+      [
+        "usage",
+        patch.usage === undefined
+          ? undefined
+          : patch.usage === null
+            ? null
+            : JSON.stringify(patch.usage),
+      ],
+      ["error_class", patch.errorClass],
+      ["started_at", patch.startedAt],
+      ["ended_at", patch.endedAt],
+      ["duration_ms", patch.durationMs],
+      ["late_arrival", patch.lateArrival === undefined ? undefined : patch.lateArrival ? 1 : 0],
+      ["updated_at", opts.updatedAt],
+    ];
+    const sets = columns.filter(([, v]) => v !== undefined);
+    if (sets.length === 0) return;
+    this.db.run(
+      `UPDATE decision_calls SET ${sets.map(([c]) => `${c} = ?`).join(", ")} WHERE id = ?`,
+      ...sets.map(([, v]) => v as SQLInputValue),
+      id,
+    );
+  }
+
+  countDecisionQuotaCalls(scope: { organismId: string; experimentId?: string | null }): number {
+    // 消耗/预留 = 已发送（sent=1）或仍处 prepared 的 model 调用；
+    // prepared 未发送即取消（cancelled + sent=0）不计数
+    if (scope.experimentId) {
+      const row = this.db.get<{ n: number }>(
+        `SELECT COUNT(*) AS n FROM decision_calls
+         WHERE kind = 'model' AND experiment_id = ? AND (sent = 1 OR state = 'prepared')`,
+        scope.experimentId,
+      )!;
+      return row.n;
+    }
+    const row = this.db.get<{ n: number }>(
+      `SELECT COUNT(*) AS n FROM decision_calls dc
+         JOIN runs r ON r.id = dc.run_id
+         WHERE dc.kind = 'model' AND r.organism_id = ? AND (dc.sent = 1 OR dc.state = 'prepared')`,
+      scope.organismId,
+    )!;
+    return row.n;
+  }
+
+  setDecisionCallLimit(
+    scope: { organismId: string; experimentId?: string | null },
+    maxCalls: number,
+    at: number,
+  ): void {
+    this.db.run(
+      "INSERT INTO decision_call_limits (scope, max_calls, created_at) VALUES (?, ?, ?) ON CONFLICT(scope) DO UPDATE SET max_calls = excluded.max_calls",
+      decisionLimitScope(scope),
+      maxCalls,
+      at,
+    );
+  }
+
+  getDecisionCallLimit(scope: {
+    organismId: string;
+    experimentId?: string | null;
+  }): number | undefined {
+    const row = this.db.get<DecisionCallLimitRow>(
+      "SELECT * FROM decision_call_limits WHERE scope = ?",
+      decisionLimitScope(scope),
+    );
+    return row?.max_calls;
   }
 
   // ---- Evolution：candidate / evaluation / promotion（M2）----
@@ -743,6 +899,8 @@ function mapRun(row: RunRow): RunRecord {
       : null,
     waitingUntil: row.waiting_until,
     evaluatorVersionId: row.evaluator_version_id,
+    deadlineAt: row.deadline_at ?? row.created_at,
+    experimentId: row.experiment_id ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -796,6 +954,39 @@ function mapDispatch(row: DispatchRow): DispatchRecord {
     dispatchedAt: row.dispatched_at,
     completedAt: row.completed_at,
   };
+}
+
+function mapDecisionCall(row: DecisionCallRow): DecisionCallRecord {
+  return {
+    id: row.id,
+    experimentId: row.experiment_id,
+    runId: row.run_id,
+    nodeId: row.node_id,
+    snapshotId: row.snapshot_id,
+    kind: row.kind as DecisionCallRecord["kind"],
+    state: row.state as DecisionCallRecord["state"],
+    sent: row.sent === 1,
+    provider: row.provider,
+    policyVersionId: row.policy_version_id,
+    viewVersionId: row.view_version_id,
+    requestRef: row.request_ref,
+    requestDigest: row.request_digest,
+    responseRef: row.response_ref,
+    responseDigest: row.response_digest,
+    provenance: JSON.parse(row.provenance) as DecisionCallRecord["provenance"],
+    usage: row.usage ? (JSON.parse(row.usage) as DecisionCallRecord["usage"]) : null,
+    errorClass: row.error_class,
+    startedAt: row.started_at,
+    endedAt: row.ended_at,
+    durationMs: row.duration_ms,
+    lateArrival: row.late_arrival === 1,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function decisionLimitScope(scope: { organismId: string; experimentId?: string | null }): string {
+  return scope.experimentId ? `experiment:${scope.experimentId}` : `organism:${scope.organismId}`;
 }
 
 function mapCandidate(row: CandidateRow): CandidateRecord {

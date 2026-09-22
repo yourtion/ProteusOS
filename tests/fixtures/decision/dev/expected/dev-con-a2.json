@@ -1,0 +1,27 @@
+{
+  "summary": {
+    "total": 5,
+    "files": [
+      {
+        "path": "src/alpha.ts",
+        "category": "source"
+      },
+      {
+        "path": "src/alpha.test.ts",
+        "category": "source"
+      },
+      {
+        "path": "docs/alpha.md",
+        "category": "docs"
+      },
+      {
+        "path": "alpha.config.json",
+        "category": "config"
+      },
+      {
+        "path": "alpha.lock",
+        "category": "other"
+      }
+    ]
+  }
+}

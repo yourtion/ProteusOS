@@ -1,0 +1,27 @@
+{
+  "summary": {
+    "total": 5,
+    "files": [
+      {
+        "path": "x/y/z.ts",
+        "category": "source"
+      },
+      {
+        "path": "x/tests/z.test.ts",
+        "category": "test"
+      },
+      {
+        "path": "x/y/notes.md",
+        "category": "docs"
+      },
+      {
+        "path": "x/y/z.json",
+        "category": "config"
+      },
+      {
+        "path": "x/y/z.map",
+        "category": "other"
+      }
+    ]
+  }
+}

@@ -239,4 +239,55 @@ CREATE INDEX idx_promotions_organism ON promotions(organism_id);
 ALTER TABLE runs ADD COLUMN evaluator_version_id TEXT;
 `,
   },
+  {
+    // 本体决策实验（ADR 0007）：
+    // - runs.deadline_at：Run 截止点持久化，剩余时间不能每个节点重新给足
+    // - runs.experiment_id：实验 Run 归属（决策调用额度按 experiment/organism 双域记账）
+    // - decision_calls：独立决策调用账本（prepared→started→终态），不挪用 Executor Attempt
+    // - decision_call_limits：持久化额度（进程重启/换 experimentId 不能重置）
+    version: 5,
+    name: "organism-decision-v1",
+    sql: `
+ALTER TABLE runs ADD COLUMN deadline_at INTEGER;
+UPDATE runs SET deadline_at = created_at
+  + CAST(COALESCE(JSON_EXTRACT(budget, '$.maxWallClockSeconds'), 0) AS INTEGER) * 1000
+  WHERE deadline_at IS NULL;
+ALTER TABLE runs ADD COLUMN experiment_id TEXT;
+
+CREATE TABLE decision_calls (
+  id TEXT PRIMARY KEY,
+  experiment_id TEXT,
+  run_id TEXT NOT NULL,
+  node_id TEXT NOT NULL,
+  snapshot_id TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  state TEXT NOT NULL,
+  sent INTEGER NOT NULL DEFAULT 0,
+  provider TEXT NOT NULL,
+  policy_version_id TEXT NOT NULL,
+  view_version_id TEXT,
+  request_ref TEXT,
+  request_digest TEXT,
+  response_ref TEXT,
+  response_digest TEXT,
+  provenance TEXT NOT NULL,
+  usage TEXT,
+  error_class TEXT,
+  started_at INTEGER,
+  ended_at INTEGER,
+  duration_ms INTEGER,
+  late_arrival INTEGER NOT NULL DEFAULT 0,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+CREATE INDEX idx_decision_calls_run ON decision_calls(run_id);
+CREATE INDEX idx_decision_calls_experiment ON decision_calls(experiment_id);
+
+CREATE TABLE decision_call_limits (
+  scope TEXT PRIMARY KEY,
+  max_calls INTEGER NOT NULL,
+  created_at INTEGER NOT NULL
+);
+`,
+  },
 ];

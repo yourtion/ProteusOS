@@ -1,0 +1,23 @@
+{
+  "summary": {
+    "total": 4,
+    "files": [
+      {
+        "path": "src/util.ts",
+        "category": "source"
+      },
+      {
+        "path": "src/util.spec.ts",
+        "category": "source"
+      },
+      {
+        "path": "docs/api.md",
+        "category": "docs"
+      },
+      {
+        "path": "config/settings.yml",
+        "category": "config"
+      }
+    ]
+  }
+}

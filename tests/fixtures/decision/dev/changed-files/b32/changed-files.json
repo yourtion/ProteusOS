@@ -1,0 +1,24 @@
+{
+  "changes": [
+    {
+      "path": "log/tail.ts",
+      "changeType": "modified"
+    },
+    {
+      "path": "log/tail.test.mjs",
+      "changeType": "modified"
+    },
+    {
+      "path": "docs/tail.md",
+      "changeType": "deleted"
+    },
+    {
+      "path": "log/format.yaml",
+      "changeType": "modified"
+    },
+    {
+      "path": "log/sample.log",
+      "changeType": "added"
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "changes": [
+    {
+      "path": "lib/core.mjs",
+      "changeType": "modified"
+    },
+    {
+      "path": "lib/__tests__/core.test.mjs",
+      "changeType": "added"
+    },
+    {
+      "path": "docs/guide.md",
+      "changeType": "modified"
+    },
+    {
+      "path": "config/app.yaml",
+      "changeType": "modified"
+    },
+    {
+      "path": "data/raw.csv",
+      "changeType": "added"
+    }
+  ]
+}

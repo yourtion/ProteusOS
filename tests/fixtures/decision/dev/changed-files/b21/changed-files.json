@@ -1,0 +1,24 @@
+{
+  "changes": [
+    {
+      "path": "db/schema.ts",
+      "changeType": "modified"
+    },
+    {
+      "path": "db/schema.test.ts",
+      "changeType": "added"
+    },
+    {
+      "path": "docs/schema.md",
+      "changeType": "modified"
+    },
+    {
+      "path": "config/schema.prisma",
+      "changeType": "modified"
+    },
+    {
+      "path": "dump.sqlite",
+      "changeType": "added"
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "changes": [
+    {
+      "path": "ml/train.py",
+      "changeType": "modified"
+    },
+    {
+      "path": "tests/train_test.py",
+      "changeType": "added"
+    },
+    {
+      "path": "docs/ml.md",
+      "changeType": "added"
+    },
+    {
+      "path": "config/model.yaml",
+      "changeType": "modified"
+    },
+    {
+      "path": "weights.pt",
+      "changeType": "added"
+    }
+  ]
+}

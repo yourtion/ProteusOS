@@ -1,0 +1,23 @@
+{
+  "summary": {
+    "total": 4,
+    "files": [
+      {
+        "path": "core/a.mjs",
+        "category": "source"
+      },
+      {
+        "path": "core/a.test.mjs",
+        "category": "test"
+      },
+      {
+        "path": "core/b.cjs",
+        "category": "source"
+      },
+      {
+        "path": "README.md",
+        "category": "docs"
+      }
+    ]
+  }
+}

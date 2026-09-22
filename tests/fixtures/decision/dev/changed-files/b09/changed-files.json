@@ -1,0 +1,20 @@
+{
+  "changes": [
+    {
+      "path": "core/engine.ts",
+      "changeType": "modified"
+    },
+    {
+      "path": "docs/design.md",
+      "changeType": "added"
+    },
+    {
+      "path": "config/defaults.yaml",
+      "changeType": "modified"
+    },
+    {
+      "path": "tools/seed.sql",
+      "changeType": "added"
+    }
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "summary": {
+    "total": 3,
+    "files": [
+      {
+        "path": "src/store.ts",
+        "category": "source"
+      },
+      {
+        "path": "src/store.test.mjs",
+        "category": "test"
+      },
+      {
+        "path": "config/store.json",
+        "category": "config"
+      }
+    ]
+  }
+}

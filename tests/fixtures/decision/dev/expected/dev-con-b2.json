@@ -1,0 +1,23 @@
+{
+  "summary": {
+    "total": 4,
+    "files": [
+      {
+        "path": "src/beta.ts",
+        "category": "source"
+      },
+      {
+        "path": "src/beta.spec.mjs",
+        "category": "source"
+      },
+      {
+        "path": "docs/beta.md",
+        "category": "docs"
+      },
+      {
+        "path": "beta.settings.toml",
+        "category": "config"
+      }
+    ]
+  }
+}

@@ -69,7 +69,7 @@ function runtimeWith(budget: Partial<OrganismBudget>, executorMs = 250): Runtime
     kernel: app.kernel,
     organismId: "organism-default",
     executors: new Map([["local-process", slowExecutor(executorMs)]]),
-    decision: new RuleDecisionProvider(),
+    decisions: new Map([["decision-rule", new RuleDecisionProvider()]]),
     blobs: app.blobs,
     instanceRoot: app.root,
     clock: { now: Date.now },

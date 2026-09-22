@@ -1,0 +1,27 @@
+{
+  "summary": {
+    "total": 5,
+    "files": [
+      {
+        "path": "web/src/app.tsx",
+        "category": "source"
+      },
+      {
+        "path": "web/src/tests/render.test.tsx",
+        "category": "test"
+      },
+      {
+        "path": "web/README.md",
+        "category": "docs"
+      },
+      {
+        "path": "web/vite.config.ts",
+        "category": "source"
+      },
+      {
+        "path": "assets/font.woff2",
+        "category": "other"
+      }
+    ]
+  }
+}

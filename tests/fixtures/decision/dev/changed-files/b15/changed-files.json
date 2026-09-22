@@ -1,0 +1,24 @@
+{
+  "changes": [
+    {
+      "path": "src/graph.ts",
+      "changeType": "added"
+    },
+    {
+      "path": "src/graph.test.ts",
+      "changeType": "added"
+    },
+    {
+      "path": "docs/graph.md",
+      "changeType": "added"
+    },
+    {
+      "path": "config/graph.yaml",
+      "changeType": "added"
+    },
+    {
+      "path": "graph.dump",
+      "changeType": "added"
+    }
+  ]
+}

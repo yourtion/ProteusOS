@@ -1,0 +1,20 @@
+{
+  "changes": [
+    {
+      "path": "ui/view.jsx",
+      "changeType": "modified"
+    },
+    {
+      "path": "ui/__tests__/view.test.jsx",
+      "changeType": "added"
+    },
+    {
+      "path": "ui/style.css",
+      "changeType": "modified"
+    },
+    {
+      "path": "ui/theme.json",
+      "changeType": "modified"
+    }
+  ]
+}

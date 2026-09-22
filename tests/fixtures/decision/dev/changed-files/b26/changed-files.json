@@ -1,0 +1,20 @@
+{
+  "changes": [
+    {
+      "path": "fin/calc.ts",
+      "changeType": "modified"
+    },
+    {
+      "path": "fin/docs.md",
+      "changeType": "added"
+    },
+    {
+      "path": "fin/rates.json",
+      "changeType": "modified"
+    },
+    {
+      "path": "fin/data.bin",
+      "changeType": "added"
+    }
+  ]
+}

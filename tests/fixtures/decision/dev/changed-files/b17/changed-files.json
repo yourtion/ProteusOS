@@ -1,0 +1,24 @@
+{
+  "changes": [
+    {
+      "path": "src/a.ts",
+      "changeType": "modified"
+    },
+    {
+      "path": "src/b.ts",
+      "changeType": "modified"
+    },
+    {
+      "path": "src/tests/helper.ts",
+      "changeType": "added"
+    },
+    {
+      "path": "docs/a-and-b.md",
+      "changeType": "added"
+    },
+    {
+      "path": "config/a.json",
+      "changeType": "deleted"
+    }
+  ]
+}

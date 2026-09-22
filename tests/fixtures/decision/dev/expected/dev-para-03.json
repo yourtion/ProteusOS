@@ -1,0 +1,25 @@
+{
+  "files": [
+    {
+      "path": "b11/file-a.md",
+      "bytes": 26,
+      "lines": 3,
+      "words": 3,
+      "headings": 1
+    },
+    {
+      "path": "b11/file-b.txt",
+      "bytes": 22,
+      "lines": 1,
+      "words": 1,
+      "headings": 0
+    }
+  ],
+  "totals": {
+    "files": 2,
+    "bytes": 48,
+    "lines": 4,
+    "words": 4,
+    "headings": 1
+  }
+}

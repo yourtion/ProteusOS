@@ -1,0 +1,20 @@
+{
+  "changes": [
+    {
+      "path": "lib/http.ts",
+      "changeType": "modified"
+    },
+    {
+      "path": "docs/http.md",
+      "changeType": "modified"
+    },
+    {
+      "path": "lib/native.node",
+      "changeType": "added"
+    },
+    {
+      "path": "config/http.yaml",
+      "changeType": "deleted"
+    }
+  ]
+}

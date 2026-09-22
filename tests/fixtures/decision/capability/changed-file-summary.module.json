@@ -1,0 +1,11 @@
+{
+  "kind": "capability-module-v1",
+  "name": "changed-file-summary",
+  "entry": "index.mjs",
+  "files": [
+    {
+      "path": "index.mjs",
+      "content": "import { readFileSync, realpathSync, writeFileSync } from \"node:fs\";\nimport { join } from \"node:path\";\nimport { pathToFileURL } from \"node:url\";\n\n/**\n * ChangedFileSummary 能力实现（测试基准实现：fake builder 的标准产出、\n * 真实 agent 按同一规范生成；collectCandidate 从工作区采集的就是这类文件）。\n * 合同：导出 classifyChanges(changes)（测试入口）；\n * 作为主模块运行时读 inputs/changed-files.json 写 output.json（执行入口）。\n */\nexport function classifyChanges(changes) {\n  const files = changes.map((change) => ({\n    path: change.path,\n    category: categoryOf(change.path),\n  }));\n  return { total: files.length, files };\n}\n\nfunction categoryOf(path) {\n  if (/\\.test\\.[cm]?js$/.test(path) || path.includes(\"/tests/\") || path.includes(\"/__tests__/\")) {\n    return \"test\";\n  }\n  if (/\\.(ts|tsx|js|jsx|mjs|cjs)$/.test(path)) return \"source\";\n  if (path.endsWith(\".md\")) return \"docs\";\n  if (/\\.(json|ya?ml|toml)$/.test(path)) return \"config\";\n  return \"other\";\n}\n\n// realpath 消除符号链接差异（如 macOS /var → /private/var），否则 argv 与 import.meta.url 不等\nconst isMain =\n  process.argv[1] && import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href;\n\nif (isMain) {\n  const input = JSON.parse(\n    readFileSync(join(process.cwd(), \"inputs\", \"changed-files.json\"), \"utf8\"),\n  );\n  writeFileSync(\n    join(process.cwd(), \"output.json\"),\n    JSON.stringify({ summary: classifyChanges(input.changes) }, null, 2),\n  );\n}\n"
+    }
+  ]
+}

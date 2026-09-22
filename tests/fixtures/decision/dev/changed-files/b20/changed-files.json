@@ -1,0 +1,20 @@
+{
+  "changes": [
+    {
+      "path": "src/one.ts",
+      "changeType": "added"
+    },
+    {
+      "path": "src/two.ts",
+      "changeType": "deleted"
+    },
+    {
+      "path": "docs/migration.md",
+      "changeType": "modified"
+    },
+    {
+      "path": "config/two.json",
+      "changeType": "deleted"
+    }
+  ]
+}

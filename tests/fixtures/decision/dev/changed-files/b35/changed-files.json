@@ -1,0 +1,24 @@
+{
+  "changes": [
+    {
+      "path": "src/gamma.ts",
+      "changeType": "modified"
+    },
+    {
+      "path": "src/gamma.test.ts",
+      "changeType": "modified"
+    },
+    {
+      "path": "docs/gamma.md",
+      "changeType": "modified"
+    },
+    {
+      "path": "config/gamma.yaml",
+      "changeType": "added"
+    },
+    {
+      "path": "gamma.bin",
+      "changeType": "added"
+    }
+  ]
+}

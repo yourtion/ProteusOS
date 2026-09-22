@@ -1,0 +1,24 @@
+{
+  "changes": [
+    {
+      "path": "x/y/z.ts",
+      "changeType": "added"
+    },
+    {
+      "path": "x/tests/z.test.ts",
+      "changeType": "added"
+    },
+    {
+      "path": "x/y/notes.md",
+      "changeType": "modified"
+    },
+    {
+      "path": "x/y/z.json",
+      "changeType": "modified"
+    },
+    {
+      "path": "x/y/z.map",
+      "changeType": "added"
+    }
+  ]
+}

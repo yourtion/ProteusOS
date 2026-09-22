@@ -1,0 +1,20 @@
+{
+  "changes": [
+    {
+      "path": "pkg/parser.go",
+      "changeType": "modified"
+    },
+    {
+      "path": "pkg/parser_test.go",
+      "changeType": "added"
+    },
+    {
+      "path": "docs/parser.md",
+      "changeType": "added"
+    },
+    {
+      "path": ".golangci.yml",
+      "changeType": "modified"
+    }
+  ]
+}

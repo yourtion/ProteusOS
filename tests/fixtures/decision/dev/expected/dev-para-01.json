@@ -1,0 +1,18 @@
+{
+  "files": [
+    {
+      "path": "b09/file-a.md",
+      "bytes": 36,
+      "lines": 4,
+      "words": 4,
+      "headings": 1
+    }
+  ],
+  "totals": {
+    "files": 1,
+    "bytes": 36,
+    "lines": 4,
+    "words": 4,
+    "headings": 1
+  }
+}

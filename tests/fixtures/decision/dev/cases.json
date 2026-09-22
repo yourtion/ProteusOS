@@ -1,0 +1,607 @@
+{
+  "protocol": "organism-decision-v1",
+  "split": "dev",
+  "datasetPurpose": "development",
+  "cases": [
+    {
+      "caseId": "dev-expl-01",
+      "familyId": "family-dev-expl-01",
+      "stratum": "explicit",
+      "language": "zh",
+      "goal": "统计这批文本文件的字数、行数与标题数",
+      "textDir": "bundles/b01",
+      "changedFiles": "changed-files/b01/changed-files.json",
+      "expectedChoice": "local-process",
+      "pairedCaseId": null,
+      "acceptance": {
+        "outputSchema": "schemas/stats-summary.schema.json",
+        "expectedOutput": "expected/dev-expl-01.json"
+      }
+    },
+    {
+      "caseId": "dev-expl-02",
+      "familyId": "family-dev-expl-02",
+      "stratum": "explicit",
+      "language": "en",
+      "goal": "Count words and lines for the text files in this bundle",
+      "textDir": "bundles/b02",
+      "changedFiles": "changed-files/b02/changed-files.json",
+      "expectedChoice": "local-process",
+      "pairedCaseId": null,
+      "acceptance": {
+        "outputSchema": "schemas/stats-summary.schema.json",
+        "expectedOutput": "expected/dev-expl-02.json"
+      }
+    },
+    {
+      "caseId": "dev-expl-03",
+      "familyId": "family-dev-expl-03",
+      "stratum": "explicit",
+      "language": "zh",
+      "goal": "给出输入文本的字节与行数统计摘要",
+      "textDir": "bundles/b03",
+      "changedFiles": "changed-files/b03/changed-files.json",
+      "expectedChoice": "local-process",
+      "pairedCaseId": null,
+      "acceptance": {
+        "outputSchema": "schemas/stats-summary.schema.json",
+        "expectedOutput": "expected/dev-expl-03.json"
+      }
+    },
+    {
+      "caseId": "dev-expl-04",
+      "familyId": "family-dev-expl-04",
+      "stratum": "explicit",
+      "language": "en",
+      "goal": "Produce a statistics summary with word count for these notes",
+      "textDir": "bundles/b04",
+      "changedFiles": "changed-files/b04/changed-files.json",
+      "expectedChoice": "local-process",
+      "pairedCaseId": null,
+      "acceptance": {
+        "outputSchema": "schemas/stats-summary.schema.json",
+        "expectedOutput": "expected/dev-expl-04.json"
+      }
+    },
+    {
+      "caseId": "dev-expl-05",
+      "familyId": "family-dev-expl-05",
+      "stratum": "explicit",
+      "language": "zh",
+      "goal": "对这份变更清单按源码、测试、文档与配置分类",
+      "textDir": "bundles/b05",
+      "changedFiles": "changed-files/b05/changed-files.json",
+      "expectedChoice": "capability/changed-file-summary",
+      "pairedCaseId": null,
+      "acceptance": {
+        "outputSchema": "schemas/changed-file-summary.schema.json",
+        "expectedOutput": "expected/dev-expl-05.json"
+      }
+    },
+    {
+      "caseId": "dev-expl-06",
+      "familyId": "family-dev-expl-06",
+      "stratum": "explicit",
+      "language": "en",
+      "goal": "Classify changes in the changed files list by category",
+      "textDir": "bundles/b06",
+      "changedFiles": "changed-files/b06/changed-files.json",
+      "expectedChoice": "capability/changed-file-summary",
+      "pairedCaseId": null,
+      "acceptance": {
+        "outputSchema": "schemas/changed-file-summary.schema.json",
+        "expectedOutput": "expected/dev-expl-06.json"
+      }
+    },
+    {
+      "caseId": "dev-expl-07",
+      "familyId": "family-dev-expl-07",
+      "stratum": "explicit",
+      "language": "zh",
+      "goal": "汇总修改清单：哪些是源码改动，哪些是配置",
+      "textDir": "bundles/b07",
+      "changedFiles": "changed-files/b07/changed-files.json",
+      "expectedChoice": "capability/changed-file-summary",
+      "pairedCaseId": null,
+      "acceptance": {
+        "outputSchema": "schemas/changed-file-summary.schema.json",
+        "expectedOutput": "expected/dev-expl-07.json"
+      }
+    },
+    {
+      "caseId": "dev-expl-08",
+      "familyId": "family-dev-expl-08",
+      "stratum": "explicit",
+      "language": "en",
+      "goal": "Categorize files in the change summary by source, test and docs",
+      "textDir": "bundles/b08",
+      "changedFiles": "changed-files/b08/changed-files.json",
+      "expectedChoice": "capability/changed-file-summary",
+      "pairedCaseId": null,
+      "acceptance": {
+        "outputSchema": "schemas/changed-file-summary.schema.json",
+        "expectedOutput": "expected/dev-expl-08.json"
+      }
+    },
+    {
+      "caseId": "dev-para-01",
+      "familyId": "family-dev-para-01",
+      "stratum": "paraphrase",
+      "language": "zh",
+      "goal": "帮我看看这些笔记一共有多少段落和词汇量",
+      "textDir": "bundles/b09",
+      "changedFiles": "changed-files/b09/changed-files.json",
+      "expectedChoice": "local-process",
+      "pairedCaseId": null,
+      "acceptance": {
+        "outputSchema": "schemas/stats-summary.schema.json",
+        "expectedOutput": "expected/dev-para-01.json"
+      }
+    },
+    {
+      "caseId": "dev-para-02",
+      "familyId": "family-dev-para-02",
+      "stratum": "paraphrase",
+      "language": "en",
+      "goal": "How many words appear across these documents in total?",
+      "textDir": "bundles/b10",
+      "changedFiles": "changed-files/b10/changed-files.json",
+      "expectedChoice": "local-process",
+      "pairedCaseId": null,
+      "acceptance": {
+        "outputSchema": "schemas/stats-summary.schema.json",
+        "expectedOutput": "expected/dev-para-02.json"
+      }
+    },
+    {
+      "caseId": "dev-para-03",
+      "familyId": "family-dev-para-03",
+      "stratum": "paraphrase",
+      "language": "zh",
+      "goal": "数一数每个文件有多长、各占多少篇幅",
+      "textDir": "bundles/b11",
+      "changedFiles": "changed-files/b11/changed-files.json",
+      "expectedChoice": "local-process",
+      "pairedCaseId": null,
+      "acceptance": {
+        "outputSchema": "schemas/stats-summary.schema.json",
+        "expectedOutput": "expected/dev-para-03.json"
+      }
+    },
+    {
+      "caseId": "dev-para-04",
+      "familyId": "family-dev-para-04",
+      "stratum": "paraphrase",
+      "language": "en",
+      "goal": "Measure the size of each note, including newline counts",
+      "textDir": "bundles/b12",
+      "changedFiles": "changed-files/b12/changed-files.json",
+      "expectedChoice": "local-process",
+      "pairedCaseId": null,
+      "acceptance": {
+        "outputSchema": "schemas/stats-summary.schema.json",
+        "expectedOutput": "expected/dev-para-04.json"
+      }
+    },
+    {
+      "caseId": "dev-para-05",
+      "familyId": "family-dev-para-05",
+      "stratum": "paraphrase",
+      "language": "zh",
+      "goal": "把这批提交涉及的文件按用途归归类",
+      "textDir": "bundles/b13",
+      "changedFiles": "changed-files/b13/changed-files.json",
+      "expectedChoice": "capability/changed-file-summary",
+      "pairedCaseId": null,
+      "acceptance": {
+        "outputSchema": "schemas/changed-file-summary.schema.json",
+        "expectedOutput": "expected/dev-para-05.json"
+      }
+    },
+    {
+      "caseId": "dev-para-06",
+      "familyId": "family-dev-para-06",
+      "stratum": "paraphrase",
+      "language": "en",
+      "goal": "Sort the files touched by this commit into groups by their role",
+      "textDir": "bundles/b14",
+      "changedFiles": "changed-files/b14/changed-files.json",
+      "expectedChoice": "capability/changed-file-summary",
+      "pairedCaseId": null,
+      "acceptance": {
+        "outputSchema": "schemas/changed-file-summary.schema.json",
+        "expectedOutput": "expected/dev-para-06.json"
+      }
+    },
+    {
+      "caseId": "dev-para-07",
+      "familyId": "family-dev-para-07",
+      "stratum": "paraphrase",
+      "language": "zh",
+      "goal": "列一下这次提交动过的东西分别属于哪一类",
+      "textDir": "bundles/b15",
+      "changedFiles": "changed-files/b15/changed-files.json",
+      "expectedChoice": "capability/changed-file-summary",
+      "pairedCaseId": null,
+      "acceptance": {
+        "outputSchema": "schemas/changed-file-summary.schema.json",
+        "expectedOutput": "expected/dev-para-07.json"
+      }
+    },
+    {
+      "caseId": "dev-para-08",
+      "familyId": "family-dev-para-08",
+      "stratum": "paraphrase",
+      "language": "en",
+      "goal": "Break down the commit file list by what each file is for",
+      "textDir": "bundles/b16",
+      "changedFiles": "changed-files/b16/changed-files.json",
+      "expectedChoice": "capability/changed-file-summary",
+      "pairedCaseId": null,
+      "acceptance": {
+        "outputSchema": "schemas/changed-file-summary.schema.json",
+        "expectedOutput": "expected/dev-para-08.json"
+      }
+    },
+    {
+      "caseId": "dev-dis-01",
+      "familyId": "family-dev-dis-01",
+      "stratum": "distractor",
+      "language": "zh",
+      "goal": "统计这些文档的字数与行数；不需要输出变更文件的分类",
+      "textDir": "bundles/b17",
+      "changedFiles": "changed-files/b17/changed-files.json",
+      "expectedChoice": "local-process",
+      "pairedCaseId": null,
+      "acceptance": {
+        "outputSchema": "schemas/stats-summary.schema.json",
+        "expectedOutput": "expected/dev-dis-01.json"
+      }
+    },
+    {
+      "caseId": "dev-dis-02",
+      "familyId": "family-dev-dis-02",
+      "stratum": "distractor",
+      "language": "en",
+      "goal": "Give me the word count and line count of the notes, ignoring changed files classification",
+      "textDir": "bundles/b18",
+      "changedFiles": "changed-files/b18/changed-files.json",
+      "expectedChoice": "local-process",
+      "pairedCaseId": null,
+      "acceptance": {
+        "outputSchema": "schemas/stats-summary.schema.json",
+        "expectedOutput": "expected/dev-dis-02.json"
+      }
+    },
+    {
+      "caseId": "dev-dis-03",
+      "familyId": "family-dev-dis-03",
+      "stratum": "distractor",
+      "language": "zh",
+      "goal": "文本统计任务：虽然清单里有 changed files，我要的是标题数",
+      "textDir": "bundles/b19",
+      "changedFiles": "changed-files/b19/changed-files.json",
+      "expectedChoice": "local-process",
+      "pairedCaseId": null,
+      "acceptance": {
+        "outputSchema": "schemas/stats-summary.schema.json",
+        "expectedOutput": "expected/dev-dis-03.json"
+      }
+    },
+    {
+      "caseId": "dev-dis-04",
+      "familyId": "family-dev-dis-04",
+      "stratum": "distractor",
+      "language": "en",
+      "goal": "Count lines in these memos; do not summarize modified files",
+      "textDir": "bundles/b20",
+      "changedFiles": "changed-files/b20/changed-files.json",
+      "expectedChoice": "local-process",
+      "pairedCaseId": null,
+      "acceptance": {
+        "outputSchema": "schemas/stats-summary.schema.json",
+        "expectedOutput": "expected/dev-dis-04.json"
+      }
+    },
+    {
+      "caseId": "dev-dis-05",
+      "familyId": "family-dev-dis-05",
+      "stratum": "distractor",
+      "language": "zh",
+      "goal": "对变更做分类汇总；字数统计这批文本不需要",
+      "textDir": "bundles/b21",
+      "changedFiles": "changed-files/b21/changed-files.json",
+      "expectedChoice": "capability/changed-file-summary",
+      "pairedCaseId": null,
+      "acceptance": {
+        "outputSchema": "schemas/changed-file-summary.schema.json",
+        "expectedOutput": "expected/dev-dis-05.json"
+      }
+    },
+    {
+      "caseId": "dev-dis-06",
+      "familyId": "family-dev-dis-06",
+      "stratum": "distractor",
+      "language": "en",
+      "goal": "Classify changes only; skip the word count statistics",
+      "textDir": "bundles/b22",
+      "changedFiles": "changed-files/b22/changed-files.json",
+      "expectedChoice": "capability/changed-file-summary",
+      "pairedCaseId": null,
+      "acceptance": {
+        "outputSchema": "schemas/changed-file-summary.schema.json",
+        "expectedOutput": "expected/dev-dis-06.json"
+      }
+    },
+    {
+      "caseId": "dev-dis-07",
+      "familyId": "family-dev-dis-07",
+      "stratum": "distractor",
+      "language": "zh",
+      "goal": "文件分类：源码与配置各自有哪些；行数这里用不上",
+      "textDir": "bundles/b23",
+      "changedFiles": "changed-files/b23/changed-files.json",
+      "expectedChoice": "capability/changed-file-summary",
+      "pairedCaseId": null,
+      "acceptance": {
+        "outputSchema": "schemas/changed-file-summary.schema.json",
+        "expectedOutput": "expected/dev-dis-07.json"
+      }
+    },
+    {
+      "caseId": "dev-dis-08",
+      "familyId": "family-dev-dis-08",
+      "stratum": "distractor",
+      "language": "en",
+      "goal": "File categories for the commit, not text statistics",
+      "textDir": "bundles/b24",
+      "changedFiles": "changed-files/b24/changed-files.json",
+      "expectedChoice": "capability/changed-file-summary",
+      "pairedCaseId": null,
+      "acceptance": {
+        "outputSchema": "schemas/changed-file-summary.schema.json",
+        "expectedOutput": "expected/dev-dis-08.json"
+      }
+    },
+    {
+      "caseId": "dev-con-a1",
+      "familyId": "family-b33",
+      "stratum": "contrast",
+      "language": "zh",
+      "goal": "请对这套输入做统计摘要（字数、行数）",
+      "textDir": "bundles/b33",
+      "changedFiles": "changed-files/b33/changed-files.json",
+      "expectedChoice": "local-process",
+      "pairedCaseId": "dev-con-a2",
+      "acceptance": {
+        "outputSchema": "schemas/stats-summary.schema.json",
+        "expectedOutput": "expected/dev-con-a1.json"
+      }
+    },
+    {
+      "caseId": "dev-con-a2",
+      "familyId": "family-b33",
+      "stratum": "contrast",
+      "language": "zh",
+      "goal": "请对这套输入做变更文件的分类汇总",
+      "textDir": "bundles/b33",
+      "changedFiles": "changed-files/b33/changed-files.json",
+      "expectedChoice": "capability/changed-file-summary",
+      "pairedCaseId": "dev-con-a1",
+      "acceptance": {
+        "outputSchema": "schemas/changed-file-summary.schema.json",
+        "expectedOutput": "expected/dev-con-a2.json"
+      }
+    },
+    {
+      "caseId": "dev-con-b1",
+      "familyId": "family-b34",
+      "stratum": "contrast",
+      "language": "en",
+      "goal": "Generate a statistics summary of the bundle (word count, headings)",
+      "textDir": "bundles/b34",
+      "changedFiles": "changed-files/b34/changed-files.json",
+      "expectedChoice": "local-process",
+      "pairedCaseId": "dev-con-b2",
+      "acceptance": {
+        "outputSchema": "schemas/stats-summary.schema.json",
+        "expectedOutput": "expected/dev-con-b1.json"
+      }
+    },
+    {
+      "caseId": "dev-con-b2",
+      "familyId": "family-b34",
+      "stratum": "contrast",
+      "language": "en",
+      "goal": "Generate a category breakdown of the changed files in the bundle",
+      "textDir": "bundles/b34",
+      "changedFiles": "changed-files/b34/changed-files.json",
+      "expectedChoice": "capability/changed-file-summary",
+      "pairedCaseId": "dev-con-b1",
+      "acceptance": {
+        "outputSchema": "schemas/changed-file-summary.schema.json",
+        "expectedOutput": "expected/dev-con-b2.json"
+      }
+    },
+    {
+      "caseId": "dev-con-c1",
+      "familyId": "family-b35",
+      "stratum": "contrast",
+      "language": "zh",
+      "goal": "数一数这批文件的内容规模",
+      "textDir": "bundles/b35",
+      "changedFiles": "changed-files/b35/changed-files.json",
+      "expectedChoice": "local-process",
+      "pairedCaseId": "dev-con-c2",
+      "acceptance": {
+        "outputSchema": "schemas/stats-summary.schema.json",
+        "expectedOutput": "expected/dev-con-c1.json"
+      }
+    },
+    {
+      "caseId": "dev-con-c2",
+      "familyId": "family-b35",
+      "stratum": "contrast",
+      "language": "zh",
+      "goal": "把这批涉及的文件分门别类",
+      "textDir": "bundles/b35",
+      "changedFiles": "changed-files/b35/changed-files.json",
+      "expectedChoice": "capability/changed-file-summary",
+      "pairedCaseId": "dev-con-c1",
+      "acceptance": {
+        "outputSchema": "schemas/changed-file-summary.schema.json",
+        "expectedOutput": "expected/dev-con-c2.json"
+      }
+    },
+    {
+      "caseId": "dev-con-d1",
+      "familyId": "family-b36",
+      "stratum": "contrast",
+      "language": "en",
+      "goal": "How much text is in these files?",
+      "textDir": "bundles/b36",
+      "changedFiles": "changed-files/b36/changed-files.json",
+      "expectedChoice": "local-process",
+      "pairedCaseId": "dev-con-d2",
+      "acceptance": {
+        "outputSchema": "schemas/stats-summary.schema.json",
+        "expectedOutput": "expected/dev-con-d1.json"
+      }
+    },
+    {
+      "caseId": "dev-con-d2",
+      "familyId": "family-b36",
+      "stratum": "contrast",
+      "language": "en",
+      "goal": "Which kinds of files were touched?",
+      "textDir": "bundles/b36",
+      "changedFiles": "changed-files/b36/changed-files.json",
+      "expectedChoice": "capability/changed-file-summary",
+      "pairedCaseId": "dev-con-d1",
+      "acceptance": {
+        "outputSchema": "schemas/changed-file-summary.schema.json",
+        "expectedOutput": "expected/dev-con-d2.json"
+      }
+    },
+    {
+      "caseId": "dev-abs-01",
+      "familyId": "family-dev-abs-01",
+      "stratum": "abstain",
+      "language": "zh",
+      "goal": "先统计字数，再对变更文件分类，两个结果都要",
+      "textDir": "bundles/b25",
+      "changedFiles": "changed-files/b25/changed-files.json",
+      "expectedChoice": "abstain",
+      "pairedCaseId": null,
+      "acceptance": {
+        "outputSchema": "schemas/stats-summary.schema.json",
+        "expectedOutput": null
+      }
+    },
+    {
+      "caseId": "dev-abs-02",
+      "familyId": "family-dev-abs-02",
+      "stratum": "abstain",
+      "language": "en",
+      "goal": "I need the word count and the changed files classification together",
+      "textDir": "bundles/b26",
+      "changedFiles": "changed-files/b26/changed-files.json",
+      "expectedChoice": "abstain",
+      "pairedCaseId": null,
+      "acceptance": {
+        "outputSchema": "schemas/stats-summary.schema.json",
+        "expectedOutput": null
+      }
+    },
+    {
+      "caseId": "dev-abs-03",
+      "familyId": "family-dev-abs-03",
+      "stratum": "abstain",
+      "language": "zh",
+      "goal": "同时给出文本统计和文件分类",
+      "textDir": "bundles/b27",
+      "changedFiles": "changed-files/b27/changed-files.json",
+      "expectedChoice": "abstain",
+      "pairedCaseId": null,
+      "acceptance": {
+        "outputSchema": "schemas/stats-summary.schema.json",
+        "expectedOutput": null
+      }
+    },
+    {
+      "caseId": "dev-abs-04",
+      "familyId": "family-dev-abs-04",
+      "stratum": "abstain",
+      "language": "en",
+      "goal": "Produce both the line count summary and the change summary in one go",
+      "textDir": "bundles/b28",
+      "changedFiles": "changed-files/b28/changed-files.json",
+      "expectedChoice": "abstain",
+      "pairedCaseId": null,
+      "acceptance": {
+        "outputSchema": "schemas/stats-summary.schema.json",
+        "expectedOutput": null
+      }
+    },
+    {
+      "caseId": "dev-abs-05",
+      "familyId": "family-dev-abs-05",
+      "stratum": "abstain",
+      "language": "zh",
+      "goal": "帮我处理一下这些输入文件",
+      "textDir": "bundles/b29",
+      "changedFiles": "changed-files/b29/changed-files.json",
+      "expectedChoice": "abstain",
+      "pairedCaseId": null,
+      "acceptance": {
+        "outputSchema": "schemas/stats-summary.schema.json",
+        "expectedOutput": null
+      }
+    },
+    {
+      "caseId": "dev-abs-06",
+      "familyId": "family-dev-abs-06",
+      "stratum": "abstain",
+      "language": "en",
+      "goal": "Do something useful with this workspace",
+      "textDir": "bundles/b30",
+      "changedFiles": "changed-files/b30/changed-files.json",
+      "expectedChoice": "abstain",
+      "pairedCaseId": null,
+      "acceptance": {
+        "outputSchema": "schemas/stats-summary.schema.json",
+        "expectedOutput": null
+      }
+    },
+    {
+      "caseId": "dev-abs-07",
+      "familyId": "family-dev-abs-07",
+      "stratum": "abstain",
+      "language": "zh",
+      "goal": "整理这批资料",
+      "textDir": "bundles/b31",
+      "changedFiles": "changed-files/b31/changed-files.json",
+      "expectedChoice": "abstain",
+      "pairedCaseId": null,
+      "acceptance": {
+        "outputSchema": "schemas/stats-summary.schema.json",
+        "expectedOutput": null
+      }
+    },
+    {
+      "caseId": "dev-abs-08",
+      "familyId": "family-dev-abs-08",
+      "stratum": "abstain",
+      "language": "en",
+      "goal": "Handle the bundle as you see fit",
+      "textDir": "bundles/b32",
+      "changedFiles": "changed-files/b32/changed-files.json",
+      "expectedChoice": "abstain",
+      "pairedCaseId": null,
+      "acceptance": {
+        "outputSchema": "schemas/stats-summary.schema.json",
+        "expectedOutput": null
+      }
+    }
+  ]
+}
