@@ -1086,6 +1086,7 @@ export class Evolution {
     params?: ConsolidationParams;
     /** 开发集标注（goal → 正确选项）：失败/弃权成员 join 为正例；验证 family 不得传入 */
     goldMatches?: Array<{ goal: string; choice: string }>;
+    mode?: ConsolidationMode;
     createdBy: string;
   }): Promise<{
     candidate: CandidateRecord | null;
@@ -1095,7 +1096,7 @@ export class Evolution {
       datasetId: opts.datasetId,
       params: opts.params ?? DEFAULT_CONSOLIDATION_PARAMS,
       goldMatches: opts.goldMatches,
-      mode: "rule",
+      mode: opts.mode ?? "rule",
       createdBy: opts.createdBy,
     });
   }
