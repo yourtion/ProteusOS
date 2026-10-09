@@ -9,6 +9,7 @@ import {
   experimentRunCommand,
   initCommand,
   inspectCommand,
+  consolidateCommand,
   datasetFreezeCommand,
   datasetInspectCommand,
   datasetListCommand,
@@ -92,6 +93,16 @@ withCommon(
     .argument("[id]", "Candidate ID"),
 ).action(async (id: string | undefined, opts) => {
   await candidatesCommand(id, opts);
+});
+
+withCommon(
+  program
+    .command("consolidate")
+    .description("从冻结经验集归纳策略候选（确定性规则归纳，只改 routing-policy）")
+    .argument("<datasetId>", "development 用途的经验集 ID")
+    .option("--gold <file>", "开发集标注 JSON（[{goal, choice}]；验证 family 不得传入）"),
+).action(async (datasetId: string, opts) => {
+  await consolidateCommand(datasetId, opts);
 });
 
 withCommon(

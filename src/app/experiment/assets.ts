@@ -20,57 +20,8 @@ export const EXPERIMENT_OPTIONS = [STATS_OPTION, CHANGE_OPTION] as const;
 
 export const DECISION_LINEAGE_ID = "lineage-experiment-decision";
 
-/**
- * decision-view 槽位冻结内容：选项描述 + 词法特征词表（开发集确定）+ 输入限制。
- * 词表修订 = 新版本 = 新协议记录，不能在看见验证结果后原地改词表。
- */
-export const DECISION_VIEW_CONTENT = {
-  schemaVersion: 1,
-  kind: "decision-view-v1",
-  optionDescriptions: {
-    [STATS_OPTION]: "统计输入文本的文件数、字节、行、词与 Markdown 标题",
-    [CHANGE_OPTION]: "按源码、测试、文档、配置与其他类别列出变更文件",
-  },
-  features: {
-    hasStatsIntent: {
-      terms: [
-        "字数",
-        "词数",
-        "行数",
-        "字节",
-        "标题数",
-        "统计摘要",
-        "文本统计",
-        "word count",
-        "line count",
-        "count words",
-        "count lines",
-        "byte count",
-        "heading count",
-        "text statistics",
-        "statistics summary",
-      ],
-    },
-    hasChangeIntent: {
-      terms: [
-        "变更",
-        "改动",
-        "修改清单",
-        "文件分类",
-        "分类汇总",
-        "源码",
-        "配置文件",
-        "changed files",
-        "classify changes",
-        "file categories",
-        "categorize files",
-        "change summary",
-        "modified files",
-      ],
-    },
-  },
-  inputViewLimitBytes: 16 * 1024,
-} as const;
+export { DECISION_VIEW_CONTENT } from "../../evolution/assets.ts";
+import { DECISION_VIEW_CONTENT } from "../../evolution/assets.ts";
 
 /** R 组规则基线策略（rule-choice-v1）：单侧特征命中选择，双侧/零侧 abstain */
 export const RULE_CHOICE_POLICY_CONTENT = {

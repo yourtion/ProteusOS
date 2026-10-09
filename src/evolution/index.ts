@@ -14,7 +14,15 @@ import {
   ensureHybridEvaluatorVersion,
   ensureJudgeGenome,
   evaluationProtocolDigest,
+  registerDerivedVersion,
 } from "./assets.ts";
+import {
+  consolidateRoutes,
+  DEFAULT_CONSOLIDATION_PARAMS,
+  type ConsolidationParams,
+  type ConsolidationResult,
+  type RouteSample,
+} from "./consolidation.ts";
 import type {
   CandidateRecord,
   CandidateStatus,
@@ -866,6 +874,196 @@ export class Evolution {
       })
       .filter((m): m is ExperienceMemberView => m !== null);
     return { dataset, members };
+  }
+
+  /**
+   * 策略候选提议（M3 首个学习场景，evolution.md §2 Variation"规则搜索"）：
+   * 冻结经验集（development 许可）→ 确定性规则归纳 → 只改 routing-policy 的
+   * 候选快照（图/能力/裁判固定）。策略内容 rule-hybrid-v1：归纳的
+   * featureRoutes 优先，基准兜底 routes 继承（回归约束）。
+   * 零提议是正常结果（证据不足，不提议候选）。
+   */
+  proposePolicyCandidate(opts: {
+    datasetId: string;
+    params?: ConsolidationParams;
+    /** 开发集标注（goal → 正确选项）：失败/弃权成员 join 为正例；验证 family 不得传入 */
+    goldMatches?: Array<{ goal: string; choice: string }>;
+    createdBy: string;
+  }): {
+    candidate: CandidateRecord | null;
+    consolidation: ConsolidationResult;
+  } {
+    const { dataset, members } = this.experienceDatasetView(opts.datasetId);
+    if (dataset.purpose !== "development") {
+      throw new EvolutionError(
+        "dataset_purpose_forbidden",
+        `经验集 ${opts.datasetId} 用途为 ${dataset.purpose}，仅 development 许可作为学习来源`,
+      );
+    }
+    const params = opts.params ?? DEFAULT_CONSOLIDATION_PARAMS;
+
+    // 组装归纳样本：决策视图特征来自请求 blob（请求内容不可回放的调用计入缺口统计）
+    const samples: RouteSample[] = [];
+    let unreplayable = 0;
+    for (const member of members) {
+      for (const call of member.decisionCalls) {
+        const features = this.callFeatures(call.id);
+        if (!features) {
+          unreplayable += 1;
+          continue;
+        }
+        const succeeded = member.result === "succeeded";
+        const gold = succeeded
+          ? undefined
+          : opts.goldMatches?.find((g) => g.goal === member.taskGoal);
+        samples.push({
+          runId: member.runId,
+          experienceId: member.experienceId,
+          features,
+          chosen: succeeded ? call.chosenOption : (gold?.choice ?? null),
+          succeeded,
+          origin: succeeded ? "experience" : gold ? "gold" : undefined,
+        });
+      }
+    }
+    const consolidation = consolidateRoutes(samples, params);
+    if (unreplayable > 0) {
+      consolidation.hypothesis += `；${unreplayable} 个决策调用请求不可回放，未计入`;
+    }
+    if (consolidation.proposals.length === 0) {
+      return { candidate: null, consolidation };
+    }
+
+    const organism = this.deps.kernel.getOrganism(this.deps.organismId);
+    const baseSnapshotId = organism?.activeGenomeId ?? null;
+    if (!organism || !baseSnapshotId) {
+      throw new EvolutionError("no_active_genome", "默认快照未安装，无基准可组合策略候选");
+    }
+    const { snapshot: base, versions: baseVersions } =
+      this.deps.kernel.resolveSnapshot(baseSnapshotId);
+    const basePolicy = baseVersions.get("routing-policy");
+    if (!basePolicy) {
+      throw new EvolutionError("missing_binding", "基准快照缺少 routing-policy 槽位");
+    }
+    if (!base.bindings["decision-view"]) {
+      throw new EvolutionError(
+        "missing_binding",
+        "基准快照缺少 decision-view 槽位：策略候选的图须声明受限视图（先经能力组合建立）",
+      );
+    }
+
+    // 混合策略内容：归纳 featureRoutes + 基准兜底 routes 继承
+    const basePolicyContent = JSON.parse(this.deps.blobs.read(basePolicy.contentRef)) as {
+      kind?: string;
+      routes?: Array<{ when: Record<string, unknown>; choose: string }>;
+      featureRoutes?: Array<{ feature: string; choose: string }>;
+    };
+    const fallbackRoutes =
+      basePolicyContent.kind === "rule-hybrid-v1" && Array.isArray(basePolicyContent.routes)
+        ? basePolicyContent.routes
+        : basePolicyContent.kind === "rule-v1" && Array.isArray(basePolicyContent.routes)
+          ? basePolicyContent.routes.map((r) => ({ when: r.when, choose: String(r.choose) }))
+          : [];
+    const existingFeatures = new Set(
+      basePolicyContent.kind === "rule-hybrid-v1"
+        ? (basePolicyContent.featureRoutes ?? []).map((r) => r.feature)
+        : [],
+    );
+    const merged = [
+      ...(basePolicyContent.kind === "rule-hybrid-v1"
+        ? (basePolicyContent.featureRoutes ?? [])
+        : []),
+      ...consolidation.proposals
+        .filter((p) => !existingFeatures.has(p.feature))
+        .map((p) => ({ feature: p.feature, choose: p.choose })),
+    ];
+    const policyContent = {
+      schemaVersion: 1,
+      kind: "rule-hybrid-v1",
+      featureRoutes: merged,
+      routes:
+        fallbackRoutes.length > 0
+          ? fallbackRoutes
+          : [{ when: { nodeType: "execute" }, choose: "local-process" }],
+    };
+
+    return this.deps.storage.tx(() => {
+      const policyVersion = registerDerivedVersion(
+        {
+          kernel: this.deps.kernel,
+          storage: this.deps.storage,
+          blobs: this.deps.blobs,
+          clock: this.deps.clock,
+        },
+        {
+          slot: "routing-policy",
+          baseVersion: basePolicy,
+          content: policyContent,
+          createdBy: opts.createdBy,
+        },
+      );
+      const bindings = { ...base.bindings, "routing-policy": policyVersion.id };
+      const snapshot = this.deps.kernel.createSnapshot(bindings, opts.createdBy);
+      const existing = this.deps.storage.findCandidateByProposedSnapshot(
+        this.deps.organismId,
+        snapshot.id,
+      );
+      if (existing) return { candidate: existing, consolidation };
+      const now = this.deps.clock.now();
+      const candidate: CandidateRecord = {
+        id: this.deps.ids.next(),
+        organismId: this.deps.organismId,
+        baseSnapshotId,
+        baseRevision: organism.revision,
+        proposedSnapshotId: snapshot.id,
+        hypothesis: consolidation.hypothesis,
+        proposedBy: opts.createdBy,
+        sourceRefs: {
+          candidateType: "policy",
+          datasetId: dataset.id,
+          datasetDigest: dataset.digest,
+          consolidationParamsDigest: digestOf(canonicalJson(params)),
+          rulesDigest: digestOf(canonicalJson(policyContent)),
+        },
+        datasetRef: dataset.id,
+        createdAt: now,
+      };
+      this.deps.storage.insertCandidate(candidate);
+      this.deps.storage.appendEvent({
+        streamId: `candidate-${candidate.id}`,
+        type: "candidate.proposed",
+        payload: {
+          candidateId: candidate.id,
+          candidateType: "policy",
+          proposedSnapshotId: snapshot.id,
+          proposedSnapshotDigest: snapshot.digest,
+          baseSnapshotId,
+          baseRevision: candidate.baseRevision,
+          hypothesis: candidate.hypothesis,
+          datasetId: dataset.id,
+          datasetDigest: dataset.digest,
+        },
+        organismId: this.deps.organismId,
+        occurredAt: now,
+      });
+      return { candidate, consolidation };
+    });
+  }
+
+  /** 决策调用的视图特征（请求 blob 重放；缺失/损坏返回 null） */
+  private callFeatures(decisionCallId: string): Record<string, boolean> | null {
+    const call = this.deps.storage.getDecisionCall(decisionCallId);
+    if (!call?.requestRef || !this.deps.blobs.has(call.requestRef)) return null;
+    try {
+      const parsed = JSON.parse(this.deps.blobs.read(call.requestRef)) as {
+        view?: { features?: unknown } | null;
+      };
+      const features = parsed.view?.features;
+      if (typeof features !== "object" || features === null) return null;
+      return features as Record<string, boolean>;
+    } catch {
+      return null;
+    }
   }
 
   /** 单个成员的学习投影；experience 或关联记录缺失时如实返回 null（不可回放则显式标注） */

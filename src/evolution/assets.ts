@@ -37,6 +37,8 @@ export function makeCapabilityGraphContent(capabilities: string[]): object {
         problem: "choice",
         options: ["local-process", ...capabilities.map((c) => `capability/${c}`)],
         context: { nodeType: "execute" },
+        // 声明受限视图（M3）：路由决策可按词表特征分流；快照须含 decision-view 槽位
+        view: "decision-view-v1",
       },
       { id: "work", type: "execute", executorFrom: "route", dependsOn: ["route"] },
       {
@@ -323,6 +325,24 @@ export function ensureCapabilityGenome(
       createdBy: opts.createdBy,
     }).id;
     // acceptance-evaluator 继承基准槽位（裁判拆分）
+    // decision-view：组合图声明受限视图，绑定预注册词表版本（digest 幂等，
+    // 与实验冻结内容同版本）；基准已有该槽位则继承
+    if (!bindings["decision-view"]) {
+      deps.storage.insertArtifact({
+        id: "decision-view",
+        kind: "decision-view",
+        lineageId: EVOLUTION_LINEAGE_ID,
+        ownerId: opts.createdBy,
+        createdAt: deps.clock.now(),
+      });
+      bindings["decision-view"] = registerDerivedVersion(deps, {
+        slot: "decision-view",
+        baseVersion: undefined,
+        artifact: deps.storage.getArtifact("decision-view")!,
+        content: makeDecisionViewContent(names),
+        createdBy: opts.createdBy,
+      }).id;
+    }
 
     for (const asset of opts.capabilities) {
       const artifactId = `capability/${asset.name}`;
@@ -365,7 +385,7 @@ function parseEvaluatorKind(content: string): string {
 }
 
 /** 注册派生版本：内容写入 blob，parents 指向基准版本；digest 幂等 */
-function registerDerivedVersion(
+export function registerDerivedVersion(
   deps: EvolutionDeps,
   opts: {
     slot: string;
@@ -386,4 +406,71 @@ function registerDerivedVersion(
     dependencies: [],
     createdBy: opts.createdBy,
   });
+}
+
+/**
+ * decision-view 槽位预注册内容（与实验冻结内容一致：同一 canonical 字节 →
+ * 同一 digest → 同一版本；策略候选与实验共用该视图词表）。
+ * 词表修订 = 新版本 = 新协议记录，不能在看见验证结果后原地改词表。
+ */
+export const DECISION_VIEW_CONTENT = {
+  schemaVersion: 1,
+  kind: "decision-view-v1",
+  optionDescriptions: {
+    "local-process": "统计输入文本的文件数、字节、行、词与 Markdown 标题",
+    "capability/changed-file-summary": "按源码、测试、文档、配置与其他类别列出变更文件",
+  },
+  features: {
+    hasStatsIntent: {
+      terms: [
+        "字数",
+        "词数",
+        "行数",
+        "字节",
+        "标题数",
+        "统计摘要",
+        "文本统计",
+        "word count",
+        "line count",
+        "count words",
+        "count lines",
+        "byte count",
+        "heading count",
+        "text statistics",
+        "statistics summary",
+      ],
+    },
+    hasChangeIntent: {
+      terms: [
+        "变更",
+        "改动",
+        "修改清单",
+        "文件分类",
+        "分类汇总",
+        "源码",
+        "配置文件",
+        "changed files",
+        "classify changes",
+        "file categories",
+        "categorize files",
+        "change summary",
+        "modified files",
+      ],
+    },
+  },
+  inputViewLimitBytes: 16 * 1024,
+} as const;
+
+/**
+ * 组合视图内容：特征词表与冻结内容一致（学习语义稳定，不原地改词表）；
+ * optionDescriptions 按能力集扩充为新版本（版本化操作，digest 幂等）。
+ */
+export function makeDecisionViewContent(capabilities: string[]): object {
+  const descriptions: Record<string, string> = {
+    ...DECISION_VIEW_CONTENT.optionDescriptions,
+  };
+  for (const name of capabilities) {
+    descriptions[`capability/${name}`] ??= `按 ${name} 能力的实现处理任务`;
+  }
+  return { ...DECISION_VIEW_CONTENT, optionDescriptions: descriptions };
 }

@@ -381,6 +381,52 @@ export async function datasetInspectCommand(id: string, opts: CommonOpts): Promi
   }
 }
 
+export interface ConsolidateOpts extends CommonOpts {
+  gold?: string;
+}
+
+/**
+ * 策略候选提议（M3）：冻结经验集（development）→ 确定性规则归纳 →
+ * 只改 routing-policy 的候选。--gold 为开发集标注文件（JSON 数组
+ * [{goal, choice}]；验证 family 不得传入）。零提议是正常结果。
+ */
+export async function consolidateCommand(datasetId: string, opts: ConsolidateOpts): Promise<void> {
+  let goldMatches: Array<{ goal: string; choice: string }> | undefined;
+  if (opts.gold) {
+    goldMatches = JSON.parse(readFileSync(resolve(opts.gold), "utf8")) as Array<{
+      goal: string;
+      choice: string;
+    }>;
+  }
+  const inst = openInstance(resolveInstanceRoot(opts.home));
+  try {
+    const result = inst.evolution.proposePolicyCandidate({
+      datasetId,
+      goldMatches,
+      createdBy: PRINCIPAL_ID,
+    });
+    if (opts.json) {
+      console.log(JSON.stringify(result, null, 2));
+      return;
+    }
+    if (!result.candidate) {
+      console.log("· 未归纳出达门槛规则：证据不足，不提议候选（正常结果）");
+      console.log(`  ${result.consolidation.hypothesis}`);
+      return;
+    }
+    console.log(`✓ candidate ${result.candidate.id}（policy，来源 dataset ${datasetId}）`);
+    console.log(`  hypothesis ${result.candidate.hypothesis}`);
+    for (const p of result.consolidation.proposals) {
+      console.log(
+        `  rule       ${p.feature} → ${p.choose}（支持 ${p.support}，精度 ${p.precision.toFixed(2)}，经验 ${p.byOrigin.experience} + 标注 ${p.byOrigin.gold}）`,
+      );
+    }
+    console.log(`  候选快照   ${result.candidate.proposedSnapshotId}`);
+  } finally {
+    inst.close();
+  }
+}
+
 export async function candidatesCommand(id: string | undefined, opts: CommonOpts): Promise<void> {
   const inst = openInstance(resolveInstanceRoot(opts.home));
   try {
