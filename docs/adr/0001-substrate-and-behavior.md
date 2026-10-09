@@ -1,5 +1,6 @@
 ---
-status: proposed
+status: accepted
+date: 2026-10-10
 ---
 
 # 基质与可进化行为分离

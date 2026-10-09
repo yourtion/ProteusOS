@@ -5,7 +5,7 @@ date: 2026-09-21
 
 # M2 最小自举：能力槽位、进程级隔离与预注册裁判
 
-M2 落地 Candidate / Evaluation / Promotion，端到端完成 ChangedFileSummary 自举故事（roadmap §3）。三个实现决策：
+M2 落地 Candidate / Evaluation / Promotion，端到端完成 ChangedFileSummary 自举故事（见自举验收故事）。三个实现决策：
 
 **能力即快照槽位，经独立子进程加载。** 能力以 `capability/<name>` 为槽位名（artifact kind 与槽位一致），复用 Kernel 既有的槽位校验与闭包解析，不新增版本概念。产物内容合同 `capability-module-v1`（`{ kind, name, entry, files[] }`），执行合同与 M0 本地 worker 相同：独立 node 子进程、cwd=工作区、读 `inputs/` 写 `output.json`——满足"代码候选不热加载进 kernel"（roadmap），但不构成安全沙箱。**隔离决策：M2 采用进程级隔离（子进程 + 超时 + 工作区 + 路径越界拒绝），真隔离（容器/独立宿主）挂账 M3**；工作区不算安全沙箱的立场不变，此为显式接受的让步而非默认。任务经 `requires` 声明能力，准入检查发现缺口即进入带截止点的 `waiting`（出路只有被接替或到期 `failed/missing_capability`——Run 固定自身快照，能力永远不会在其中出现）；决策上下文把声明展开为 `capability:<name>: true` 布尔键，rule-v1 严格匹配零扩展。
 
@@ -16,3 +16,5 @@ M2 落地 Candidate / Evaluation / Promotion，端到端完成 ChangedFileSummar
 **M2 收官审查后的补强。** builder Run 成功时立即记录约定产出的内容摘要，采集只接受与该证明一致的内容，避免验收后修改工作区再借用旧证据。候选构造必须同时固定评估计划摘要；摘要覆盖目标、输入文件树、schema、可选期望输出、预算、能力声明和回归任务，执行评估时重新计算并拒绝漂移。新能力任务必须声明候选能力；基准快照已有的其他能力必须分别出现在回归任务中。能力候选的图与策略从基准已有能力槽位和本次新增能力的并集生成，持续积累不会丢失旧路由。ChangedFileSummary 以固定完整输出做语义比对，不再只验证 JSON schema。rollback 目标必须出现在该 Organism 的历史 Promotion 路径中，未评估、被拒或从未采用的候选快照不能借 rollback 激活。外部执行器通过 `recoveryPolicy` 显式声明缺失产物是否可安全重试；ACP、pi 与动态能力执行器默认人工对账，未知副作用不会被误判失败后重派。能力名统一限制为单段 slug，并在最终工作区路径上再次校验边界，阻断名称级目录逃逸。最新 Evaluation 的 eligible 门移入晋升事务，与 CAS 使用同一提交单元，消除事务外读取造成的竞态窗口。
 
 其余已确认事项：评估预算与普通 Run 共享 organism 池（purpose 标记区分，独立预算池 M3）；评估指标按成功/回归/时延分列、成本显式 null（真实计费数据出现前不臆造）；canonicalJson 下沉至 storage/blobs.ts（evolution 不依赖 app 层）。验证布局新增 tests/evals/（Evaluation 层）。
+
+M2 的阶段性让步已经由 M3 补齐：裁判独立晋升、normal/evaluation 分池和可配置隔离后端见 [ADR 0008](./0008-m3-experience-driven-evolution.md)；当前授权检查包含实际操作权限及版本闭包，见 [运行时合同](../runtime.md)。

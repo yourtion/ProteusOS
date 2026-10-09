@@ -1,8 +1,8 @@
 # 本体决策实验 v1：实施与验证规范
 
-状态：**协议已冻结；E1–E4 已实现并通过工程验证（2026-09-22，含 D01–D15 场景与 M0–M2 回归）；真实模型调用未执行（缺凭据，`realModel=not_run`），E5 独立验证待验证负责人执行**。基准提交为 `c77188a`，协议 ID 为 `organism-decision-v1`。本文与 [ADR 0007](../adr/0007-organism-decision-experiment.md)组成开发交接合同；数值是本次实验预先选择的门槛，不是已经获得的结果，也不代表所有任务的通用标准。实现落点、命令、退出码与未验证条件见[执行说明](./organism-decision-v1-runbook.md)。
+协议 ID：`organism-decision-v1`。工程实现与固定 fixture 验收已完成；仓库尚无独立正式集上的真实模型收益证据。本文与 [ADR 0007](../adr/0007-organism-decision-experiment.md)定义固定比较协议；数值是预设门槛，不是已经获得的结果，也不代表所有任务的通用标准。
 
-后续 agent 按本文分片实现并执行验证。无需重新设计 Kernel 或完整 M3；若需要改变选项、数据切分、指标、调用次数或门槛，先修改协议版本并说明原因，不能在看见验证结果后原地修改 v1。
+改变选项、数据切分、指标、调用次数或门槛须创建新的协议版本，不能在看见验证结果后原地修改 v1。配置与命令见第 10 节。
 
 ## 1. 要回答的问题与边界
 
@@ -12,23 +12,19 @@
 2. 在相同输入、能力和验收条件下，LLM 能否比合理的规则基线更准确地选择能力，并改善最终任务成功率？
 3. 是否保存了足够的决策与结果证据，使 M3 可以冻结开发经验并提出可评估的 Policy 候选？
 
-本轮只实现两个选项的 `choice`，一次选择后至多执行一个 worker。所有执行代码来自受信 fixture；模型只返回结构化选择，不生成代码或工具调用。使用临时实验实例，保留普通 seed 和既有 M0–M2 行为。Rank、权限 gate、规则/模型级联、检索记忆、在线训练、动态扩图、自动晋升及 Jev Adapter 都不属于本轮。
+本轮只实现两个选项的 `choice`，一次选择后至多执行一个 worker。所有执行代码来自受信 fixture；模型只返回结构化选择，不生成代码或工具调用。使用临时实验实例，保留普通 seed 和既有 M0–M2 行为。Rank、权限 gate、规则/模型级联、检索记忆、在线训练、动态扩图、自动晋升都不属于本轮。
 
-## 2. 现有实现与必须补齐的差距
+## 2. 实现落点
 
-以下结论来自基准提交，不能把设计文档中的完整合同当作已实现 API：
+| 模块 | 已实现职责 |
+| --- | --- |
+| `src/decision/` | 受限视图、严格响应解析、版本化规则/LLM 策略及调用记录合同 |
+| `src/adapters/decision-rule/`、`decision-llm/` | 固定规则基线与 Anthropic Messages Adapter；后者关闭自动重试并支持取消 |
+| `src/runtime/`、`src/storage/` | 决策调用账本、原子额度预留、截止点、取消、恢复与证据关联 |
+| `src/app/experiment/` | 数据集装载、双臂快照、Oracle 预检、运行与只读证据复算 |
+| `tests/contract/decision-contract.test.ts`、`tests/integration/decision-runtime.test.ts`、`tests/acceptance/organism-decision.test.ts` | 合同、恢复、报告验收及 240-trial fake 管道演练 |
 
-| 位置 | 当前实现 | 本轮要求 |
-| --- | --- | --- |
-| `src/decision/index.ts` | choice 校验；来源只有 provider 与 policyVersion | 请求/响应运行时校验，明确错误分类，记录真实调用配置与用量 |
-| `src/adapters/decision-rule/index.ts` | `rule-v1` 对 context 做键值相等匹配 | 保留既有语义；实验使用版本化词法特征和固定规则形成基线 |
-| `src/app/instance.ts` | 固定注入一个 RuleDecisionProvider | 允许 app 注入按名称查找的 DecisionProvider；默认仍装配规则，实验显式装配 LLM |
-| `src/runtime/index.ts` 的 runDecision | context 仅有静态图字段与 requires 布尔键；传入整段 Run 时限 | 加入经约束的任务视图，计算实际剩余时间，执行取消及调用预算检查 |
-| 同上 | 只在成功后记录 choice；decision.recorded 与 node.completed 分开写入 | 全部调用状态可审计；成功选择与节点完成同事务提交，关闭崩溃窗口 |
-| `src/runtime/types.ts` / `src/storage/` | Experience 保存最终结果；缺少独立决策调用账本 | 关联完整决策证据和 Experience；增加决策调用身份与额度，不能挪用 Executor Attempt |
-| `src/evolution/` | M2 评估协议面向新增能力和回归 | 本轮输出独立实验报告；不把路由比较塞进 M2 eligible 评估或伪造 Candidate |
-
-新合同归属 `decision`，调度及状态转换归属 `runtime`，持久化实现归属 `storage`，服务 SDK/HTTP 映射归属 `adapters`，依赖装配与实验入口归属 `app`。Runtime 不导入 Evolution，Kernel 不导入模型 SDK。无需为实验创建第二套生产 Runtime。
+合同归属 Decision，调度归属 Runtime，持久化归属 Storage，SDK 映射归属 Adapter，装配与入口归属 App。Runtime 不导入 Evolution，Kernel 不导入模型 SDK。
 
 ## 3. 最小场景与执行图
 
@@ -79,13 +75,13 @@ Runtime 生成 `decision-view-v1`，包含：任务 goal、固定选项及其描
 
 ### 4.1 版本来源
 
-规则组的 routing-policy 保持 `rule-v1`，直接交给现有 RuleDecisionProvider；LLM 组使用 `llm-choice-v1`，其不可变内容包括提示模板、服务/模型标识、采样参数与响应 schema。两组共享同一 `decision-view` 槽位版本，内容为视图规则、选项描述、词表与输入限制，Runtime 负责装配并校验。复用现有 artifact/version/dependency 机制，不新增可变的 latest 引用，也不把 LLM 配置包装后误传给只认识 rule-v1 的 Provider。
+实验规则组的 routing-policy 使用 `rule-choice-v1`，交给 RuleDecisionProvider；LLM 组使用 `llm-choice-v1`，其不可变内容包括提示模板、服务/模型标识、采样参数与响应 schema。两组共享同一 `decision-view` 槽位版本，内容为视图规则、选项描述、词表与输入限制，Runtime 负责装配并校验。复用现有 artifact/version/dependency 机制，不新增可变的 latest 引用，RuleDecisionProvider 不接收 LLM 策略。
 
 迁移保留旧 rule-v1 快照和事件。没有 decision-view 槽位的旧图继续使用原静态上下文及能力键；实验图缺少该槽位则拒绝准入。旧 decision.recorded 可作为原有已记录选择恢复，但不存在的输入/用量证据必须标记 unavailable，不能补写为完整实验样本。D15 必须包含旧实例迁移与历史事件恢复。
 
 运行记录至少包括 provider/adapter 版本、服务标识、请求的 model ID、服务报告的版本（缺省 null）、采样参数、输出上限、prompt/template digest、视图版本、响应 schema digest、策略版本和代码 commit。凭据从 app 注入；可变 endpoint 配置不能在恢复时静默映射到另一服务。模型权重无法钉住时明确 `reproducibility=recorded-inputs-only`。
 
-首个实现只选一种与操作者现有配置匹配的服务协议，按其官方文档映射并锁定依赖。将协议名、依赖版本、配置变量和启动方法补入本目录的执行说明后再执行真实验证。不为未选定的服务虚构配置或兼容性；没有可用配置时，完成 fake 验证并将真实阶段列为未执行。
+当前 Adapter 使用 Anthropic Messages，依赖锁定在 pnpm-lock.yaml；模型和提示由 `llm-choice-v1` 固定。配置见第 10 节；兼容端点与真实服务行为须通过实际调用验证。
 
 ### 4.2 本轮额度
 
@@ -184,7 +180,7 @@ gold label、schema 与预期输出存于独立评估资料中，由 case→run 
 
 第 9 节全部场景通过；M0–M2 回归通过；存在真实调用时每次都有完整来源和调用状态；重放/恢复没有隐式模型重调或重复 worker 派发；预算和取消门不可绕过；普通实例 activeGenome 与原 revision 不被实验修改。
 
-fake 通过仅得到 `engineering=passed`。真实配置缺失则 `realModel=not_run`、`benefit=inconclusive`，整体交付注明待验证。缺少原始证据、发生样本泄漏或比较快照超出允许差异时，不能报告独立收益通过。
+完整 fake 演练可以得到 `engineering=passed`、`realModel=not_run`、`benefit=not_evaluated`。真实配置缺失时 runner 预检失败，可能尚未生成报告；真实阶段注明未执行。缺少原始证据、发生样本泄漏或比较快照超出允许差异时，不能报告独立收益通过。
 
 ### 7.3 收益门
 
@@ -204,7 +200,7 @@ fake 通过仅得到 `engineering=passed`。真实配置缺失则 `realModel=not
 
 ## 8. 报告与可复算交付物
 
-实现一个由 manifest 驱动的实验入口，以及只读证据生成报告的入口。现有项目尚无这些命令，开发 agent 必须在实际实现后补充精确命令、参数、退出码和可复制示例；本文不把拟议名称写成已经可运行的 CLI。
+`experiment run` 生成 manifest 并执行实验；`experiment report` 只读原始证据、重新写出汇总报告，不调用模型。命令与退出码见第 10 节。
 
 每轮运行的输出至少包括：
 
@@ -217,9 +213,9 @@ fake 通过仅得到 `engineering=passed`。真实配置缺失则 `realModel=not
 
 把缺失/损坏 blob、重复 trial key、输入摘要漂移、未开始的 trial、unknown 调用都显式列出。聚合须校验唯一键 `(experimentId, arm, caseId, repeat)`，报告不能悄悄丢弃失败行。Oracle 和开发结果另存并标记用途，不混入 600 行正式比较记录。合成且无敏感内容的冻结 manifest 和报告可进入仓库；实例数据库/凭据/远端原始认证信息不提交。
 
-CLI 要能区分“工程/预检失败”和“实验完成但收益未证明”。收益不足不等于测试框架失败；预算中止或无凭据也不能以空报告显示成功。具体退出码由实现定义并在使用说明中固定。
+CLI 要能区分“工程/预检失败”和“实验完成但收益未证明”。收益不足不等于测试框架失败；预算中止或无凭据也不能以空报告显示成功。退出码见第 10 节。
 
-## 9. 必须实现的验证场景
+## 9. 工程验证场景
 
 | ID | 场景 | 可观察验收 |
 | --- | --- | --- |
@@ -241,42 +237,51 @@ CLI 要能区分“工程/预检失败”和“实验完成但收益未证明”
 
 测试按现有 unit / contract / integration / acceptance / evals 布局安排。fake 必须能模拟传输失败、延迟取消、started 后断连和重复返回，不只返回立即成功。真实模型接口兼容性单独显式启用，不能由 fake 代替。
 
-## 10. 开发切片与执行交接
+## 10. 配置与运行
 
-| 切片 | 工作与建议落点 | 交付门 |
+当前冻结配置：规则 `rule-choice-v1`、共享 `decision-view-v1`（UTF-8 16 KiB）、LLM `llm-choice-v1`、固定裁判 `hybrid-acceptance-v1`。LLM 默认模型为 `GLM-5.3-Flash`，temperature=0、maxOutputTokens=256；提示与参数来自 `src/decision/llm-policy.ts` 的版本化内容，凭据不进入产物。
+
+真实调用需要 `PROTEUS_LLM_API_KEY`；`PROTEUS_LLM_BASE_URL` 可覆盖默认 `https://api.z.ai/api/anthropic`。`PROTEUS_COMMIT` 可记录实现 commit。端点可变时恢复仍检查原调用的策略与请求摘要，配置漂移不得静默重发；托管模型仅声明 `reproducibility=recorded-inputs-only`。
+
+下面使用独立实例；所有运行、复算与结案命令须沿用相同的 home、organism 与 actor。路径和 ID 按本轮实验替换。
+
+```bash
+pnpm proteus init --home ./experiment-instance --organism experiment --actor operator
+
+# 无模型调用的管道演练：40 个样本 × 两组 × 3 次重复
+pnpm proteus experiment run --home ./experiment-instance --organism experiment --actor operator \
+  --dataset tests/fixtures/decision/plumbing --out ./plumbing-out \
+  --llm fake --oracle --experiment-id plumbing-v1 --json
+pnpm proteus experiment report ./plumbing-out --dataset tests/fixtures/decision/plumbing \
+  --home ./experiment-instance --organism experiment --actor operator --json
+
+# 开发阶段：先配置真实调用凭据，额度包含联通预检
+pnpm proteus experiment run --home ./experiment-instance --organism experiment --actor operator \
+  --dataset tests/fixtures/decision/dev --out ./dev-out --llm real --oracle \
+  --experiment-id dev-v1 --experiment-calls 100 --organism-calls 1000 --repeats 1 --json
+
+# 正式阶段：先独立准备并冻结 formal-dataset
+pnpm proteus experiment run --home ./experiment-instance --organism experiment --actor operator \
+  --dataset ./formal-dataset --out ./formal-out --llm real --oracle \
+  --experiment-id formal-v1 --experiment-calls 300 --repeats 3 --seed 20260921 --json
+pnpm proteus experiment report ./formal-out --dataset ./formal-dataset \
+  --home ./experiment-instance --organism experiment --actor operator --json
+
+# 结案未知调用，保留 unknown 证据与未结算费用
+pnpm proteus settle-decision <decisionId> --note "operator 结案说明" \
+  --home ./experiment-instance --organism experiment --actor operator
+```
+
+恢复沿用原 experimentId、输出目录与配置，只补未开始的 `(arm, caseId, repeat)`，不覆盖旧结果。调用额度持久化，重启或更换 experimentId 不重置个体累计额度；墙钟上限默认 60 分钟。
+
+| 命令 | 退出码 | 含义 |
 | --- | --- | --- |
-| E1 合同与版本 | `src/decision/` 的视图/响应/调用记录合同；规则基线与策略引用；app 决策注册表 | 旧 rule-v1 不变；D01/D03/D04/D09 的合同测试 |
-| E2 运行与证据 | `src/runtime/`、`src/storage/` 的持久化调用额度、截止点、取消、恢复和 Experience 关联 | D05–D08/D10/D12/D13，真实 SQLite 验证 |
-| E3 实验与裁判 | 40 个开发 fixture、实验快照、只读报告器；manifest 与正确性预检 | D02/D11/D14/D15；fake 跑通完整数量与报告格式，不宣称收益 |
-| E4 单一真实 Adapter | 按实际配置实现一个 `src/adapters/decision-…/`，官方协议映射、用量、取消、关闭重试；补精确运行说明 | 官方服务预检与开发集调用记录，最终版本和提示冻结 |
-| E5 独立验证 | 独立准备/冻结正式集，运行 Oracle、600 Run 比较并复算报告 | 工程结论、收益结论和所有局限分别交付 |
+| experiment run | 0 | 计划完成；收益可以未证明或未评估 |
+| experiment run | 2 | runner 返回预检失败，如真实配置缺失或 Oracle 失败 |
+| experiment run | 3 | 未完成，如墙钟/额度中止，保留已有证据 |
+| experiment report | 0 / 2 | 工程证据完整 / 报告列出证据问题 |
+| 任一命令 | 1 | CLI 参数、文件读取、摘要漂移等直接抛错；可能没有报告 |
 
-一个实现 agent 可依序完成 E1–E4；E5 交给未参与调参的验证负责人。多个实现 agent 并行时先固定 E1 合同，再明确各自文件范围；Runtime/Storage 的事务变更由同一个负责人集成，避免多方各自实现不一致的状态机。此表规定交接责任，不要求现在创建任务或自动启动其他 agent。
+仓库开发集有 40 个 case、36 个 family；plumbing 集仅作管道演练，不提供独立收益证据。正式集须另备 100 个样本（80 可执行、20 弃权），其 family 与开发集完全隔离。装载器提供 `assertFamilyIsolation`，实验负责人须执行隔离检查并记录可见范围，runner 不自动证明语义独立性。
 
-E3 的全数量 fake 演练使用专门的管道测试数据，可以由开发 fixture 派生；它不创建或提前读取 E5 的正式验证集。报告标记 `datasetPurpose=plumbing-test`，不能与独立验证结果混合。
-
-每个切片先核对基准以来的变化，阅读 ADR 0007、本文及 `runtime.md`/`repository.md`，然后实现对应验收。提交说明写清行为变化与证据，最终执行现有 `pnpm check`。文档编写阶段无需运行模型或全量代码测试；实现阶段必须运行相关检查，真实模型执行依赖显式配置与本轮额度。
-
-完工清单：代码与迁移、合同/恢复/报告测试、开发 fixture、真实服务配置说明、冻结 manifest、逐次证据、可复算报告、独立验证集的使用与泄漏声明。未完成的真实步骤必须列明缺少的具体条件；不能把工程通过写成整个实验已完成。
-
-## 11. 交接到 M3 的条件
-
-E1–E5 的记录与结论用于编写 ADR 0008；收益未证明时仍可整理证据，选择继续规则策略或修订下一版实验，不要求强行采用 LLM。
-
-M3 的首个候选建议只改变路由 Policy，保持执行能力和裁判固定。ADR 0008 至少明确：冻结经验的成员与内容摘要、开发数据和新的独立验证 family、可修改的策略字段、Consolidation 的候选数/预算/停止条件、收益与回归门槛，以及 Candidate→Evaluation→operator Promotion 的关系。本实验的 model/prompt 版本与未知结果处理语义可以复用；规则归纳、检索或微调算法尚未由本文决定。
-
-M3 实施前须兑现真隔离、裁判独立晋升、独立评估预算三个前置。冻结只包含有权限读取的确切经验成员，保留失败与 unknown；本轮用于调参的开发经验可作为学习来源，已经暴露的验证资料只能作回归用途。每个候选关联来源 dataset digest，新的验证证据不足时不晋升；采用后新 Run 使用新策略，旧 Run/恢复仍使用旧快照。
-
-M3 的隔离与预算准备可以与本实验并行规划；经验驱动规则改进不依赖 LLM 或 Jev 必须胜出。真实隔离未就位时，本实验受信 fixture 的结果不能被用作生成代码在宿主机自主执行的授权。
-
-## 12. 可直接转交的任务说明
-
-**给实现 agent：**
-
-> 阅读 docs/adr/0007-organism-decision-experiment.md、本文和 docs/runtime.md、docs/repository.md，对照基准 c77188a 与当前代码，依序完成 E1–E4。先以 D01–D15 的相关场景固定合同、恢复和预算行为，再接入一个真实 LLM Adapter。只使用开发集和独立的管道测试数据，不读取或构造正式 held-out 的目标与答案。提交代码、迁移、回归测试、准确的 CLI/配置说明、开发调用记录以及冻结的唯一规则/模型/提示配置。运行 pnpm check；没有真实配置时完成其他部分并明确列出 E4 未验证条件。保持当前默认行为，不启动 M3 或自动晋升。最后记录实现 commit、开发数据 family 清单和交给 E5 的运行入口。
-
-**给验证 agent：**
-
-> 在实现 agent 的冻结 commit 上阅读 ADR 0007 与本文，先复核 E1–E4 的工程门和开发记录，再独立准备 E5 的 100 个正式样本；保证与开发集按 family 隔离，且目标与标签没有反馈给调参方。冻结 manifest 后运行 160 个 Oracle 正反预检和 R/L 各 300 个正式 Run，遵守真实调用数、超时、额度与不补考规则。独立复算报告，分别交付工程正确性、真实兼容性与收益结论，并列明未知/缺失证据。若发现实现错误，先保存本轮失败记录再交回修复；一旦验证目标/标签用于修复或调参，该集转为回归资料，下一轮另备新 family。不得为了通过而降低门槛，不自动晋升，不直接开始 M3。
-
-两份任务说明引用同一规范；任何实现选择若与冻结协议冲突，先记录差异及新协议版本。接手者以实际 commit 和可复算证据报告完成情况，不能用“文档已写”或“mock 全绿”替代真实实验结论。
+`realModel=ran` 根据运行清单中的真实 Adapter 配置分类；是否实际发送、成功及计费仍须检查逐次调用证据。收益结论不触发晋升。M3 的候选、验证计划与学习账本另见 [ADR 0008](../adr/0008-m3-experience-driven-evolution.md)。

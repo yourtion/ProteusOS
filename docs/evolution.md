@@ -1,30 +1,16 @@
 # 自进化、巩固与协作继承
 
-状态：设计基线；文中标为 **proposed** 的实现默认值可在首个原型后修订。本文规定演化对象、证据与晋升协议，不代表相关能力已经实现。
-
-M2 后先按[本体决策实验 v1](./experiments/organism-decision-v1.md)补齐在线决策证据并进行规则/LLM 对照。其收益报告不产生 eligible Candidate，也不授权晋升；M3 的经验冻结、候选学习与新验证集方案将在实验收口后记录于 ADR 0008。LLM 未证明收益时仍可推进规则策略的演化。
+当前实现包括能力/裁判/策略候选、冻结验证计划、学习队列、独立评估与显式晋升，以及团队版本继承。规则/LLM 本体决策实验报告与 Candidate 评估是不同证据，不会自动产生晋升授权。阶段状态见 [路线图](./roadmap.md)。
 
 ProteusOS 的自进化是：同一 Organism 从多次任务的经验中提出变化，经独立评估后保留可复用结构，并让未来运行使用这些结构。是否“变好”必须限定任务分布、环境、约束和预算；生成更多内容、完成一次任务或多个 Agent 同时工作，都不足以证明进化。
-
-生物学与神经科学中的个体、遗传、可塑性和巩固在这里是工程类比。它们帮助提出可检验的设计假设，不意味着实现了生物进化、大脑机制或意识，也不产生系统自行延续、扩张资源或扩大权限的目标。
 
 ## 1. 哪些东西可以改变
 
 Kernel 维护身份、权限、不可变记录和晋升协议；主要演化对象是其上运行的 ArtifactVersion 组合。Organism 保持身份连续性，通过更新默认 GenomeSnapshot 改变后续行为。
 
-| 层级 | 对象 | 变化方式 | 生效范围 |
-| --- | --- | --- | --- |
-| L0 Constitutional Substrate | Identity、Artifact/Lineage 规则、隔离、权限、版本、晋升与回滚协议 | 常规软件发布与明确迁移；不进入运行时自主演化 | 指定部署与迁移范围 |
-| L1 Architecture | Module 拓扑、学习机制、评估协议 | 低频候选，单独评审与兼容性验证 | 新部署或显式支持的新快照 |
-| L2 Heritable Artifacts | Skill、Policy、Model、Graph、Prompt、Tool 描述、Code | Candidate → Evaluation → Promotion | 新 Run |
-| L3 Adaptive State | 临时路由权重、阈值、记忆检索权重、用户模型更新假设 | 已授权规则内快速调整，记录输入与变化 | 当前 Run；跨 Run 保留须版本化并晋升 |
-| L4 Ephemeral State | 上下文、当前计划、草稿、临时假设 | 执行中随观察变化 | 当前 Run 或 Process |
+当前可替换对象包含 task-graph、routing-policy、acceptance-evaluator、decision-view 与 capability 槽位。能力由独立构建与验收提出，策略由冻结开发经验归纳，裁判变化必须单独评估。Kernel、持久化格式与授权规则通过软件发布和迁移更新，不参加运行时自动演化。
 
-上述层级描述允许的变化路径，不规定固定的秒、小时或天数。L0“稳定”不等于永远不能修复；L4“临时”也不等于不留审计记录。
-
-L3 不能成为绕过 L2 的通道。阈值或路由权重一旦跨 Run 影响行为，就必须作为精确版本进入 GenomeSnapshot；当前 Run 的快速调整只能写入本次运行状态与经验，不能静默修改其他 Run 的策略。事实性经验可以持续追加，但追加记录本身不构成行为规则的晋升。
-
-已有策略允许的检索、计划修订和预算内探索属于运行行为。改变策略、学习率、晋升阈值或允许学习的对象属于可继承变化；其中控制学习与评估的规则按 L1 处理，不能由被评估候选自行放宽。
+运行中上下文不是可继承规则；要影响后续 Run 必须产生精确版本、候选与晋升。通用模型微调、架构演化与自适应路由权重未实现。
 
 ## 2. 演化的最小闭环
 
@@ -42,7 +28,7 @@ flowchart LR
   G --> N[未来 Run]
 ```
 
-Variation 可以来自人工修改、规则搜索、模型生成、外部编码执行器、蒸馏或微调。一次经验可以触发候选提议，但不能因为“这次有效”直接成为长期策略。候选可以只改变一个 Skill，也可以提出一组相互依赖的版本；后者必须作为完整快照评估。
+当前候选来自外部编码构建、规则归纳或受控 LLM 提议。一次经验可以触发候选提议，但不能因为“这次有效”直接成为长期策略。候选可以只改变一个 Skill，也可以提出一组相互依赖的版本；后者必须作为完整快照评估。
 
 Selection 使用预先确定的约束、基线与评估集。Retention 保留精确版本、来源、证据及采用记录；未被采用的候选仍可留下审计记录。保留候选不等于激活候选，保存到仓库也不等于允许执行其代码。
 
@@ -50,9 +36,9 @@ Selection 使用预先确定的约束、基线与评估集。Retention 保留精
 
 ## 3. 在线执行与离线学习
 
-在线路径负责观察、决策、执行、记录预期与实际结果。DecisionProvider 提供推断，不通过同一个 Interface 原地训练或覆盖正在服务的模型。
+在线路径负责决策、执行与结果记录。DecisionProvider 提供推断，不通过同一个 Interface 原地训练或覆盖正在服务的模型。
 
-离线路径从冻结的经验集出发，执行整理、去重、模式提取、假设生成、候选构建和评估。PolicyLearner 产出新的 ArtifactVersion 与 Candidate，不直接更新 Organism 的 activeGenome。
+离线路径从冻结的经验集出发，执行整理、去重、模式提取、假设生成、候选构建和评估。Consolidation 产出新的 ArtifactVersion 与 Candidate，不直接更新 Organism 的 activeGenome。
 
 “离线”是与在线执行的版本和权限隔离，不要求整个系统休眠。Consolidation 可以与用户 Run 并行，并受独立队列、预算与取消策略约束；它只读取一个已确定的经验窗口，后续经验留给下一轮。
 
@@ -66,7 +52,7 @@ GenomeSnapshot 是不可变的 ArtifactVersion 精确引用集，包含运行需
 
 Task 是任务目标；Run 是一次完整任务执行；Process 是 Run 内的执行单元，可能委托给外部 Agent session；Attempt 是某个 Process 的一次执行尝试。每个 Run 创建时绑定一个 GenomeSnapshot，Process 和重试均沿用该快照。
 
-Organism 的 `activeGenome` 指向供新 Run 使用的默认快照，并带有单调递增的 `revision`。已启动 Run 不随指针变化。Checkpoint 恢复使用原快照；若必须采用新版本，创建新 Run 并关联原 Run，而不是把恢复伪装成同一次执行。详见 [运行时设计](./runtime.md)。
+Organism 的 `activeGenome` 指向供新 Run 使用的默认快照，并带有单调递增的 `revision`。已启动 Run 不随指针变化。恢复使用原快照；若必须采用新版本，创建新 Run 并关联原 Run，而不是把恢复伪装成同一次执行。详见 [运行时设计](./runtime.md)。
 
 运行中的计划和上下文仍可变化；这些变化属于运行状态。快照固定的是可继承结构，不意味着每个行动或上下文都预先确定。
 
@@ -74,15 +60,15 @@ Organism 的 `activeGenome` 指向供新 Run 使用的默认快照，并带有�
 
 | 记录 | 必须表达的事实 |
 | --- | --- |
-| Candidate | 目标 Organism/Scope、基准快照与 revision、候选快照、变更动机、来源经验集、提出者、资源预算 |
-| Evaluation | Candidate、基线快照、评估协议与裁判版本、数据切分、环境、逐次结果、汇总指标、不确定性、成本、执行者 |
+| Candidate | 目标 Organism、基准快照与 revision、候选快照、变更动机、来源经验集与引用、提出者 |
+| Evaluation | Candidate、基线快照、协议摘要、评估 Run 引用与结果、数据集引用、汇总指标与结论；裁判由计划和 Run 固定 |
 | Promotion | 目标 Organism、旧/新快照、预期/实际 revision、采用的 Evaluation、授权依据、操作者、提交结果与时间 |
 
 这些记录不能合并为 ArtifactVersion 上的 `status`。Candidate 的待评估、拒绝或可晋升状态来自记录投影；`active` 是 Organism 与快照的采用关系，同一版本可以在一个 Organism 中活跃、在另一个中未采用。
 
-一份 Evaluation 只能证明其记录范围内的结果。晋升时仍要检查权限、预算、依赖闭包、基准是否过期以及所需评估是否齐全。评估完成不等于自动授权晋升。
+一份 Evaluation 只能证明其记录范围内的结果。晋升时仍要检查权限、依赖闭包、基准是否过期以及所需评估是否齐全。评估完成不等于自动授权晋升。
 
-**proposed 默认值：**首版由 operator 批准晋升；系统可以自动收集经验、生成候选和执行已授权的评估。未来可允许低风险 Artifact 类型在指定 Scope、预算、指标与回滚条件内自主晋升，但必须记录授权策略版本。此处是运行产品的治理默认值，不要求批准本文档。
+晋升由 operator 显式调用，最新评估必须 eligible；自动晋升未实现。
 
 ## 6. 评估设计与裁判独立性
 
@@ -131,20 +117,11 @@ revision 用于识别 G12 → G13 → G12 的变化过程，即使回滚后快�
 
 进程崩溃、预算耗尽、数据损坏或评估失败都不能留下半激活快照。若已提交成功但响应丢失，调用者按幂等标识查询已有记录；若未提交成功，继续使用原默认快照。
 
-## 9. Experience、Evidence 与 Credit
+## 9. Experience 与 Evidence
 
-Experience 描述一次运行中发生的事；Outcome 描述观测到的结果；Evidence 是用于支持或反驳某个主张的记录引用。一次成功可以成为 Evidence，但不是“所有参与 Artifact 都有正贡献”的证明。
+Experience 保存 Run 的终态、验收、输出摘要、耗时、Attempt 数和 decisionCallIds；通过 Run/Task/事件引用还原行为来源。开发窗口只包含本个体 normal Run，评估经历不得重新包装为开发材料。冻结成员用途不可任意改写，缺失或摘要漂移时拒绝读取。
 
-每个 Run 至少关联：
-
-- Task、Organism、GenomeSnapshot、Process/Attempt 与执行器版本。
-- 使用过的 ArtifactVersion、关键决策输入、预期结果与实际结果；无法获得的字段显式缺省。
-- 环境、能力授权、资源预算与实际消耗、重试、评估结果及用户纠正。
-- 记录来源、可见 Scope、数据保留与共享限制。
-
-Credit 是对贡献的可追溯假设：关联某个版本、某组证据、所用归因方法、置信限制和适用环境。它不能仅凭相关性宣称因果，也不直接变成奖励或晋升票数。若要识别某个 Skill 的增益，应保持其他版本尽量固定，做消融或对照，并记录实验局限。
-
-首版先保证 provenance 完整，再增加统计归因。没有充分证据时保留“无法区分贡献”，比把成功平均分配给所有 Module 更有价值。
+一次成功只能支持其记录范围内的主张。当前未实现通用 Credit 或因果归因；规则学习按支持数与精度重算提议，未知成本保持 null。
 
 ## 10. 团队共享、继承与主权
 
@@ -165,50 +142,17 @@ Credit 是对贡献的可追溯假设：关联某个版本、某组证据、所�
 
 私有经验、提示、凭据、用户偏好与原始任务内容不默认随 Artifact 发布。发布者明确选择共享内容与 Scope，记录必要的过滤与来源限制；接收方仍把外部内容视为待验证数据。团队评估可共享汇总证据，但汇总本身也需要检查是否泄露私有信息。
 
-未来的 semantic crossover 可把多个版本组合成一个多 parents 候选。真正共进化还需要处理多个策略互相改变带来的基线漂移，因此先固定伙伴版本、分轮评估；不在 MVP 中开放所有 Organism 实时互改行为。
+签名包在接收方本地登记公钥后验签，网络 registry 还检查团队凭据。来源撤信会阻止新导入、继承、评估与首次晋升，不自动回滚已采用行为。详见 [共享使用说明](./sharing-registry.md)。
 
-## 11. MVP 顺序与验收
+## 11. 当前学习与验证规则
 
-初始 MVP 从单用户、单 Organism、多个 Process 并发开始，先实现规则、Skill 与 Graph 的演化。M4 已扩展至多个体本地隔离与选择性共享，见 §14；签名来源信任和 HTTP registry 随后完成工程验收。模型微调、架构演化、生产网络部署和共进化按 [路线图](./roadmap.md) 后置。
+- `dataset-freeze` 固定 development 经验投影；`consolidate` 或队列作业只读取该投影。LLM 提议也必须按开发证据重算支持数/精度，零提议是正常结果。
+- 非零策略候选生成前须 `validation-register` 注册未使用的本地计划，固定 case/family、输入内容树、schema/期望输出、回归角色、预算、重复数与门槛。
+- 策略候选仅替换 routing-policy；图、能力、视图和裁判保持固定。验证 family 不可与开发窗口混用，已使用 family 不能重新注册为未见数据。语义家族归类由实验负责人保证。
+- 双臂 × case × repeat 记录成功率、路由准确率、弃权率、时延及重复方差；不足样本或健康基线回归失败记 inconclusive，候选回归失败或标注路由不符记 rejected。
+- 正式验证集只领用一次，同候选重试只读回既有评估；输入、门槛或计划摘要变化拒绝执行。
+- 学习模型调用默认每个体累计最多 100 次，可显式调整。超时、取消及未知结果保留 unknown 和已用额度，迟到结果不生成候选。
+- 学习队列支持运行中取消；停止其他 worker 后可显式恢复崩溃作业，未知外部调用不自动重发。
+- normal/evaluation 预算池独立；导入能力代码要求真实隔离后端，固定 fixture 工程验收不能代替真实隔离或模型收益结论。
 
-第一条演化路径可以人工提出候选，也可以从重复失败中提取候选。关键是完成并验证以下行为：
-
-1. 两个并发 Run 使用同一个已固定快照，各自记录完整来源和结果。
-2. 从冻结经验集提出一个规则或 Skill 候选，在固定基线与 held-out 任务上评估。
-3. operator 批准后提交一次可审计的 Promotion；新 Run 使用新快照，旧 Run 保持原快照。
-4. 对同一基准的另一个晋升请求返回 stale，完成重建与重评后才能再次尝试。
-5. 将默认快照回滚并再次运行任务，证明版本切换可恢复，同时保留外部副作用记录。
-
-这些结果能证明演化协议可工作，不能提前证明长期收益。收益需要持续比较质量、成本、回归与用户纠正，并允许“不晋升”成为正常结果。相关对象定义见 [领域模型](./domain-model.md)，文档入口见 [设计文档索引](./README.md)。
-
-## 12. 实现注记（M2 最小自举）
-
-M2 落地本文 §5–§8 的最小版本，对应实现与让步：
-
-- **三种记录独立落库**（migration v3）：Candidate（基准快照+revision、候选快照、动机、来源 refs——builder Run 可追溯）；Evaluation（协议 digest、基线、逐 Run 结果、分列指标、verdict）；Promotion（operationId 唯一、kind=adopt/rollback、from/to、expected/result revision、evaluation 引用、actor）。Candidate 流程状态由 `candidate-<id>` 事件流投影（proposed/evaluating/eligible/rejected/stale/adopted），不物化 status 列。
-- **候选来源**：M3 前允许人工/委托构建提出（`proteus build`），流程完整记录来源（builder Run id、goal digest、验收时的产出 digest）；builder 产出须经 test-runner 独立验收，采集时内容必须与验收后立即记录的摘要一致，测试失败或产出漂移不能构造候选。
-- **评估协议 m2-bootstrap-eval-v1**（构造候选前固定）：Candidate 记录评估计划 digest，覆盖任务、输入内容树、schema、固定期望输出、预算与能力声明；评估时重新计算并拒绝漂移。新能力任务必须实际声明候选能力。候选×新能力验收 + 每项既有能力的候选×回归和基准×回归（健康对照）；基线失败 → `inconclusive`（评估环境不可信，不判 rejected，可重评）——"证据不足不能记通过"。裁判按内容寻址钉住预注册 hybrid 版本（持久化于 `runs.evaluator_version_id`），候选快照槽位换放水裁判对评估无效。
-- **§7 CAS 协议**：`Kernel.promote` 一个事务内完成验证（快照可解析/授权者/revision）+ 条件更新 + 成功记录；operationId 幂等读回（提交成功响应丢失场景）；stale 不落记录、候选标 stale 须基于新基准重构重评；回滚到相同快照引用后旧并发请求仍 stale。
-- **§8 回滚**：`kind=rollback` 的 Promotion，revision 只增不减；目标快照必须可解析完整闭包，并已出现在该 Organism 的历史 Promotion 路径中（依赖缺失、未评估或从未采用的候选不能回滚激活）。
-- **晋升授权**：proposed 首版默认——评估自动执行，晋升由 operator 显式批准（`proteus promote --as`）；评估完成不等于授权（最新评估必须 eligible 才放行）。
-- **让步（ADR 0006）**：hybrid 裁判与能力变化同处候选快照，以"固定裁判一方 + tests/evals 等价性证明"折衷，M3 拆分；评估预算与普通 Run 共享 organism 池；成本指标显式 null。
-- **§11 MVP 五条验收**全部落地：并发同快照（M0 既有 + 评估三 Run 并行）、人工候选 + 固定基线评估、operator 批准可审计 Promotion、stale 重构重评、回滚后再跑（tests/acceptance/bootstrap-story.test.ts 七步故事固化；真实 builder 版 `PROTEUS_E2E=bootstrap`）。
-
-## 13. 实现注记（M3 经验驱动演化）
-
-M3 落地本文 §3/§6 的离线闭环，决策与让步全文见 [ADR 0008](./adr/0008-m3-experience-driven-evolution.md)：
-
-- **冻结经验集**（§3"只读取一个已确定的经验窗口"）：`experience_datasets` 固定成员清单+内容摘要+截止点+过滤规则版本+用途许可；学习投影（experience × run/task × decision_calls × 预算）是 Consolidation 唯一输入，不可回放如实标注。
-- **Consolidation**（§3 离线路径）：首版纯规则确定性归纳（不调 LLM）；正例两类——成功 Run 的实际选择（expectedOutput 验收即正确性）与失败/弃权成员经开发集 gold join；门槛/候选数/扫描预算显式预限制；零提议正常。已支持持久化作业队列、独立模型调用额度预留和运行中取消；LLM 提议仍须按开发证据重算统计门槛。
-- **策略候选**（实验文档 §11"只改路由 Policy"）：只换 routing-policy 槽位（图/能力/裁判/视图固定）；rule-hybrid-v1 特征路由优先 + 基准兜底继承（无特征任务行为不变的回归约束）。
-- **多目标比较**（§6 五条最低证据要求）：m3-policy-eval-v1 双臂×cases×repeats 固定顺序；成功率/路由准确率/弃权率/时延 p50·p95/跨重复方差分列记录（uncertainty），不合成总分；样本不足 inconclusive 不判通过；验证方案在候选构造前内容寻址冻结，Evaluation 绑定真实验证集及 case ID；一次正式领用后不得继续用作未见验证集，同候选重试仅幂等读回证据。
-- **三项前置兑现**：SandboxBackend 真隔离（microsandbox 后端；不可用拒绝执行不降级；docker 后端预留）、评估独立预算池（purpose 双池）、裁判拆分两阶段晋升（§6"拆分为不同候选"正式兑现，自举链 G0→G_eval→G_cap）。
-
-
-## 14. 实现注记（M4 独立个体与共享）
-
-`Federation` 已实现本文 §10 的本地 publication/import/fork/inherit 和拒绝流程，详见 [ADR 0009](./adr/0009-m4-selective-local-sharing.md)。CLI 明确绑定个体与操作者；个人经验、学习窗口、作业、候选和默认指针相互独立。公开内容不授予团队治理权，分享包自身不授予任何本地权限。
-
-分享包固定精确版本及依赖，拒绝私有或越权依赖；严格字段白名单不会自动输出任务、经历、原始运行和凭据。显式选定的评估只导出样本足够的数字汇总，仍属于外部主张。导入保留完整包摘要和来源父版本，为接收方建立本地谱系，不激活。inherit 绑定本地冻结计划与基准 revision，固定当地裁判评估后仍须 operator 晋升；拒绝不改变默认行为，也不撤销历史外部结果。不同个体可以对同一版本作出不同选择。真正共进化未实现。
-
-M4 后续已增加签名来源信任与 HTTP registry，见 [ADR 0010](./adr/0010-signed-sharing-and-registry.md)。传输授权、来源信任与本地晋升证据分别验证；撤信阻止继承候选继续评估/晋升，保留已发生的采用与历史证明。
+实现理由见 [ADR 0008](./adr/0008-m3-experience-driven-evolution.md)、[ADR 0009](./adr/0009-m4-selective-local-sharing.md) 与 [ADR 0010](./adr/0010-signed-sharing-and-registry.md)。

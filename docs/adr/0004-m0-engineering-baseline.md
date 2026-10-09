@@ -16,7 +16,7 @@ ProteusOS 的仓库级技术栈于 2026-09-20 逐项确认。本文是唯一完�
 | 存储 | 内置 `node:sqlite` 单 writer + 按摘要寻址的 blob 文件；驱动位于 Persistence port 之后 |
 | 包管理 | pnpm；根包 `@techs/proteus`，后续包统一 `@techs` scope，暂不发布 |
 | CLI | commander；二进制名 `proteus` |
-| 运行时校验 | zod v4；内部边界校验与 JSON Schema 导出（`z.toJSONSchema`）共用一个库 |
+| 运行时校验 | zod v4；分享包等边界校验；任务验收由 runtime 的 JSON Schema 校验实现执行 |
 | 配置解析 | `yaml` 包（task.yaml 等配置文件） |
 | 日志 | pino 结构化 JSON 运维日志；与 SQLite 事件账本是两条独立通道 |
 | 测试 | vitest；分层布局与替身要求见 [repository.md §5](../repository.md#5-验证布局) |
@@ -29,13 +29,11 @@ ProteusOS 的仓库级技术栈于 2026-09-20 逐项确认。本文是唯一完�
 ## 替代方案与理由
 
 - **Node，而非 Bun**：Bun 内置 SQLite 与 test runner、零依赖起点，但 Node 生态更保守、团队更熟；用 tsx 补齐直跑 TypeScript 的体验。
-- **node:sqlite，而非 better-sqlite3**：原生模块需随 Node 大版本重编译（曾在 Node 24 出现 ABI 故障）；node:sqlite 尚为 Stability 1.2（Release Candidate），该风险由 Persistence port 隔离、驱动可平移对冲。
-- **zod v4，而非 ajv**：TS-first 类型推导；`z.toJSONSchema` 让 task 验收 schema 文件与内部边界校验共用一套定义。
+- **node:sqlite，而非 better-sqlite3**：原生模块需随 Node 大版本重编译（曾在 Node 24 出现 ABI 故障）；内置 API 的兼容风险由 Persistence port 隔离，更换运行时版本时复核。
+- **zod v4，而非 ajv**：TS-first 类型推导与严格对象校验；验收 JSON Schema 与边界对象校验分别使用各自实现。
 - **commander，而非 cac / 手写解析**：五命令起步但只增不减，子命令、help、flag 解析一次到位。
 - **pino，而非手写 JSONL**：时间戳、级别、子上下文是白送能力；M0 的崩溃恢复验收需要结构化现场。
 
-## 延后与复核
+## 后续决策
 
-以下不属本文预决，决策时点见 [roadmap.md 待验证项](../roadmap.md#待验证项)：ACP SDK 与 worker 选型（M1）、隔离执行环境（M1/M2）、晋升自动化边界（M2）、评估协议参数（M2/M3）、本地模型与微调路线（M3 后）、团队治理（M4 前）。M0 的 CLI 命令集、task.yaml schema、预算维度与 G0 快照槽位属产品形态决策，同样记录于该表。
-
-Node 26 转 LTS（2026-10-28）后复核 `node:sqlite` API 稳定性与 engines 基线。
+外部执行器见 ADR 0005，自举与评估见 ADR 0006/0008，共享治理见 ADR 0009/0010。当前剩余工作统一见 [路线图](../roadmap.md#2-尚未完成或验证)。更换运行时主版本时复核 node:sqlite API、迁移与恢复兼容性。

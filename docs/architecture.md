@@ -9,9 +9,13 @@
 ```mermaid
 flowchart TB
   User[操作者 / CLI] --> Runtime[Runtime：任务图与运行生命周期]
+  User --> Federation[Federation：发布 / 来源信任 / 继承]
+  Federation --> Evolution
+  Federation --> Kernel
+  Federation --> Storage
   Runtime --> Decision[Decision：结构化选择]
   Runtime --> Executor[Executor：受控执行]
-  Runtime --> Workspace[上下文与记忆视图]
+  Runtime --> Workspace[工作区与受限任务视图]
   Runtime --> Kernel[Kernel：身份 / 授权 / 版本 / 变化不变量]
   Decision --> Rules[规则 / 模型 Adapter]
   Executor --> Workers[本地进程 / ACP / 其他 Adapter]
@@ -29,7 +33,7 @@ flowchart TB
 
 拥有身份归属、授权判断、资源约束、ArtifactVersion 与 Lineage 不变量、快照完整性和晋升提交规则。它知道“这个版本能否被合法采用”，不知道某份内容是如何完成代码审查的。
 
-Kernel 不依赖 ACP、某个模型 SDK、Cordis 或 DSH。固定的图算法、检索、学习和评估策略不进入核心不变量。它也不需要理解每种 skill 的语义：内容有效性由受信任的类型校验和评估实现给出，kernel 核查其版本、证据及授权。
+Kernel 不依赖外部执行协议或模型 SDK。固定的图算法、检索、学习和评估策略不进入核心不变量。它也不需要理解每种 skill 的语义：内容有效性由受信任的类型校验和评估实现给出，kernel 核查其版本、证据及授权。
 
 “稳定”表示不参加日常自动进化，不表示永不修复。基质、持久化格式和授权规则通过受审查的软件发布、迁移及兼容性验证更新，不能由普通候选绕过。
 
@@ -41,7 +45,7 @@ Kernel 不依赖 ACP、某个模型 SDK、Cordis 或 DSH。固定的图算法、
 
 ### Decision：选择机制
 
-将有限候选、排序或判断问题交给规则或模型；负责校验结果、记录来源，并在不支持、超时或无法判断时按版本化策略处理。Decision 是 Runtime 的独立 seam，Provider 不拥有权限或晋升权。
+当前将有限 choice 交给规则或模型，校验结果并记录来源；不支持、超时、弃权与非法输出分别结案。排序和 gate 仅有类型声明。Decision 是 Runtime 的独立 seam，Provider 不拥有权限或晋升权。
 
 Planner 的开放式生成可先由 Executor 承载，不为尚无第二种实现的能力创建额外公共接口。形成独立需求后再引入生成模块。
 
@@ -49,7 +53,7 @@ Planner 的开放式生成可先由 Executor 承载，不为尚无第二种实�
 
 消费经过授权的经验快照，生成 Candidate，委托固定条件下的评估，形成晋升建议。它可以使用与在线任务相同的执行机制，但配额、工作区和数据权限分开。
 
-学习算法不知道如何改写 active 指针；晋升必须跨过 Kernel 的授权与一致性检查。Evaluator、PolicyLearner 的策略可演进，其评估依据不能由同一个候选自行替换。
+学习算法不知道如何改写 active 指针；晋升必须跨过 Kernel 的授权与一致性检查。评估器与 Consolidation 提议算法可独立演进，其评估依据不能由同一个候选自行替换。
 
 Federation 组织团队发布、导入与本地继承，并封装发布来源签名、接收方信任和精确版本 registry。来源认证、传输授权和本地评估分别检查；网络交换不授予运行或晋升权限。详见 [ADR 0010](./adr/0010-signed-sharing-and-registry.md)。
 
@@ -57,7 +61,7 @@ Federation 组织团队发布、导入与本地继承，并封装发布来源签
 
 Persistence 提供事务、事件持久化、版本内容寻址和恢复能力；Provider Adapter 将内部合同映射为规则、进程或外部协议。应用入口负责组装依赖，领域模块不在内部自行创建外部客户端。
 
-建议以 SQLite 加内容文件存储起步；它是待验证的部署选择，不属于领域模型。ACP 是优先验证的外部执行协议，不定义内部 Task、Memory 或 Lineage。
+持久化已采用 node:sqlite 单 writer 与内容寻址 blob；事务内保存状态、事件和派发记录，外部调用在事务外执行。ACP 与 pi SDK 接入同一执行合同，不定义内部 Task、Run 或 Lineage。
 
 ## 两个闭环
 
@@ -93,8 +97,9 @@ Experience 快照 → 巩固/学习 → Candidate → 固定基线 Evaluation
 | --- | --- | --- | --- |
 | Kernel | 身份、版本与晋升不变量、授权约束 | 注册版本、解析快照、检查授权、提交晋升/回滚 | 图调度、模型推理、训练算法 |
 | Runtime | 任务运行和执行状态机 | 提交、观察、取消、恢复 | 产物选择生效、外部协议细节 |
-| Decision | 结构化问题与结果校验、回退规则 | 决策 | 授权、训练、实际副作用 |
+| Decision | 结构化问题、结果校验与调用来源 | 决策 | 授权、训练、实际副作用 |
 | Evolution | 候选与评估流程 | 提出候选、比较、请求晋升 | 绕过 kernel 修改默认行为 |
+| Federation | 发布、来源信任与继承治理 | 发布、验签、导入、构造本地继承候选 | 替代本地评估与晋升 |
 | Persistence | 持久化实现与提交一致性 | 事务、追加记录、读取内容 | 领域选择策略 |
 | Adapter | 协议映射、能力报告、执行反馈 | 满足对应 Provider 合同 | Organism 主权、任务验收 |
 
@@ -113,6 +118,6 @@ Experience 快照 → 巩固/学习 → Candidate → 固定基线 Evaluation
 
 ## 当前范围
 
-首个可用系统包含稳定 seed、规则 Decision、本地受控执行、运行记录、不可变版本和最小晋升流程；然后接入一个真实编码执行器，完成自举闭环。World Model、复杂记忆、局部模型微调、语义重组和跨主体共进化按证据逐步加入。
+当前系统支持多个体运行、规则/LLM 决策、外部委托、能力自举、经验驱动策略候选和签名版本交换。动态图、持续自主学习、大规模联邦与研究型模型能力未实现；剩余工作统一记录于路线图。
 
 源码布局见[仓库设计](./repository.md)，记录关系见[领域模型](./domain-model.md)，实现阶段见[路线图](./roadmap.md)。

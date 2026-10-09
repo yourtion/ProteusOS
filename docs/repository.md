@@ -1,6 +1,6 @@
 # 仓库架构与实现约束
 
-状态：**active**（2026-10-10）。工程基线已按 [ADR 0004](./adr/0004-m0-engineering-baseline.md) 落地；M0–M4 目录已创建并在用（含 `src/evolution/` 与验证布局 Evaluation 层 `tests/evals/`，M2 起）；examples/ 仍按“需要时才创建”原则留待后续里程碑。
+当前为 TypeScript 单包模块化仓库；依赖和检查脚本以 package.json 与 pnpm-lock.yaml 为准。技术选择见 [ADR 0004](./adr/0004-m0-engineering-baseline.md)。
 
 ## 1. 从单包模块化起步
 
@@ -8,16 +8,19 @@
 
 ```text
 ProteusOS/
-├── docs/                       # 设计、词汇、ADR、路线图（含 ADR 0004/0005 已落地决策）
+├── docs/                       # 设计、词汇、ADR、路线图
 ├── src/
 │   ├── kernel/                 # 身份/版本/快照不变量、CAS active 指针
 │   ├── runtime/                # Task/Run/Process/Attempt、DAG 节点循环、恢复与对账
 │   ├── decision/               # 结构化决策合同与结果校验
 │   ├── adapters/
-│   │   ├── decision-rule/      # 确定性规则路由（消费 routing-policy 产物）
+│   │   ├── decision-rule/      # 确定性规则路由
+│   │   ├── decision-llm/       # 在线 LLM 结构化选择
+│   │   ├── consolidation-llm/  # 离线 LLM 提议
 │   │   ├── executor-process/   # 本地受信进程（M0 stats worker）
 │   │   ├── executor-acp/       # ACP client：驱动 claude-agent-acp / codex-acp
 │   │   └── executor-pi/        # pi 官方 SDK 直连（ADR 0005）
+│   ├── evolution/              # 冻结经验、学习队列、候选与独立评估
 │   ├── federation/             # 分享包/继承、来源签名与信任、HTTP registry
 │   ├── storage/                # node:sqlite、迁移、事件流、outbox、blob
 │   └── app/                    # 组装依赖、执行器注册表、CLI 命令与 seed
@@ -25,7 +28,8 @@ ProteusOS/
 │   ├── unit/                   # 纯不变量与状态迁移
 │   ├── contract/               # Provider/持久化/ACP 合同（fake agent，真实协议）
 │   ├── integration/            # 事务、恢复、并发预算、M1 委托闭环
-│   ├── acceptance/             # M0 判据固化与 CLI 闭环
+│   ├── acceptance/             # 里程碑故事与 CLI 闭环
+│   ├── evals/                  # 基线、回归与评估协议验收
 │   ├── e2e/                    # 真实 agent（PROTEUS_E2E=claude|codex|pi|all 显式启用）
 │   └── fixtures/               # 无凭据、可重复的测试产物、fake ACP agent 与任务
 ├── bin/proteus.mjs             # CLI 启动器（tsx 加载 TS 源码）
@@ -34,8 +38,6 @@ ProteusOS/
 ├── tsconfig.json               # 严格类型检查
 └── pnpm-lock.yaml              # 依赖版本固定
 ```
-
-只在需要时创建目录：M0 不创建空的 evolution/ACP/模型训练包。Skill、Memory、World Model 先作为具体需求下的产物或内部实现，出现稳定消费者后再提取模块。
 
 ## 2. 依赖方向
 
@@ -54,13 +56,13 @@ kernel ────────→ 纯类型与基础标准库
 
 Runtime 不导入 Evolution：运行产生记录，Evolution 主动读取固定窗口并提交评估任务，避免双向依赖。Kernel 不导入 Runtime、数据库驱动或 SDK；算法只返回领域结果或待提交事实，I/O 通过由接口所有者定义的 port 注入。
 
-Executor 合同属于 Runtime，DecisionProvider 合同属于 Decision，PolicyLearner 与评估编排合同属于 Evolution。Storage 可以实现不同模块的内部存储 port，但实际事务由同一个应用提交单元协调；跨模块不变量不得拆成各自提交的多个数据库事务。
+Executor 合同属于 Runtime，DecisionProvider 合同属于 Decision，Consolidation 提议与评估编排合同属于 Evolution。Storage 可以实现不同模块的内部存储 port，但实际事务由同一个应用提交单元协调；跨模块不变量不得拆成各自提交的多个数据库事务。
 
-模块对外通过自身 `index.ts` 暴露小接口；调用方不导入别人的 `internal/`。先不创建一个囊括所有对象的 `shared` 或 `types` 包；类型归属定义其不变量的模块。
+模块入口暴露行为合同；公开的领域类型和专用合同可由调用者直接导入。先不创建一个囊括所有对象的 `shared` 或 `types` 包；类型归属定义其不变量的模块。
 
 ## 3. 模块深度与可测试性
 
-Runtime 的调用者只需提交、观察、取消或恢复工作；就绪判断、重试、对账和 checkpoint 留在实现中。Kernel 的晋升接口一次验证快照、证据引用、授权和 revision，再交由事务实现原子提交，调用者不手动串起多个可漏掉的步骤。
+Runtime 的调用者只需提交、观察、取消或恢复工作；就绪判断、重试与对账留在实现中。Kernel 的晋升接口一次验证快照、证据引用、授权和 revision，再交由事务实现原子提交，调用者不手动串起多个可漏掉的步骤。
 
 Clock、ID 生成、外部调用和持久化作为内部 seam 注入。公开 Provider seam 对应确实会变化的规则/模型或进程/协议实现；不提前为每一个未来研究词汇建立空接口。
 
@@ -79,7 +81,7 @@ Clock、ID 生成、外部调用和持久化作为内部 seam 注入。公开 Pr
 └── tmp/                        # 构建和导入的临时区
 ```
 
-路径示意不约束最终配置格式。凭据由受控的凭据来源注入，不进入实例快照或导出的经验。实现时增加 `.gitignore` 排除实例数据、工作区、测试输出和秘密文件；fixture 必须使用合成数据。
+路径示意不约束最终配置格式。凭据由受控的凭据来源注入，不进入实例快照或导出的经验。私钥与 token 文件已由 `.gitignore` 排除；实例应放在源码目录之外，fixture 使用合成数据。
 
 Seed 图、确定性策略和固定验收规范可以作为源码内的版本化资源，但首次安装需导入为不可变版本并生成初始 GenomeSnapshot。实例不能直接将仓库里一份持续变化的 Markdown 当作已固定的 skill 版本。
 
@@ -97,7 +99,7 @@ Seed 图、确定性策略和固定验收规范可以作为源码内的版本化
 
 日常 CI 使用固定 fixture 和本地可信 worker，默认无需外网、模型或用户凭据。真实 ACP 集成另设显式启用的测试任务；其缺失必须显示为未验证，不能用 mock 通过替代真实兼容性结论。
 
-实际创建工程时设置类型检查、格式检查、测试脚本并记录标准命令；本文不提供尚不存在的可运行命令。质量门槛随阶段交付，见[路线图](./roadmap.md)。
+标准检查：`pnpm check` 依次执行 lint、format 检查、typecheck 和测试；也可分别执行 `pnpm lint`、`pnpm typecheck`、`pnpm test`。`pnpm format` 会改写源码格式。Node 版本遵循 .node-version，最低要求见 package.json。
 
 ## 6. 拆包和分布式的触发条件
 

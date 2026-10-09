@@ -1,5 +1,6 @@
 ---
-status: proposed
+status: accepted
+date: 2026-10-10
 ---
 
 # 以不可变快照和原子晋升隔离行为变化

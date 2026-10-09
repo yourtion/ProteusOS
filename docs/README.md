@@ -1,51 +1,34 @@
-# ProteusOS 架构与设计
+# ProteusOS 文档
 
-ProteusOS 是承载长期、可适应智能的运行基质：让具有持续身份的个体执行任务、积累经验，并通过可验证、可继承、可回滚的产物变化改进行为。
+当前实现覆盖 M0–M4，以及签名来源信任、撤权和 HTTP registry。阶段验收与剩余工作统一见 [路线图](./roadmap.md)；工程验收与真实模型收益分开记录。
 
-## 阅读顺序
+## 阅读入口
 
-| 文档 | 回答的问题 |
+| 文档 | 内容 |
 | --- | --- |
-| [设计原则](./principles.md) | 为什么构建、何谓自进化、研究假设如何落到工程约束 |
-| [领域词汇](./CONTEXT.md) | Organism、Run、Artifact、Lineage 等词分别指什么 |
-| [总体架构](./architecture.md) | 基质、运行时、学习与外部执行如何分工 |
-| [领域模型](./domain-model.md) | 身份、版本、经验、晋升记录如何关联 |
-| [运行与 Provider 合同](./runtime.md) | 如何调度、决策、委托、取消、恢复和回放 |
-| [进化与协作](./evolution.md) | 什么可以变化、如何评估晋升、如何预留团队继承 |
-| [签名共享与 registry](./sharing-registry.md) | 如何登记公钥、交换签名包、配置 registry 并撤销授权 |
-| [仓库设计](./repository.md) | 源码如何组织、依赖方向和测试放在哪里 |
-| [自举路线与待验证项](./roadmap.md) | 先实现什么、怎样验收、哪些选择尚未确定 |
-| [本体决策实验 v1](./experiments/organism-decision-v1.md) | M2 后如何开发规则/LLM 对照、执行独立验证，以及如何向 M3 交接证据 |
+| [项目 README](../README.md) | 安装、快速开始与常用命令 |
+| [设计原则](./principles.md) | 约束、证据与用户控制 |
+| [领域词汇](./CONTEXT.md) | 统一术语 |
+| [总体架构](./architecture.md) | 模块职责、依赖和不变量 |
+| [领域模型](./domain-model.md) | 当前记录、归属和关联 |
+| [运行时合同](./runtime.md) | DAG、决策调用、派发、取消与恢复 |
+| [进化与继承](./evolution.md) | 经验冻结、候选、评估、晋升与共享 |
+| [签名共享与 registry](./sharing-registry.md) | 公钥、凭据、网络交换和撤销 |
+| [仓库设计](./repository.md) | 源码、实例数据、检查和测试布局 |
+| [路线图](./roadmap.md) | 里程碑验收与尚未验证事项 |
+| [本体决策实验](./experiments/organism-decision-v1.md) | 规则/LLM 对照协议、指标和运行命令 |
 
-## 当前结论
+## 架构决策
 
-没有阻塞文档沉淀的架构分歧。采用“稳定基质 + 个体身份 + 可继承产物”的主轴；默认使用路径是单用户、一个 Organism、多任务并发，团队通过独立谱系交换成果。
+ADR 保存选择理由；后续变化在相关记录中注明，当前行为以运行时、进化与使用文档为准。
 
-**实现进度（2026-10-10）**：M0–M4 的本地工程闭环已完成。本体决策实验的工程验证、M3 证据与预算治理、M4 选择性分享和独立采用已落地；签名信任治理与 HTTP registry 已继续落地；真实模型收益、生产网络部署与大规模联邦/共进化仍需独立验证。详见[路线图](./roadmap.md)。源码在 `src/`，目录结构以[仓库设计](./repository.md)为准。
-
-文档区分三种状态：
-
-- **设计基线**：从讨论方向收敛出的概念与不变量，如模型可替换、版本不可变、推理与学习分离。它们仍可经后续设计修订。
-- **Proposed 默认方案**：为使实现可启动而补充的建议，如单写入进程、首版由操作者晋升；尚未通过实现验证。技术栈与 M0 启动默认值（TypeScript + Node、SQLite、oxlint/oxfmt + vitest、CLI 形态、预算维度与实现切片）已于 2026-09-20 逐项确认，见[待验证项](./roadmap.md#待验证项)。
-- **延后研究**：局部模型微调、世界模型、元可塑性、团队联邦服务和真正共进化。保留演进路径，不列为首版依赖。
-
-代码实施前需要核实的选择集中在[待验证项](./roadmap.md#待验证项)，无需为这些可替换细节暂停本次文档工作。
-
-## 架构决策记录
-
-- [ADR 0001：基质与可进化行为分离](./adr/0001-substrate-and-behavior.md)
-- [ADR 0002：快照固定与原子晋升](./adr/0002-snapshots-and-promotion.md)
-- [ADR 0003：个体主权与联邦继承](./adr/0003-organism-and-federation.md)
-- [ADR 0004：仓库技术栈与工程基线](./adr/0004-m0-engineering-baseline.md)
-- [ADR 0005：M1 外部执行器接入方式](./adr/0005-external-executors.md)
-- [ADR 0006：M2 最小自举——能力槽位、进程级隔离与预注册裁判](./adr/0006-m2-minimal-bootstrap.md)
-- [ADR 0010：签名来源信任与精确版本 registry](./adr/0010-signed-sharing-and-registry.md)
-- [ADR 0009：M4 独立个体与选择性分享](./adr/0009-m4-selective-local-sharing.md)
-- [ADR 0008：M3 经验驱动演化——冻结经验集、规则归纳与策略候选](./adr/0008-m3-experience-driven-evolution.md)
-- [ADR 0007：本体决策最小实验——有限选择、独立评估与经验记录](./adr/0007-organism-decision-experiment.md)
-
-ADR 0001–0003 保留原始 `proposed` 设计记录；ADR 0004–0010 为 `accepted`，记录已落地的工程决策及其适用范围。工程验收不等于真实模型收益或持续学习效果成立。
-
-## 文档维护
-
-统一术语以 [CONTEXT.md](./CONTEXT.md) 为准，结构关系以领域模型为准；运行语义、进化规则分别由对应文档负责。修改接口或不变量时同步相关验收场景，避免多份文档各自维护不同定义。源码目录只在首次实现时创建，不为远期概念建立空包。
+- [0001：基质与行为分离](./adr/0001-substrate-and-behavior.md)
+- [0002：快照与原子晋升](./adr/0002-snapshots-and-promotion.md)
+- [0003：个体主权与继承](./adr/0003-organism-and-federation.md)
+- [0004：技术栈](./adr/0004-m0-engineering-baseline.md)
+- [0005：外部执行器](./adr/0005-external-executors.md)
+- [0006：能力自举](./adr/0006-m2-minimal-bootstrap.md)
+- [0007：本体决策实验](./adr/0007-organism-decision-experiment.md)
+- [0008：经验驱动演化](./adr/0008-m3-experience-driven-evolution.md)
+- [0009：独立个体与共享](./adr/0009-m4-selective-local-sharing.md)
+- [0010：签名信任与 registry](./adr/0010-signed-sharing-and-registry.md)
