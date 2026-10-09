@@ -8,6 +8,7 @@ import type {
   EvaluationRecord,
   ExperienceDatasetPurpose,
   ExperienceDatasetRecord,
+  ValidationSetRecord,
 } from "../evolution/types.ts";
 import type {
   AttemptRecord,
@@ -38,6 +39,7 @@ import type {
   EvaluationRow,
   ConsolidationJobRow,
   ExperienceDatasetRow,
+  ValidationSetRow,
   EventRow,
   ExperienceRow,
   OrganismRow,
@@ -951,6 +953,63 @@ export class Storage implements KernelStore, RuntimeStore {
     this.db.run(`UPDATE consolidation_jobs SET ${sets.join(", ")} WHERE id = ?`, ...params);
   }
 
+  // ---- 验证集移交注册表 ----
+
+  insertValidationSet(v: ValidationSetRecord): void {
+    this.db.run(
+      `INSERT INTO validation_sets (id, family_ids, source_ref, prepared_by, dev_families_digest, state, usage_count, first_used_at, retired_at, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      v.id,
+      JSON.stringify(v.familyIds),
+      v.sourceRef,
+      v.preparedBy,
+      v.devFamiliesDigest,
+      v.state,
+      v.usageCount,
+      v.firstUsedAt,
+      v.retiredAt,
+      v.createdAt,
+    );
+  }
+
+  getValidationSet(id: string): ValidationSetRecord | undefined {
+    const row = this.db.get<ValidationSetRow>("SELECT * FROM validation_sets WHERE id = ?", id);
+    return row ? mapValidationSet(row) : undefined;
+  }
+
+  listValidationSets(limit: number): ValidationSetRecord[] {
+    return this.db
+      .all<ValidationSetRow>(
+        "SELECT * FROM validation_sets ORDER BY created_at DESC LIMIT ?",
+        limit,
+      )
+      .map(mapValidationSet);
+  }
+
+  updateValidationSet(
+    id: string,
+    patch: Partial<
+      Pick<ValidationSetRecord, "state" | "usageCount" | "firstUsedAt" | "retiredAt">
+    > & { updatedAt: number },
+  ): void {
+    const sets: string[] = [];
+    const params: SQLInputValue[] = [];
+    for (const [key, column] of [
+      ["state", "state"],
+      ["usageCount", "usage_count"],
+      ["firstUsedAt", "first_used_at"],
+      ["retiredAt", "retired_at"],
+    ] as const) {
+      if (patch[key] !== undefined) {
+        sets.push(`${column} = ?`);
+        params.push(patch[key]);
+      }
+    }
+    if (sets.length === 0) return;
+    params.push(id);
+    this.db.run(`UPDATE validation_sets SET ${sets.join(", ")} WHERE id = ?`, ...params);
+  }
+
   insertPromotion(p: PromotionRecord): void {
     this.db.run(
       `INSERT INTO promotions (id, operation_id, kind, organism_id, from_snapshot_id, to_snapshot_id, expected_revision, result_revision, evaluation_ref, authorization_ref, actor, note, created_at)
@@ -1234,5 +1293,21 @@ function mapConsolidationJob(row: ConsolidationJobRow): ConsolidationJobRecord {
     requestedBy: row.requested_by,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+  };
+}
+
+
+function mapValidationSet(row: ValidationSetRow): ValidationSetRecord {
+  return {
+    id: row.id,
+    familyIds: JSON.parse(row.family_ids) as string[],
+    sourceRef: row.source_ref,
+    preparedBy: row.prepared_by,
+    devFamiliesDigest: row.dev_families_digest,
+    state: row.state as ValidationSetRecord["state"],
+    usageCount: row.usage_count,
+    firstUsedAt: row.first_used_at,
+    retiredAt: row.retired_at,
+    createdAt: row.created_at,
   };
 }

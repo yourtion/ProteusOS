@@ -157,3 +157,21 @@ export interface ConsolidationJobRecord {
   createdAt: number;
   updatedAt: number;
 }
+
+/** 验证集生命周期：ready → in_use（一次正式使用）→ retired（仅可作回归集） */
+export type ValidationSetState = "ready" | "in_use" | "retired";
+
+export interface ValidationSetRecord {
+  id: string;
+  familyIds: string[];
+  /** 数据集来源引用（目录/生成参数摘要，供验证负责人定位） */
+  sourceRef: string;
+  preparedBy: string;
+  /** 注册时的开发集 family 指纹（隔离基准；隔离断言依据） */
+  devFamiliesDigest: string;
+  state: ValidationSetState;
+  usageCount: number;
+  firstUsedAt: number | null;
+  retiredAt: number | null;
+  createdAt: number;
+}

@@ -243,3 +243,16 @@ export interface ConsolidationJobRow {
   created_at: number;
   updated_at: number;
 }
+
+export interface ValidationSetRow {
+  id: string;
+  family_ids: string;
+  source_ref: string;
+  prepared_by: string;
+  dev_families_digest: string;
+  state: string;
+  usage_count: number;
+  first_used_at: number | null;
+  retired_at: number | null;
+  created_at: number;
+}

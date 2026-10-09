@@ -37,6 +37,7 @@ import type {
   ExperienceDecisionCallView,
   ExperienceMemberView,
   PolicyArmMetrics,
+  ValidationSetRecord,
 } from "./types.ts";
 
 /**
@@ -1078,6 +1079,122 @@ export class Evolution {
     const job = this.deps.storage.getConsolidationJob(jobId);
     if (!job) throw new EvolutionError("unknown_job", `作业 ${jobId} 不存在`);
     return job;
+  }
+
+  /**
+   * 注册验证集（移交验证负责人机制，实验文档 §12）：
+   * - family 与开发集完全隔离（显式断言，防 held-out 泄漏为开发反馈）
+   * - 固定成员与来源引用，immutable；使用计数与降级语义可审计
+   * devFamiliesDigest 是注册时的开发集 family 指纹——后续开发集扩张
+   * 后重放隔离断言的依据。
+   */
+  registerValidationSet(opts: {
+    familyIds: string[];
+    sourceRef: string;
+    preparedBy: string;
+    /** 注册时开发集全部 family（隔离断言基准） */
+    devFamilyIds: string[];
+  }): ValidationSetRecord {
+    const overlap = opts.familyIds.filter((f) => opts.devFamilyIds.includes(f));
+    if (overlap.length > 0) {
+      throw new EvolutionError(
+        "validation_family_overlap",
+        `验证集 family 与开发集重叠：${overlap.join(", ")}（held-out 不得参与开发反馈）`,
+      );
+    }
+    const devFamiliesDigest = digestOf(canonicalJson([...opts.devFamilyIds].sort()));
+    const now = this.deps.clock.now();
+    const record: ValidationSetRecord = {
+      id: this.deps.ids.next(),
+      familyIds: [...new Set(opts.familyIds)].sort(),
+      sourceRef: opts.sourceRef,
+      preparedBy: opts.preparedBy,
+      devFamiliesDigest,
+      state: "ready",
+      usageCount: 0,
+      firstUsedAt: null,
+      retiredAt: null,
+      createdAt: now,
+    };
+    return this.deps.storage.tx(() => {
+      this.deps.storage.insertValidationSet(record);
+      this.deps.storage.appendEvent({
+        streamId: `validation-set-${record.id}`,
+        type: "validation.set.registered",
+        payload: {
+          validationSetId: record.id,
+          familyCount: record.familyIds.length,
+          preparedBy: record.preparedBy,
+          devFamiliesDigest,
+        },
+        organismId: this.deps.organismId,
+        occurredAt: now,
+      });
+      return record;
+    });
+  }
+
+  /**
+   * 领用验证集做正式评估：ready 或"首次使用中"可领用（计数 +1）；
+   * 正式结果公开后（第二次领用）拒绝——必须先显式 retire 转为回归集。
+   */
+  claimValidationSet(id: string): ValidationSetRecord {
+    const set = this.deps.storage.getValidationSet(id);
+    if (!set) throw new EvolutionError("unknown_validation_set", `验证集 ${id} 不存在`);
+    if (set.state === "retired") {
+      throw new EvolutionError(
+        "validation_set_retired",
+        `验证集 ${id} 已退休为回归集（正式结果已公开，不得继续充当未见验证集）`,
+      );
+    }
+    if (set.usageCount >= 1) {
+      throw new EvolutionError(
+        "validation_set_exhausted",
+        `验证集 ${id} 已被一次正式评估使用（usage=${set.usageCount}）；正式结果公开后须 retire 转为回归集，下一轮另备新 family`,
+      );
+    }
+    return this.deps.storage.tx(() => {
+      const now = this.deps.clock.now();
+      this.deps.storage.updateValidationSet(id, {
+        state: "in_use",
+        usageCount: set.usageCount + 1,
+        firstUsedAt: set.firstUsedAt ?? now,
+        updatedAt: now,
+      });
+      this.deps.storage.appendEvent({
+        streamId: `validation-set-${id}`,
+        type: "validation.set.claimed",
+        payload: { validationSetId: id, usageCount: set.usageCount + 1 },
+        organismId: this.deps.organismId,
+        occurredAt: now,
+      });
+      return this.deps.storage.getValidationSet(id)!;
+    });
+  }
+
+  /** 退休验证集（正式结果公开后显式降级为回归集；此后仅可 purpose=regression 引用） */
+  retireValidationSet(id: string, note?: string): ValidationSetRecord {
+    const set = this.deps.storage.getValidationSet(id);
+    if (!set) throw new EvolutionError("unknown_validation_set", `验证集 ${id} 不存在`);
+    if (set.state === "retired") return set;
+    return this.deps.storage.tx(() => {
+      const now = this.deps.clock.now();
+      this.deps.storage.updateValidationSet(id, { state: "retired", retiredAt: now, updatedAt: now });
+      this.deps.storage.appendEvent({
+        streamId: `validation-set-${id}`,
+        type: "validation.set.retired",
+        payload: { validationSetId: id, note: note ?? null, usageCount: set.usageCount },
+        organismId: this.deps.organismId,
+        occurredAt: now,
+      });
+      return this.deps.storage.getValidationSet(id)!;
+    });
+  }
+
+  validationSet(id: string): ValidationSetRecord {
+    const set = this.deps.storage.getValidationSet(id);
+    if (!set) throw new EvolutionError("unknown_validation_set", `验证集 ${id} 不存在`);
+    return set;
   }
 
   /** 同步便捷入口（不经队列）：提交语义见 executeConsolidation */

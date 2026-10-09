@@ -343,4 +343,26 @@ CREATE INDEX idx_consolidation_jobs_state ON consolidation_jobs(state);
 CREATE INDEX idx_consolidation_jobs_dataset ON consolidation_jobs(dataset_id, params_digest);
 `,
   },
+  {
+    // 验证集移交验证负责人机制（实验文档 §12 / evolution.md"多次查看同一
+    // held-out 集会使其变成开发反馈"）：注册表固定 family 成员与隔离基准，
+    // 使用计数与降级语义（正式使用一次后退休为回归集）可审计。
+    version: 9,
+    name: "validation-sets",
+    sql: `
+CREATE TABLE validation_sets (
+  id TEXT PRIMARY KEY,
+  family_ids TEXT NOT NULL,
+  source_ref TEXT NOT NULL,
+  prepared_by TEXT NOT NULL,
+  dev_families_digest TEXT NOT NULL,
+  state TEXT NOT NULL,
+  usage_count INTEGER NOT NULL DEFAULT 0,
+  first_used_at INTEGER,
+  retired_at INTEGER,
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX idx_validation_sets_state ON validation_sets(state);
+`,
+  },
 ];
