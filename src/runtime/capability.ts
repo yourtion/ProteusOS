@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, realpathSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import type { ExecutionResult } from "./types.ts";
 
@@ -115,7 +115,10 @@ export function runCapabilityModule(
   }
 
   const startedAt = Date.now();
-  const result = spawnSync(process.execPath, [join(moduleRoot, module.entry)], {
+  // 入口先 realpath 再作为 argv[1] 传入：Node ESM 的 import.meta.url 总是真实路径，
+  // 若经符号链接传参（如 /tmp → /private/tmp），被测代码的主模块判断会失配——
+  // 基座负责消除歧义，不要求每个能力实现自行处理符号链接
+  const result = spawnSync(process.execPath, [realpathSync(join(moduleRoot, module.entry))], {
     cwd: workspace,
     encoding: "utf8",
     timeout: timeoutMs,
