@@ -1,4 +1,9 @@
 import type { PublicationRecord, ImportRecord } from "../federation/types.ts";
+import type {
+  PublicationKey,
+  RegistryCredential,
+  SignedShareEnvelope,
+} from "../federation/trust.ts";
 import type { SQLInputValue } from "node:sqlite";
 import type {
   ArtifactVersion,
@@ -152,6 +157,17 @@ export class Storage implements KernelStore, RuntimeStore {
       scope,
       principalId,
       action,
+    );
+  }
+
+  deleteAccessGrant(scope: string, principalId: string, action: AccessAction): boolean {
+    return (
+      this.db.run(
+        "DELETE FROM access_grants WHERE scope = ? AND principal_id = ? AND action = ?",
+        scope,
+        principalId,
+        action,
+      ) > 0
     );
   }
 
@@ -1266,6 +1282,163 @@ export class Storage implements KernelStore, RuntimeStore {
       JSON.stringify(p.versionIds),
       p.createdBy,
       p.createdAt,
+    );
+  }
+
+  insertPublicationKey(key: PublicationKey): void {
+    this.db.run(
+      "INSERT INTO publication_keys VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      key.organismId,
+      key.keyId,
+      key.teamId,
+      key.publisher,
+      key.publicKey,
+      key.state,
+      key.localSigner ? 1 : 0,
+      key.createdBy,
+      key.createdAt,
+    );
+  }
+
+  getPublicationKey(organismId: string, keyId: string): PublicationKey | undefined {
+    const row = this.db.get<{
+      organism_id: string;
+      key_id: string;
+      team_id: string;
+      publisher: string;
+      public_key: string;
+      state: PublicationKey["state"];
+      local_signer: number;
+      created_by: string;
+      created_at: number;
+    }>("SELECT * FROM publication_keys WHERE organism_id = ? AND key_id = ?", organismId, keyId);
+    return row
+      ? {
+          organismId: row.organism_id,
+          keyId: row.key_id,
+          teamId: row.team_id,
+          publisher: row.publisher,
+          publicKey: row.public_key,
+          state: row.state,
+          localSigner: !!row.local_signer,
+          createdBy: row.created_by,
+          createdAt: row.created_at,
+        }
+      : undefined;
+  }
+
+  revokePublicationKey(organismId: string, keyId: string): void {
+    this.db.run(
+      "UPDATE publication_keys SET state = 'revoked' WHERE organism_id = ? AND key_id = ?",
+      organismId,
+      keyId,
+    );
+  }
+
+  recordImportSignature(importId: string, keyId: string, signedRef: string): void {
+    const existing = this.db.get<{ key_id: string; signed_ref: string }>(
+      "SELECT * FROM import_signatures WHERE import_id = ?",
+      importId,
+    );
+    if (existing && (existing.key_id !== keyId || existing.signed_ref !== signedRef))
+      throw new Error("导入记录已绑定不同签名，不能替换来源证明");
+    this.db.run(
+      "INSERT OR IGNORE INTO import_signatures VALUES (?, ?, ?)",
+      importId,
+      keyId,
+      signedRef,
+    );
+  }
+
+  isSharedImportTrusted(importId: string, organismId: string): boolean {
+    const imported = this.getSharedImport(importId);
+    if (!imported || imported.organismId !== organismId) return false;
+    const signature = this.db.get<{ key_id: string }>(
+      "SELECT * FROM import_signatures WHERE import_id = ?",
+      importId,
+    );
+    return !signature || this.getPublicationKey(organismId, signature.key_id)?.state === "active";
+  }
+
+  getImportSignatureRef(importId: string): string | undefined {
+    return this.db.get<{ signed_ref: string }>(
+      "SELECT signed_ref FROM import_signatures WHERE import_id = ?",
+      importId,
+    )?.signed_ref;
+  }
+
+  insertRegistryCredential(credential: RegistryCredential): void {
+    this.db.run(
+      "INSERT INTO registry_credentials VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      credential.id,
+      credential.organismId,
+      credential.tokenDigest,
+      credential.teamId,
+      credential.principalId,
+      JSON.stringify(credential.actions),
+      credential.state,
+      credential.createdBy,
+      credential.createdAt,
+    );
+  }
+
+  getRegistryCredential(organismId: string, id: string): RegistryCredential | undefined {
+    const r = this.db.get<{
+      id: string;
+      organism_id: string;
+      token_digest: string;
+      team_id: string;
+      principal_id: string;
+      actions: string;
+      state: RegistryCredential["state"];
+      created_by: string;
+      created_at: number;
+    }>("SELECT * FROM registry_credentials WHERE organism_id = ? AND id = ?", organismId, id);
+    return r
+      ? {
+          id: r.id,
+          organismId: r.organism_id,
+          tokenDigest: r.token_digest,
+          teamId: r.team_id,
+          principalId: r.principal_id,
+          actions: JSON.parse(r.actions),
+          state: r.state,
+          createdBy: r.created_by,
+          createdAt: r.created_at,
+        }
+      : undefined;
+  }
+
+  findRegistryCredential(organismId: string, tokenDigest: string): RegistryCredential | undefined {
+    const row = this.db.get<{ id: string }>(
+      "SELECT id FROM registry_credentials WHERE organism_id = ? AND token_digest = ?",
+      organismId,
+      tokenDigest,
+    );
+    return row ? this.getRegistryCredential(organismId, row.id) : undefined;
+  }
+
+  revokeRegistryCredential(id: string): void {
+    this.db.run("UPDATE registry_credentials SET state = 'revoked' WHERE id = ?", id);
+  }
+
+  getRegistryPackageRef(organismId: string, digest: string): string | undefined {
+    return this.db.get<{ signed_ref: string }>(
+      "SELECT signed_ref FROM registry_packages WHERE organism_id = ? AND digest = ?",
+      organismId,
+      digest,
+    )?.signed_ref;
+  }
+
+  insertRegistryPackage(organismId: string, pkg: SignedShareEnvelope, ref: string): void {
+    this.db.run(
+      "INSERT INTO registry_packages VALUES (?, ?, ?, ?, ?, ?)",
+      organismId,
+      pkg.envelope.digest,
+      ref,
+      pkg.envelope.bundle.teamId,
+      pkg.envelope.bundle.scope,
+      pkg.signer.keyId,
     );
   }
 

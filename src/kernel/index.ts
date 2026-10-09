@@ -40,6 +40,7 @@ export interface KernelStore {
     grantedBy: string,
     createdAt: number,
   ): void;
+  deleteAccessGrant(scope: string, principalId: string, action: AccessAction): boolean;
   findSnapshotByBindings(bindings: Record<string, string>): GenomeSnapshot | undefined;
   insertSnapshot(s: GenomeSnapshot): "inserted" | "exists";
   findSnapshotByDigest(digest: string): GenomeSnapshot | undefined;
@@ -299,6 +300,17 @@ export class Kernel {
     this.assertScopeAccess(scope, authorizedBy, "manage");
     this.assertPrincipal(principalId);
     this.store.insertAccessGrant(scope, principalId, action, authorizedBy, this.clock.now());
+  }
+
+  revokeAccess(
+    scope: string,
+    principalId: string,
+    action: AccessAction,
+    authorizedBy: string,
+  ): boolean {
+    this.assertScopeAccess(scope, authorizedBy, "manage");
+    this.assertPrincipal(principalId);
+    return this.store.deleteAccessGrant(scope, principalId, action);
   }
 
   resolveVersionClosure(versionIds: string[]): Map<string, ArtifactVersion> {

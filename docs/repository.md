@@ -1,6 +1,6 @@
 # 仓库架构与实现约束
 
-状态：**active**（2026-10-09）。工程基线已按 [ADR 0004](./adr/0004-m0-engineering-baseline.md) 落地；M0–M4 目录已创建并在用（含 `src/evolution/` 与验证布局 Evaluation 层 `tests/evals/`，M2 起）；examples/ 仍按“需要时才创建”原则留待后续里程碑。
+状态：**active**（2026-10-10）。工程基线已按 [ADR 0004](./adr/0004-m0-engineering-baseline.md) 落地；M0–M4 目录已创建并在用（含 `src/evolution/` 与验证布局 Evaluation 层 `tests/evals/`，M2 起）；examples/ 仍按“需要时才创建”原则留待后续里程碑。
 
 ## 1. 从单包模块化起步
 
@@ -18,7 +18,7 @@ ProteusOS/
 │   │   ├── executor-process/   # 本地受信进程（M0 stats worker）
 │   │   ├── executor-acp/       # ACP client：驱动 claude-agent-acp / codex-acp
 │   │   └── executor-pi/        # pi 官方 SDK 直连（ADR 0005）
-│   ├── federation/             # 白名单分享包、团队发布、导入/fork/本地继承
+│   ├── federation/             # 分享包/继承、来源签名与信任、HTTP registry
 │   ├── storage/                # node:sqlite、迁移、事件流、outbox、blob
 │   └── app/                    # 组装依赖、执行器注册表、CLI 命令与 seed
 ├── tests/
@@ -74,6 +74,7 @@ Clock、ID 生成、外部调用和持久化作为内部 seam 注入。公开 Pr
 <instance-root>/
 ├── metadata.sqlite             # 状态、事件、outbox、版本引用与晋升
 ├── blobs/                      # 按内容摘要保存的不可变内容
+├── keys/                       # 本地发布私钥（0600；不进入 blob 或分享包）
 ├── workspaces/                 # Run/Process 的可变工作区
 └── tmp/                        # 构建和导入的临时区
 ```

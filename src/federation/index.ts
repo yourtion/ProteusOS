@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { envelopeSchema, heritableKind, validateShareEnvelope } from "./package.ts";
+import type { SignedShareEnvelope } from "./trust.ts";
 import type { Clock, IdGen, Kernel, ArtifactVersion } from "../kernel/index.ts";
 import { policyEvaluationPlanDigest, type Evolution } from "../evolution/index.ts";
 import type { CandidateRecord } from "../evolution/types.ts";
@@ -15,50 +17,6 @@ import type {
 export type { ImportRecord, PublicationRecord, ShareBundle, ShareEnvelope } from "./types.ts";
 
 const id = z.string().min(1).max(256);
-const digest = z.string().regex(/^[a-f0-9]{64}$/);
-const parentSchema = z.strictObject({ id, contentDigest: digest, lineageId: id });
-const envelopeSchema = z.strictObject({
-  digest,
-  bundle: z.strictObject({
-    format: z.literal("proteus-share-v1"),
-    publicationId: id,
-    teamId: id,
-    scope: id,
-    publisher: id,
-    createdAt: z.number().int().nonnegative(),
-    roots: z.array(id).min(1).max(256),
-    versions: z
-      .array(
-        z.strictObject({
-          id,
-          artifactId: id,
-          kind: id,
-          lineageId: id,
-          scope: id,
-          schemaVersion: z.number().int().positive(),
-          content: z.string().max(8_000_000),
-          contentDigest: digest,
-          dependencies: z.array(id).max(256),
-          parents: z.array(parentSchema).max(256),
-          withheldParentCount: z.number().int().nonnegative(),
-        }),
-      )
-      .min(1)
-      .max(256),
-    evidence: z
-      .array(
-        z.strictObject({
-          protocolDigest: digest,
-          verdict: z.literal("eligible"),
-          samples: z.number().int().min(4),
-          baseSuccessRate: z.number().min(0).max(1).nullable(),
-          candidateSuccessRate: z.number().min(0).max(1).nullable(),
-        }),
-      )
-      .max(64),
-  }),
-});
-
 export class FederationError extends Error {
   readonly code: string;
   constructor(code: string, message: string) {
@@ -78,6 +36,7 @@ export class Federation {
     actorId: string;
     clock: Clock;
     ids: IdGen;
+    verifySignature?: (input: unknown) => SignedShareEnvelope;
   };
   constructor(deps: Federation["deps"]) {
     this.deps = deps;
@@ -166,7 +125,7 @@ export class Federation {
         opts.scope.startsWith("team:") ? opts.scope.slice(5) : opts.createdBy,
         opts.scope,
       );
-      const versions: Record<string, string> = {};
+      const versions: Record<string, string> = Object.create(null);
       const pending = [...sources];
       while (pending.length) {
         const index = pending.findIndex((v) =>
@@ -307,35 +266,30 @@ export class Federation {
 
   importBundle(input: unknown, opts: { createdBy: string }): ImportRecord {
     this.actor(opts.createdBy);
-    const envelope = envelopeSchema.parse(input);
-    if (canonicalJson(envelope).length > 16_000_000)
-      throw new FederationError("bundle_too_large", "分享包超出导入预算");
-    if (digestOf(canonicalJson(envelope.bundle)) !== envelope.digest)
-      throw new FederationError("bundle_digest_mismatch", "分享包摘要不符");
+    const isSigned =
+      !!input &&
+      typeof input === "object" &&
+      (input as Record<string, unknown>)["format"] === "proteus-signed-share-v1";
+    const rawEnvelope = isSigned ? (input as Record<string, unknown>)["envelope"] : input;
+    const envelope = validateShareEnvelope(rawEnvelope);
     const bundle = envelope.bundle;
-    if (bundle.scope !== "public" && bundle.scope !== `team:${bundle.teamId}`)
-      throw new FederationError("invalid_scope", "分享包 scope 与团队不一致");
     if (bundle.scope !== "public")
       this.deps.kernel.assertScopeAccess(bundle.scope, opts.createdBy, "read");
     const sourceVersions = new Map(bundle.versions.map((v) => [v.id, v]));
-    if (
-      sourceVersions.size !== bundle.versions.length ||
-      new Set(bundle.roots).size !== bundle.roots.length ||
-      bundle.roots.some((v) => !sourceVersions.has(v))
-    )
-      throw new FederationError("invalid_bundle", "重复版本或根版本缺失");
-    for (const v of sourceVersions.values()) {
-      if (!heritableKind(v.kind) || !this.shareable(v.scope, bundle.scope))
-        throw new FederationError("private_dependency", "外部版本类型或 scope 不允许分享");
-      if (
-        digestOf(v.content) !== v.contentDigest ||
-        v.dependencies.some((d) => !sourceVersions.has(d))
-      )
-        throw new FederationError("invalid_bundle", "内容摘要不符或依赖闭包缺失");
-    }
     return this.deps.storage.tx(() => {
+      const authenticated = isSigned ? this.deps.verifySignature?.(input) : undefined;
+      if (isSigned && !authenticated)
+        throw new FederationError("signature_verifier_missing", "签名验证器未装配");
       const previous = this.deps.storage.findSharedImport(this.deps.organismId, envelope.digest);
-      if (previous) return previous;
+      if (previous) {
+        if (authenticated)
+          this.deps.storage.recordImportSignature(
+            previous.id,
+            authenticated.signer.keyId,
+            this.deps.blobs.write(canonicalJson(authenticated)).ref,
+          );
+        return previous;
+      }
       const importId = this.deps.ids.next();
       const lineageId = this.deps.ids.next();
       this.deps.kernel.createLineage(lineageId, opts.createdBy, `organism:${this.deps.organismId}`);
@@ -352,7 +306,7 @@ export class Federation {
             publicationDigest: envelope.digest,
           });
       }
-      const versions: Record<string, string> = {};
+      const versions: Record<string, string> = Object.create(null);
       const pending = [...sourceVersions.values()];
       while (pending.length) {
         const index = pending.findIndex((v) => v.dependencies.every((d) => versions[d]));
@@ -391,6 +345,12 @@ export class Federation {
         createdAt: this.deps.clock.now(),
       };
       this.deps.storage.insertSharedImport(imported);
+      if (authenticated)
+        this.deps.storage.recordImportSignature(
+          imported.id,
+          authenticated.signer.keyId,
+          this.deps.blobs.write(canonicalJson(authenticated)).ref,
+        );
       this.event(`import-${importId}`, "versions.imported", {
         importId,
         bundleDigest: envelope.digest,
@@ -414,6 +374,8 @@ export class Federation {
     this.actor(opts.createdBy);
     return this.deps.storage.tx(() => {
       const imported = this.ownedImport(importId);
+      if (!this.deps.storage.isSharedImportTrusted(importId, this.deps.organismId))
+        throw new FederationError("source_untrusted", "共享来源签名信任已撤销");
       if (imported.state === "rejected")
         throw new FederationError("import_rejected", "已拒绝的版本不能继续继承");
       const organism = this.deps.kernel.getOrganism(this.deps.organismId)!;
@@ -587,11 +549,4 @@ export class Federation {
       occurredAt: this.deps.clock.now(),
     });
   }
-}
-
-function heritableKind(kind: string): boolean {
-  return (
-    ["task-graph", "routing-policy", "acceptance-evaluator", "decision-view"].includes(kind) ||
-    /^capability\/[a-z][a-z0-9-]*$/.test(kind)
-  );
 }

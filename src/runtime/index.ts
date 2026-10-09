@@ -604,6 +604,10 @@ export class Runtime {
         this.markNode(runId, node, "skipped", "cancel_requested", nodeStates);
         continue;
       }
+      if (failure?.reason === "access_revoked") {
+        this.markNode(runId, node, "skipped", "access_revoked", nodeStates);
+        continue;
+      }
       if (!node.dependsOn.every((d) => nodeStates.get(d) === "succeeded")) {
         this.markNode(runId, node, "skipped", "dependency_not_succeeded", nodeStates);
         continue;
@@ -1122,6 +1126,11 @@ export class Runtime {
     // 事务一：额度检查与预留 + prepared 记录（远端调用才查额度；本地计算不消耗）
     const now = this.deps.clock.now();
     this.deps.storage.tx(() => {
+      try {
+        this.assertRunAccess(run, task, versions);
+      } catch {
+        throw new NodeFailure("access_revoked", "访问权限已撤销，禁止准备决策调用");
+      }
       if (kind === "model") {
         const scopes: Array<{ organismId: string; experimentId?: string | null }> = [
           { organismId: run.organismId },
@@ -1200,8 +1209,26 @@ export class Runtime {
   ): Promise<RunSummaryDecision> {
     const { run, node, provider, request, remainingMs, nodeStates } = args;
     const now = this.deps.clock.now();
+    let beforeSendFailure: NodeFailure | undefined;
     // 事务二：started 先于网络发送（§4.3：标记后、发送前崩溃保守判 unknown 的依据）
     this.deps.storage.tx(() => {
+      try {
+        const task = this.deps.storage.getTask(run.taskId);
+        if (!task) throw new Error(`run ${run.id} 的 task 缺失`);
+        this.assertRunAccess(run, task, this.deps.kernel.resolveSnapshot(run.snapshotId).versions);
+      } catch {
+        this.deps.storage.updateDecisionCall(
+          decisionId,
+          { state: "cancelled", sent: false, endedAt: now, errorClass: "access_revoked" },
+          { updatedAt: now },
+        );
+        this.appendDecisionEvent(run.id, node, "decision.cancelled", {
+          decisionId,
+          phase: "access_revoked",
+        });
+        beforeSendFailure = new NodeFailure("access_revoked", "访问权限已撤销，决策调用未发送");
+        return;
+      }
       if (this.deps.storage.hasCancelIntent(run.id)) {
         this.deps.storage.updateDecisionCall(
           decisionId,
@@ -1217,10 +1244,11 @@ export class Runtime {
           decisionId,
           phase: "before_send",
         });
-        throw new NodeFailure(
+        beforeSendFailure = new NodeFailure(
           "decision_cancelled",
           `决策 ${node.id} 发送前收到取消请求，调用未发出（额度已释放）`,
         );
+        return;
       }
       this.deps.storage.updateDecisionCall(
         decisionId,
@@ -1229,6 +1257,7 @@ export class Runtime {
       );
       this.appendDecisionEvent(run.id, node, "decision.started", { decisionId });
     });
+    if (beforeSendFailure) throw beforeSendFailure;
 
     // 网络调用在数据库事务外执行；超时取单次上限与 Run 剩余时间的较小值
     const startedAt = this.deps.clock.now();
@@ -1833,6 +1862,11 @@ export class Runtime {
     // Attempt 配额检查与创建必须在同一事务内：并发派发不会重复花费同一余额。
     // 重试沿用 Process 身份并创建新 Attempt（docs/runtime.md §1）。
     const processId = this.deps.storage.tx((): string => {
+      try {
+        this.assertRunAccess(run, task, versions);
+      } catch {
+        throw new NodeFailure("access_revoked", "访问权限已撤销，禁止派发 worker");
+      }
       // worker 派发前检查取消与未结决策调用（§4.3：不能只在实验 runner 内阻止）
       if (this.deps.storage.hasCancelIntent(runId)) {
         throw new NodeFailure("cancel_requested", `execute ${node.id} 派发前收到取消请求`);
@@ -2190,6 +2224,21 @@ export class Runtime {
     if (run.organismId !== this.deps.organismId)
       throw new RuntimeError("unknown_run", "Run 属于其他个体");
     return run;
+  }
+
+  private assertRunAccess(
+    run: RunRecord,
+    task: TaskRecord,
+    versions: Map<string, ArtifactVersion>,
+  ): void {
+    const actors = new Set([this.deps.actorId ?? task.requestedBy, task.requestedBy]);
+    for (const actor of actors) {
+      this.deps.kernel.assertOrganismAccess(run.organismId, actor, "operate");
+      for (const version of versions.values())
+        this.deps.kernel.assertVersionAccess(version.id, actor);
+      if (run.evaluatorVersionId)
+        this.deps.kernel.assertVersionAccess(run.evaluatorVersionId, actor);
+    }
   }
 
   private transition(runId: string, from: RunState, to: RunState, reason: string | null): void {

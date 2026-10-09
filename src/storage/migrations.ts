@@ -474,4 +474,47 @@ CREATE TABLE shared_imports (
     name: "m4-organism-scoped-experiment-limits",
     sql: "INSERT OR IGNORE INTO decision_call_limits SELECT 'experiment:organism-default:' || substr(scope, 12), max_calls, created_at FROM decision_call_limits WHERE scope LIKE 'experiment:%';",
   },
+  {
+    version: 14,
+    name: "signed-sharing-trust-and-registry",
+    sql: `
+CREATE TABLE publication_keys (
+  organism_id TEXT NOT NULL,
+  key_id TEXT NOT NULL,
+  team_id TEXT NOT NULL,
+  publisher TEXT NOT NULL,
+  public_key TEXT NOT NULL,
+  state TEXT NOT NULL CHECK(state IN ('active', 'revoked')),
+  local_signer INTEGER NOT NULL DEFAULT 0,
+  created_by TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  PRIMARY KEY(organism_id, key_id)
+);
+CREATE TABLE import_signatures (
+  import_id TEXT PRIMARY KEY,
+  key_id TEXT NOT NULL,
+  signed_ref TEXT NOT NULL
+);
+CREATE TABLE registry_packages (
+  organism_id TEXT NOT NULL,
+  digest TEXT NOT NULL,
+  signed_ref TEXT NOT NULL,
+  team_id TEXT NOT NULL,
+  scope TEXT NOT NULL,
+  key_id TEXT NOT NULL,
+  PRIMARY KEY(organism_id, digest)
+);
+CREATE TABLE registry_credentials (
+  id TEXT PRIMARY KEY,
+  organism_id TEXT NOT NULL,
+  token_digest TEXT NOT NULL UNIQUE,
+  team_id TEXT NOT NULL,
+  principal_id TEXT NOT NULL,
+  actions TEXT NOT NULL,
+  state TEXT NOT NULL CHECK(state IN ('active', 'revoked')),
+  created_by TEXT NOT NULL,
+  created_at INTEGER NOT NULL
+);
+`,
+  },
 ];

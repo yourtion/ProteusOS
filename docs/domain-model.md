@@ -65,7 +65,7 @@ Organism 的历史由 Run、Promotion 和所选快照串联；持续身份不等
 - `scope` 说明资源所属或分享的范围，如指定 organism/team/organization 或 public。
 - `grantRef` 指向谁可对什么对象执行什么操作、资源上限及有效期的授权记录。
 
-M4 已实现本地 user/organism/team 与 public 范围，以及明确的 read/operate/promote/publish/manage 授权；团队身份登记不自动赋予个人操作权限。网络身份认证尚未实现，本地 CLI 操作者提供受信身份声明。Public 只表示可公开读取，不等于允许执行、晋升或进一步分享私有依赖。
+M4 已实现本地 user/organism/team 与 public 范围，以及明确的 read/operate/promote/publish/manage 授权；团队身份登记不自动赋予个人操作权限。签名共享按公钥固定 team/publisher 来源身份，接收方独立登记信任；registry 请求凭据绑定既有主体与团队权限。本地 CLI 操作者仍提供受信身份声明。Public 只表示可公开读取，不等于允许执行、晋升或进一步分享私有依赖。
 
 Run 保存准入时的授权引用以便审计，但每次派发仍检查当前撤权和剩余预算。权限不会因为写入快照而永久有效。资源账本至少记录预算预留、消耗、释放与未知成本；多个并发 Run 的配额预留须原子化，不能各自读取同一余额后重复花费。
 

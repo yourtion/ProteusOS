@@ -4,5 +4,7 @@ dist/
 *.log
 .env
 .env.*
+**/keys/*.pem
+*.token
 .zcodeignore
 .DS_Store

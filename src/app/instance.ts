@@ -11,6 +11,7 @@ import { PiExecutor } from "../adapters/executor-pi/index.ts";
 import { llmProposerFromEnv } from "../adapters/consolidation-llm/index.ts";
 import type { RouteProposer } from "../evolution/consolidation.ts";
 import { Federation } from "../federation/index.ts";
+import { PublicationTrust } from "../federation/trust.ts";
 import { Evolution } from "../evolution/index.ts";
 import { Kernel } from "../kernel/index.ts";
 import { Runtime } from "../runtime/index.ts";
@@ -37,6 +38,7 @@ export interface AppInstance {
   runtime: Runtime;
   evolution: Evolution;
   federation: Federation;
+  sharingTrust: PublicationTrust;
   blobs: BlobStore;
   logger: Logger;
   close(): void;
@@ -176,11 +178,24 @@ export function openInstance(
     clock,
     ids,
   });
+  let sharingTrust: PublicationTrust;
   const federation = new Federation({
     kernel,
     storage,
     blobs,
     evolution,
+    organismId,
+    actorId,
+    clock,
+    ids,
+    verifySignature: (input) => sharingTrust.verify(input),
+  });
+  sharingTrust = new PublicationTrust({
+    kernel,
+    storage,
+    blobs,
+    federation,
+    root,
     organismId,
     actorId,
     clock,
@@ -193,6 +208,7 @@ export function openInstance(
     runtime,
     evolution,
     federation,
+    sharingTrust,
     blobs,
     logger: options.logger ?? createLogger(),
     close: () => db.close(),

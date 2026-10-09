@@ -660,6 +660,14 @@ export class Evolution {
         this.deps.storage.getSharedImport(candidate.sourceRefs["importId"]!)?.state !== "imported"
       )
         throw new EvolutionError("import_rejected", "拒绝或缺失的导入不得晋升");
+      if (
+        candidate.sourceRefs["candidateType"] === "inheritance" &&
+        !this.deps.storage.isSharedImportTrusted(
+          candidate.sourceRefs["importId"]!,
+          this.deps.organismId,
+        )
+      )
+        throw new EvolutionError("source_untrusted", "共享来源签名信任已撤销");
       const latest = this.deps.storage.listEvaluationsByCandidate(candidateId, 1)[0];
       if (
         latest &&
@@ -1831,6 +1839,14 @@ export class Evolution {
       this.deps.storage.getSharedImport(candidate.sourceRefs["importId"]!)?.state !== "imported"
     )
       throw new EvolutionError("import_rejected", "导入已拒绝或缺失，不得评估继承候选");
+    if (
+      candidate.sourceRefs["candidateType"] === "inheritance" &&
+      !this.deps.storage.isSharedImportTrusted(
+        candidate.sourceRefs["importId"]!,
+        this.deps.organismId,
+      )
+    )
+      throw new EvolutionError("source_untrusted", "共享来源签名信任已撤销");
     const plan = this.policyEvaluationPlan(candidateId);
     if (
       suppliedPlan &&

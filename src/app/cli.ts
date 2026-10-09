@@ -1,5 +1,17 @@
 import { Command } from "commander";
 import {
+  accessCommand,
+  keyCreateCommand,
+  keyTrustCommand,
+  keyRevokeCommand,
+  publicationSignCommand,
+  registryCredentialCommand,
+  registryRevokeCommand,
+  registryPublishCommand,
+  registryImportCommand,
+  registryServeCommand,
+} from "./sharing-commands.ts";
+import {
   advanceCommand,
   buildCommand,
   candidatesCommand,
@@ -451,6 +463,105 @@ withCommon(
     .option("--note <note>", "结案说明"),
 ).action(async (decisionId: string, opts) => {
   await settleDecisionCommand(decisionId, opts);
+});
+
+for (const kind of ["grant", "revoke"] as const) {
+  withCommon(
+    program
+      .command(`access-${kind}`)
+      .description(`${kind === "grant" ? "授予" : "撤销"}当前组织或团队权限`)
+      .argument("<scope>", "organism:<id> 或 team:<id>")
+      .argument("<principal>")
+      .requiredOption("--permission <action>", "read/operate/promote/publish/manage"),
+  ).action(async (scope: string, principal: string, opts) => {
+    await accessCommand(kind, scope, principal, opts);
+  });
+}
+withCommon(
+  program
+    .command("sharing-key-create")
+    .description("创建团队发布签名密钥，仅导出公钥")
+    .argument("<team>")
+    .requiredOption("--public-out <file>", "公钥文件（须不存在）"),
+).action(async (team: string, opts) => {
+  await keyCreateCommand(team, opts);
+});
+withCommon(
+  program
+    .command("sharing-key-trust")
+    .description("登记当前个体信任的团队发布公钥")
+    .argument("<team>")
+    .requiredOption("--publisher <principal>")
+    .requiredOption("--public-key <file>"),
+).action(async (team: string, opts) => {
+  await keyTrustCommand(team, opts);
+});
+withCommon(
+  program
+    .command("sharing-key-revoke")
+    .description("永久撤销当前个体对发布公钥的信任")
+    .argument("<keyId>"),
+).action(async (keyId: string, opts) => {
+  await keyRevokeCommand(keyId, opts);
+});
+withCommon(
+  program
+    .command("publication-sign")
+    .description("导出带来源签名的离线分享包")
+    .argument("<publicationId>")
+    .requiredOption("--key <keyId>")
+    .requiredOption("--out <file>"),
+).action(async (publicationId: string, opts) => {
+  await publicationSignCommand(publicationId, opts);
+});
+
+const registry = program
+  .command("registry")
+  .description("签名发布 registry（客户端远程地址须 HTTPS）");
+withCommon(
+  registry
+    .command("serve")
+    .description("启动本地 registry；远程部署通过 HTTPS 反向代理接入")
+    .option("--port <port>", "本机监听端口，0 为随机", "9030"),
+).action(async (opts) => {
+  await registryServeCommand(opts);
+});
+withCommon(
+  registry
+    .command("token-create")
+    .description("为团队已有权限签发 registry 凭据")
+    .requiredOption("--team <id>")
+    .requiredOption("--principal <id>")
+    .requiredOption("--permission <actions...>", "read/publish")
+    .requiredOption("--out <file>", "凭据文件（须不存在，权限 0600）"),
+).action(async (opts) => {
+  await registryCredentialCommand(opts);
+});
+withCommon(
+  registry.command("token-revoke").description("撤销 registry 凭据").argument("<id>"),
+).action(async (id: string, opts) => {
+  await registryRevokeCommand(id, opts);
+});
+withCommon(
+  registry
+    .command("publish")
+    .description("签名并上传精确发布记录，不重试远端写入")
+    .argument("<publicationId>")
+    .requiredOption("--key <keyId>")
+    .requiredOption("--registry <url>")
+    .requiredOption("--token-file <file>"),
+).action(async (publicationId: string, opts) => {
+  await registryPublishCommand(publicationId, opts);
+});
+withCommon(
+  registry
+    .command("import")
+    .description("下载并验证当前个体信任的签名发布，不改变默认行为")
+    .argument("<digest>")
+    .requiredOption("--registry <url>")
+    .option("--token-file <file>", "team 包需要 registry read 凭据"),
+).action(async (digest: string, opts) => {
+  await registryImportCommand(digest, opts);
 });
 
 program.parseAsync(process.argv).catch((err: unknown) => {
