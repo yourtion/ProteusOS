@@ -1,4 +1,4 @@
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -6,12 +6,58 @@ import { openInstance, type AppInstance } from "../src/app/instance.ts";
 import { ensureJudgeGenome, HYBRID_EVALUATOR_CONTENT } from "../src/evolution/assets.ts";
 import type { ExecutorProvider } from "../src/runtime/types.ts";
 import { installSeed, canonicalJson } from "../src/app/seed.ts";
+import type { PolicyEvaluationPlan } from "../src/evolution/index.ts";
 
 export const FIXTURES = fileURLToPath(new URL("./fixtures/stats", import.meta.url));
 export const REPO_ROOT = resolve(fileURLToPath(new URL("..", import.meta.url)));
 
 export function fixturePath(...parts: string[]): string {
   return join(FIXTURES, ...parts);
+}
+
+/** Register an isolated, immutable policy validation plan for integration tests. */
+export function registerPolicyValidationSet(
+  inst: AppInstance,
+  plan: PolicyEvaluationPlan,
+  sourceRef = "tests/integration/policy-evidence.test.ts",
+): string {
+  const familyIds = [...new Set(plan.cases.map((c) => c.familyId))];
+  return inst.evolution.registerValidationSet({
+    familyIds,
+    devFamilyIds: [],
+    sourceRef,
+    preparedBy: "principal-local",
+    plan,
+  }).id;
+}
+
+export function policyValidationPlan(repeats = 1): PolicyEvaluationPlan {
+  const fixture = fileURLToPath(
+    new URL("./fixtures/policy-evolution/validation-cases.json", import.meta.url),
+  );
+  const cases = JSON.parse(readFileSync(fixture, "utf8")) as Array<{
+    id: string;
+    familyId: string;
+    role?: "validation" | "regression";
+    task: PolicyEvaluationPlan["cases"][number]["task"];
+    expectedChoice: string | null;
+  }>;
+  return {
+    cases: cases.map((c) => ({
+      ...c,
+      task: {
+        ...c.task,
+        inputs: c.task.inputs.map((p) => resolve(REPO_ROOT, p)),
+        acceptance: {
+          ...c.task.acceptance,
+          outputSchema: resolve(REPO_ROOT, c.task.acceptance.outputSchema),
+        },
+      },
+    })),
+    repeats,
+    thresholds: { minSuccessRate: 0.75, minImprovement: 0, minSamples: 1 },
+    requestedBy: "principal-local",
+  };
 }
 
 export function tempInstanceRoot(): string {

@@ -2,6 +2,7 @@ import type { SQLInputValue } from "node:sqlite";
 import type { ArtifactVersion, GenomeSnapshot, KernelStore } from "../kernel/index.ts";
 import type { PromotionRecord } from "../kernel/index.ts";
 import type {
+  LearningCallRecord,
   CandidateRecord,
   ConsolidationJobRecord,
   ConsolidationJobState,
@@ -236,8 +237,8 @@ export class Storage implements KernelStore, RuntimeStore {
 
   insertTask(t: TaskRecord): void {
     this.db.run(
-      `INSERT INTO tasks (id, revision, requested_by, goal, inputs, budget, acceptance, requires, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO tasks (id, revision, requested_by, goal, inputs, budget, acceptance, requires, created_at, family_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       t.id,
       t.revision,
       t.requestedBy,
@@ -247,6 +248,7 @@ export class Storage implements KernelStore, RuntimeStore {
       JSON.stringify(t.acceptance),
       JSON.stringify(t.requires),
       t.createdAt,
+      t.familyId ?? null,
     );
   }
 
@@ -258,6 +260,7 @@ export class Storage implements KernelStore, RuntimeStore {
           revision: row.revision,
           requestedBy: row.requested_by,
           goal: row.goal,
+          familyId: row.family_id,
           inputs: JSON.parse(row.inputs) as string[],
           budget: JSON.parse(row.budget) as TaskBudget,
           acceptance: JSON.parse(row.acceptance) as TaskAcceptance,
@@ -297,11 +300,11 @@ export class Storage implements KernelStore, RuntimeStore {
     return row ? mapRun(row) : undefined;
   }
 
-  listRuns(limit: number): Array<RunRecord & { goal: string }> {
+  listRuns(limit: number, organismId?: string): Array<RunRecord & { goal: string }> {
     const rows = this.db.all<RunRow & { goal: string }>(
       `SELECT runs.*, tasks.goal AS goal FROM runs JOIN tasks ON tasks.id = runs.task_id
-       ORDER BY runs.created_at DESC LIMIT ?`,
-      limit,
+       ${organismId ? "WHERE runs.organism_id = ?" : ""} ORDER BY runs.created_at DESC LIMIT ?`,
+      ...(organismId ? [organismId, limit] : [limit]),
     );
     return rows.map((row) => ({ ...mapRun(row), goal: row.goal }));
   }
@@ -819,8 +822,8 @@ export class Storage implements KernelStore, RuntimeStore {
 
   insertExperienceDataset(d: ExperienceDatasetRecord): void {
     this.db.run(
-      `INSERT INTO experience_datasets (id, digest, purpose, cutoff_at, member_experience_ids, member_digest, filter_version, permission_scope, created_by, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO experience_datasets (id, digest, purpose, cutoff_at, member_experience_ids, member_digest, filter_version, permission_scope, created_by, created_at, organism_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       d.id,
       d.digest,
       d.purpose,
@@ -831,7 +834,11 @@ export class Storage implements KernelStore, RuntimeStore {
       d.permissionScope,
       d.createdBy,
       d.createdAt,
+      d.organismId,
     );
+    for (const experienceId of d.memberExperienceIds) {
+      this.db.run("INSERT INTO experience_dataset_members VALUES (?, ?)", d.id, experienceId);
+    }
   }
 
   getExperienceDataset(id: string): ExperienceDatasetRecord | undefined {
@@ -870,19 +877,107 @@ export class Storage implements KernelStore, RuntimeStore {
           .map(mapExperienceDataset);
   }
 
-  /** 列出 organism 全部 experience（冻结成员扫描用）：id 升序确定性 */
-  listExperiences(limit: number): Array<{ id: string; runId: string; createdAt: number }> {
+  listExperiences(
+    limit: number,
+    organismId?: string,
+  ): Array<{ id: string; runId: string; createdAt: number }> {
     return this.db
-      .all<ExperienceRow>("SELECT * FROM experiences ORDER BY created_at, id LIMIT ?", limit)
+      .all<ExperienceRow>(
+        `SELECT e.* FROM experiences e JOIN runs r ON r.id = e.run_id ${organismId ? "WHERE r.organism_id = ?" : ""} ORDER BY e.created_at, e.id LIMIT ?`,
+        ...(organismId ? [organismId, limit] : [limit]),
+      )
       .map((row) => ({ id: row.id, runId: row.run_id, createdAt: row.created_at }));
+  }
+
+  experienceDatasetPurposes(experienceId: string): ExperienceDatasetPurpose[] {
+    return this.db
+      .all<{ purpose: ExperienceDatasetPurpose }>(
+        "SELECT DISTINCT d.purpose FROM experience_datasets d JOIN experience_dataset_members m ON m.dataset_id = d.id WHERE m.experience_id = ?",
+        experienceId,
+      )
+      .map((row) => row.purpose);
+  }
+
+  learningCallLimit(organismId: string): number {
+    return (
+      this.db.get<{ max_calls: number }>(
+        "SELECT max_calls FROM learning_call_limits WHERE organism_id = ?",
+        organismId,
+      )?.max_calls ?? 100
+    );
+  }
+
+  setLearningCallLimit(organismId: string, maxCalls: number): void {
+    if (!Number.isSafeInteger(maxCalls) || maxCalls < 0)
+      throw new Error("Invalid learning call limit");
+    this.db.run(
+      "INSERT INTO learning_call_limits VALUES (?, ?) ON CONFLICT(organism_id) DO UPDATE SET max_calls = excluded.max_calls",
+      organismId,
+      maxCalls,
+    );
+  }
+
+  learningCalls(organismId: string): LearningCallRecord[] {
+    return this.db
+      .all<{
+        id: string;
+        organism_id: string;
+        job_id: string | null;
+        state: LearningCallRecord["state"];
+        usage: string | null;
+        error: string | null;
+        created_at: number;
+        ended_at: number | null;
+      }>("SELECT * FROM learning_calls WHERE organism_id = ? ORDER BY created_at, id", organismId)
+      .map((r) => ({
+        id: r.id,
+        organismId: r.organism_id,
+        jobId: r.job_id,
+        state: r.state,
+        usage: r.usage ? JSON.parse(r.usage) : null,
+        error: r.error,
+        createdAt: r.created_at,
+        endedAt: r.ended_at,
+      }));
+  }
+
+  insertLearningCall(call: LearningCallRecord): void {
+    this.db.run(
+      "INSERT INTO learning_calls VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+      call.id,
+      call.organismId,
+      call.jobId,
+      call.state,
+      call.usage ? JSON.stringify(call.usage) : null,
+      call.error,
+      call.createdAt,
+      call.endedAt,
+    );
+  }
+
+  finishLearningCall(
+    id: string,
+    state: LearningCallRecord["state"],
+    usage: LearningCallRecord["usage"],
+    error: string | null,
+    endedAt: number,
+  ): void {
+    this.db.run(
+      "UPDATE learning_calls SET state = ?, usage = ?, error = ?, ended_at = ? WHERE id = ? AND state = 'reserved'",
+      state,
+      usage ? JSON.stringify(usage) : null,
+      error,
+      endedAt,
+      id,
+    );
   }
 
   // ---- M3+：Consolidation 作业队列 ----
 
   insertConsolidationJob(j: ConsolidationJobRecord): void {
     this.db.run(
-      `INSERT INTO consolidation_jobs (id, dataset_id, mode, params_digest, params, state, result, error, requested_by, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO consolidation_jobs (id, dataset_id, mode, params_digest, params, state, result, error, requested_by, created_at, updated_at, organism_id, validation_set_id, cancel_requested)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       j.id,
       j.datasetId,
       j.mode,
@@ -894,6 +989,9 @@ export class Storage implements KernelStore, RuntimeStore {
       j.requestedBy,
       j.createdAt,
       j.updatedAt,
+      j.organismId,
+      j.validationSetId,
+      Number(j.cancelRequested),
     );
   }
 
@@ -906,11 +1004,15 @@ export class Storage implements KernelStore, RuntimeStore {
   }
 
   listConsolidationJobs(
-    filter: { state?: ConsolidationJobState; datasetId?: string },
+    filter: { state?: ConsolidationJobState; datasetId?: string; organismId?: string },
     limit: number,
   ): ConsolidationJobRecord[] {
     const conditions: string[] = [];
     const params: SQLInputValue[] = [];
+    if (filter.organismId) {
+      conditions.push("organism_id = ?");
+      params.push(filter.organismId);
+    }
     if (filter.state) {
       conditions.push("state = ?");
       params.push(filter.state);
@@ -931,7 +1033,9 @@ export class Storage implements KernelStore, RuntimeStore {
 
   updateConsolidationJob(
     id: string,
-    patch: Partial<Pick<ConsolidationJobRecord, "state" | "result" | "error">> & {
+    patch: Partial<
+      Pick<ConsolidationJobRecord, "state" | "result" | "error" | "cancelRequested">
+    > & {
       updatedAt: number;
     },
   ): void {
@@ -939,13 +1043,20 @@ export class Storage implements KernelStore, RuntimeStore {
     const params: SQLInputValue[] = [];
     for (const [key, column] of [
       ["state", "state"],
+      ["cancelRequested", "cancel_requested"],
       ["result", "result"],
       ["error", "error"],
     ] as const) {
       if (patch[key] !== undefined) {
         sets.push(`${column} = ?`);
         const value = patch[key];
-        params.push(typeof value === "object" && value !== null ? JSON.stringify(value) : value);
+        params.push(
+          typeof value === "boolean"
+            ? Number(value)
+            : typeof value === "object" && value !== null
+              ? JSON.stringify(value)
+              : value,
+        );
       }
     }
     sets.push("updated_at = ?");
@@ -957,8 +1068,8 @@ export class Storage implements KernelStore, RuntimeStore {
 
   insertValidationSet(v: ValidationSetRecord): void {
     this.db.run(
-      `INSERT INTO validation_sets (id, family_ids, source_ref, prepared_by, dev_families_digest, state, usage_count, first_used_at, retired_at, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO validation_sets (id, family_ids, source_ref, prepared_by, dev_families_digest, state, usage_count, first_used_at, retired_at, created_at, organism_id, dev_family_ids, plan_digest, plan_ref, candidate_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       v.id,
       JSON.stringify(v.familyIds),
       v.sourceRef,
@@ -969,6 +1080,11 @@ export class Storage implements KernelStore, RuntimeStore {
       v.firstUsedAt,
       v.retiredAt,
       v.createdAt,
+      v.organismId,
+      JSON.stringify(v.devFamilyIds),
+      v.planDigest,
+      v.planRef,
+      v.candidateId,
     );
   }
 
@@ -989,13 +1105,17 @@ export class Storage implements KernelStore, RuntimeStore {
   updateValidationSet(
     id: string,
     patch: Partial<
-      Pick<ValidationSetRecord, "state" | "usageCount" | "firstUsedAt" | "retiredAt">
+      Pick<
+        ValidationSetRecord,
+        "state" | "usageCount" | "firstUsedAt" | "retiredAt" | "candidateId"
+      >
     > & { updatedAt: number },
   ): void {
     const sets: string[] = [];
     const params: SQLInputValue[] = [];
     for (const [key, column] of [
       ["state", "state"],
+      ["candidateId", "candidate_id"],
       ["usageCount", "usage_count"],
       ["firstUsedAt", "first_used_at"],
       ["retiredAt", "retired_at"],
@@ -1267,6 +1387,7 @@ function mapPromotion(row: PromotionRow): PromotionRecord {
 
 function mapExperienceDataset(row: ExperienceDatasetRow): ExperienceDatasetRecord {
   return {
+    organismId: row.organism_id,
     id: row.id,
     digest: row.digest,
     purpose: row.purpose as ExperienceDatasetRecord["purpose"],
@@ -1282,6 +1403,9 @@ function mapExperienceDataset(row: ExperienceDatasetRow): ExperienceDatasetRecor
 
 function mapConsolidationJob(row: ConsolidationJobRow): ConsolidationJobRecord {
   return {
+    organismId: row.organism_id,
+    validationSetId: row.validation_set_id,
+    cancelRequested: Boolean(row.cancel_requested),
     id: row.id,
     datasetId: row.dataset_id,
     mode: row.mode as ConsolidationJobRecord["mode"],
@@ -1296,9 +1420,13 @@ function mapConsolidationJob(row: ConsolidationJobRow): ConsolidationJobRecord {
   };
 }
 
-
 function mapValidationSet(row: ValidationSetRow): ValidationSetRecord {
   return {
+    organismId: row.organism_id,
+    devFamilyIds: JSON.parse(row.dev_family_ids) as string[],
+    planDigest: row.plan_digest,
+    planRef: row.plan_ref,
+    candidateId: row.candidate_id,
     id: row.id,
     familyIds: JSON.parse(row.family_ids) as string[],
     sourceRef: row.source_ref,

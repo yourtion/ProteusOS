@@ -94,9 +94,10 @@ describe("冻结经验集", () => {
   });
 
   it("数据集不可变：记录只能读取；用途许可与过滤版本入库", async () => {
-    const app = instance();
+    const app = bootSeededInstance();
     const frozen = app.evolution.freezeExperienceWindow({
       purpose: "regression",
+      runIds: [],
       createdBy: "principal-local",
       permissionScope: "organism:organism-default",
     });
@@ -109,5 +110,6 @@ describe("冻结经验集", () => {
     // 事件留痕
     const events = app.storage.listEvents({ streamId: `dataset-${stored.id}` }, 10);
     expect(events.map((e) => e.type)).toEqual(["dataset.frozen"]);
+    app.close();
   });
 });

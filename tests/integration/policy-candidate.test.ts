@@ -5,7 +5,13 @@ import { afterAll, describe, expect, it } from "vitest";
 import type { AppInstance } from "../../src/app/instance.ts";
 import { ensureCapabilityGenome } from "../../src/evolution/assets.ts";
 import type { CapabilityModule } from "../../src/runtime/capability.ts";
-import { bootSeededInstance, fixturePath, upgradeJudgeToActive } from "../helpers.ts";
+import {
+  bootSeededInstance,
+  fixturePath,
+  policyValidationPlan,
+  registerPolicyValidationSet,
+  upgradeJudgeToActive,
+} from "../helpers.ts";
 
 /**
  * 从冻结经验归纳策略候选（"从历史失败提出改进"）。
@@ -117,6 +123,7 @@ describe("策略候选归纳", () => {
     // gold join：两个失败成员的 goal 关联正确选项 → 归纳出特征路由
     const proposed = await app.evolution.proposePolicyCandidate({
       datasetId: frozen.dataset.id,
+      validationSetId: registerPolicyValidationSet(app, policyValidationPlan()),
       goldMatches: [
         { goal: SUMMARY_GOAL, choice: "capability/changed-file-summary" },
         { goal: `${SUMMARY_GOAL}（第二次）`, choice: "capability/changed-file-summary" },
@@ -173,9 +180,10 @@ describe("策略候选归纳", () => {
   });
 
   it("非 development 许可的数据集拒绝作为学习来源", async () => {
-    const app = instance();
+    const app = bootSeededInstance();
     const regression = app.evolution.freezeExperienceWindow({
       purpose: "regression",
+      runIds: [],
       createdBy: "principal-local",
     });
     await expect(
@@ -184,5 +192,6 @@ describe("策略候选归纳", () => {
         createdBy: "principal-local",
       }),
     ).rejects.toThrowError(/仅 development 许可/);
+    app.close();
   });
 });

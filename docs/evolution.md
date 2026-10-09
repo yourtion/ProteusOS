@@ -199,7 +199,7 @@ M2 落地本文 §5–§8 的最小版本，对应实现与让步：
 M3 落地本文 §3/§6 的离线闭环，决策与让步全文见 [ADR 0008](./adr/0008-m3-experience-driven-evolution.md)：
 
 - **冻结经验集**（§3"只读取一个已确定的经验窗口"）：`experience_datasets` 固定成员清单+内容摘要+截止点+过滤规则版本+用途许可；学习投影（experience × run/task × decision_calls × 预算）是 Consolidation 唯一输入，不可回放如实标注。
-- **Consolidation**（§3 离线路径）：首版纯规则确定性归纳（不调 LLM）；正例两类——成功 Run 的实际选择（expectedOutput 验收即正确性）与失败/弃权成员经开发集 gold join；门槛/候选数/扫描预算显式预限制；零提议正常。独立队列/取消策略挂账（现为同步函数+预算参数）。
+- **Consolidation**（§3 离线路径）：首版纯规则确定性归纳（不调 LLM）；正例两类——成功 Run 的实际选择（expectedOutput 验收即正确性）与失败/弃权成员经开发集 gold join；门槛/候选数/扫描预算显式预限制；零提议正常。已支持持久化作业队列、独立模型调用额度预留和运行中取消；LLM 提议仍须按开发证据重算统计门槛。
 - **策略候选**（实验文档 §11"只改路由 Policy"）：只换 routing-policy 槽位（图/能力/裁判/视图固定）；rule-hybrid-v1 特征路由优先 + 基准兜底继承（无特征任务行为不变的回归约束）。
-- **多目标比较**（§6 五条最低证据要求）：m3-policy-eval-v1 双臂×cases×repeats 固定顺序；成功率/路由准确率/弃权率/时延 p50·p95/跨重复方差分列记录（uncertainty），不合成总分；样本不足 inconclusive 不判通过；held-out 使用计数经 evaluations.datasetRef 审计（多次查看同一 held-out 集的跟踪要求落地）。
+- **多目标比较**（§6 五条最低证据要求）：m3-policy-eval-v1 双臂×cases×repeats 固定顺序；成功率/路由准确率/弃权率/时延 p50·p95/跨重复方差分列记录（uncertainty），不合成总分；样本不足 inconclusive 不判通过；验证方案在候选构造前内容寻址冻结，Evaluation 绑定真实验证集及 case ID；一次正式领用后不得继续用作未见验证集，同候选重试仅幂等读回证据。
 - **三项前置兑现**：SandboxBackend 真隔离（microsandbox 后端；不可用拒绝执行不降级；docker 后端预留）、评估独立预算池（purpose 双池）、裁判拆分两阶段晋升（§6"拆分为不同候选"正式兑现，自举链 G0→G_eval→G_cap）。

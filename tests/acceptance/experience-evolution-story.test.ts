@@ -150,6 +150,18 @@ describe("经验驱动演化（端到端）", () => {
     ]);
     expect(frozen.memberCount).toBeGreaterThanOrEqual(3);
 
+    // 在看见候选结果前由独立准备者登记 held-out cases 并冻结评估计划。
+    const validation = proteusJson<{ validationSet: { id: string; planDigest: string } }>([
+      "validation-register",
+      "--cases",
+      join(PE, "validation-cases.json"),
+      "--repeats",
+      "1",
+      "--json",
+    ]);
+    expect(validation.validationSet.id).toBeTruthy();
+    expect(validation.validationSet.planDigest).toBeTruthy();
+
     // 注意：窗口含 ①② 的评估 Run（成功路由能力的正例），无 gold 也可能
     // 归纳出经验性规则——零提议的反向场景由 integration 测试单独覆盖
     const proposed = proteusJson<{
@@ -157,7 +169,15 @@ describe("经验驱动演化（端到端）", () => {
       consolidation: {
         proposals: Array<{ feature: string; choose: string; byOrigin: { gold: number } }>;
       };
-    }>(["consolidate", frozen.dataset.id, "--gold", join(PE, "gold.json"), "--json"]);
+    }>([
+      "consolidate",
+      frozen.dataset.id,
+      "--gold",
+      join(PE, "gold.json"),
+      "--validation-set",
+      validation.validationSet.id,
+      "--json",
+    ]);
     expect(proposed.candidate).not.toBeNull();
     policyCandidateId = proposed.candidate!.id;
     // gold join 后必含目标规则（未声明能力的失败 → 特征路由修复）
@@ -179,21 +199,16 @@ describe("经验驱动演化（端到端）", () => {
         };
       };
       status: string;
-    }>([
-      "evaluate-policy",
-      policyCandidateId,
-      "--cases",
-      join(PE, "validation-cases.json"),
-      "--repeats",
-      "1",
-      "--json",
-    ]);
+    }>(["evaluate-policy", policyCandidateId, "--json"]);
     expect(result.evaluation.verdict).toBe("eligible");
     expect(result.status).toBe("eligible");
     // 双臂各 4 Run（4 case × 1 repeat）；分列指标记录方差
     expect(result.evaluation.policy.candidate.runs).toBe(4);
     expect(result.evaluation.policy.base.runs).toBe(4);
-    expect(result.evaluation.policy.candidate.successRate).toBe(1);
+    expect(
+      result.evaluation.policy.candidate.successRate,
+      JSON.stringify(result.evaluation.runs),
+    ).toBe(1);
     expect(result.evaluation.policy.base.successRate).toBeLessThan(1);
     // 逐 Run 留痕（可复验）
     expect(result.evaluation.runs.filter((r) => r.role === "policy-candidate")).toHaveLength(4);

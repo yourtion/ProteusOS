@@ -51,6 +51,7 @@ const EXPERIENCE_FILTER_VERSION_EXPLICIT = "v1:explicit-run-ids";
 
 export class Evolution {
   readonly deps: EvolutionRuntimeDeps;
+  private readonly activeLearningAborts = new Map<string, AbortController>();
 
   constructor(deps: EvolutionRuntimeDeps) {
     this.deps = deps;
@@ -642,7 +643,17 @@ export class Evolution {
     const candidate = this.mustGetCandidate(candidateId);
     const operationId = opts.operationId ?? this.deps.ids.next();
     return this.deps.storage.tx(() => {
+      this.assertActor(opts.authorizedBy);
       const latest = this.deps.storage.listEvaluationsByCandidate(candidateId, 1)[0];
+      if (
+        latest &&
+        (latest.baselineSnapshotId !== candidate.baseSnapshotId ||
+          ((candidate.sourceRefs["candidateType"] === "policy" ||
+            candidate.sourceRefs["candidateType"] === "inheritance") &&
+            (latest.protocolDigest !== candidate.sourceRefs["policyEvaluationPlanDigest"] ||
+              latest.datasetRef !== candidate.sourceRefs["validationSetId"])))
+      )
+        throw new EvolutionError("evaluation_mismatch", "评估不适用于当前候选和固定验证集");
       if (!latest || latest.verdict !== "eligible") {
         throw new EvolutionError(
           "evaluation_not_eligible",
@@ -790,6 +801,8 @@ export class Evolution {
 
   private mustGetCandidate(candidateId: string): CandidateRecord {
     const candidate = this.deps.storage.getCandidate(candidateId);
+    if (candidate && candidate.organismId !== this.deps.organismId)
+      throw new EvolutionError("forbidden", "候选属于其他个体");
     if (!candidate) throw new EvolutionError("unknown_candidate", `候选 ${candidateId} 不存在`);
     return candidate;
   }
@@ -806,12 +819,29 @@ export class Evolution {
     createdBy: string;
     permissionScope?: string;
   }): { dataset: ExperienceDatasetRecord; created: boolean; memberCount: number } {
+    this.assertActor(opts.createdBy);
+    if (opts.permissionScope && opts.permissionScope !== `organism:${this.deps.organismId}`)
+      throw new EvolutionError("forbidden", "经验冻结只能使用当前个体的私有 scope");
     const cutoff = opts.cutoffAt ?? this.deps.clock.now();
-    const scan = this.deps.storage.listExperiences(100_000);
+    if (opts.runIds)
+      for (const id of opts.runIds) {
+        const run = this.deps.storage.getRun(id);
+        if (!run || run.organismId !== this.deps.organismId)
+          throw new EvolutionError("forbidden", "经验成员不存在或属于其他个体");
+        if (opts.purpose === "development" && run.purpose === "evaluation")
+          throw new EvolutionError(
+            "dataset_purpose_forbidden",
+            "验证经历不得作为 development 学习来源",
+          );
+      }
+    const scan = this.deps.storage.listExperiences(100_000, this.deps.organismId);
     const selected = scan
-      .filter((e) => (opts.runIds ? opts.runIds.includes(e.runId) : e.createdAt <= cutoff))
+      .filter((e) => e.createdAt <= cutoff && (!opts.runIds || opts.runIds.includes(e.runId)))
       .map((e) => this.memberView(e.id, e.runId))
-      .filter((m): m is ExperienceMemberView => m !== null)
+      .filter(
+        (m): m is ExperienceMemberView =>
+          m !== null && (opts.purpose !== "development" || m.runPurpose === "normal"),
+      )
       .sort((a, b) => (a.experienceId < b.experienceId ? -1 : 1));
 
     const memberDigest = digestOf(canonicalJson(selected.map((m) => digestOf(canonicalJson(m)))));
@@ -821,6 +851,7 @@ export class Evolution {
       : EXPERIENCE_FILTER_VERSION_CUTOFF;
     const digest = digestOf(
       canonicalJson({
+        organismId: this.deps.organismId,
         purpose: opts.purpose,
         cutoffAt: cutoff,
         memberExperienceIds,
@@ -830,10 +861,33 @@ export class Evolution {
     );
 
     return this.deps.storage.tx(() => {
+      for (const member of selected) {
+        if (opts.purpose === "development") {
+          for (const set of this.deps.storage.listValidationSets(100_000)) {
+            if (set.organismId !== this.deps.organismId || !set.planRef) continue;
+            const plan = JSON.parse(this.deps.blobs.read(set.planRef)) as PolicyEvaluationPlan;
+            if (
+              plan.cases.some(
+                (c) =>
+                  c.familyId === member.familyId ||
+                  goalFamily(c.task.goal) === goalFamily(member.taskGoal),
+              )
+            )
+              throw new EvolutionError(
+                "dataset_purpose_forbidden",
+                "正式验证 family 不得进入学习集",
+              );
+          }
+        }
+        const uses = this.deps.storage.experienceDatasetPurposes(member.experienceId);
+        if (uses.some((p) => p !== opts.purpose))
+          throw new EvolutionError("dataset_purpose_forbidden", "同一经验成员不得跨用途复用");
+      }
       const existing = this.deps.storage.findExperienceDatasetByDigest(digest);
       if (existing) return { dataset: existing, created: false, memberCount: selected.length };
       const now = this.deps.clock.now();
       const dataset: ExperienceDatasetRecord = {
+        organismId: this.deps.organismId,
         id: this.deps.ids.next(),
         digest,
         purpose: opts.purpose,
@@ -870,15 +924,22 @@ export class Evolution {
     dataset: ExperienceDatasetRecord;
     members: ExperienceMemberView[];
   } {
-    const dataset = this.deps.storage.getExperienceDataset(datasetId);
+    const dataset = this.ownedDataset(datasetId);
     if (!dataset) throw new EvolutionError("unknown_dataset", `经验集 ${datasetId} 不存在`);
     const members = dataset.memberExperienceIds
       .map((experienceId) => {
         // 成员按 experience id 固化；run 关系经存储反查
-        const scan = this.deps.storage.listExperiences(100_000).find((e) => e.id === experienceId);
+        const scan = this.deps.storage
+          .listExperiences(100_000, this.deps.organismId)
+          .find((e) => e.id === experienceId);
         return scan ? this.memberView(experienceId, scan.runId) : null;
       })
       .filter((m): m is ExperienceMemberView => m !== null);
+    if (members.length !== dataset.memberExperienceIds.length)
+      throw new EvolutionError("dataset_unreplayable", "冻结经验成员缺失，不能静默缩减学习数据");
+    const digest = digestOf(canonicalJson(members.map((m) => digestOf(canonicalJson(m)))));
+    if (digest !== dataset.memberDigest)
+      throw new EvolutionError("dataset_drift", "冻结成员内容已漂移，请重建数据集");
     return { dataset, members };
   }
 
@@ -896,12 +957,14 @@ export class Evolution {
    */
   submitConsolidationJob(opts: {
     datasetId: string;
+    validationSetId?: string;
     params?: ConsolidationParams;
     goldMatches?: Array<{ goal: string; choice: string }>;
     mode?: ConsolidationMode;
     createdBy: string;
   }): { job: ConsolidationJobRecord; created: boolean } {
-    const dataset = this.deps.storage.getExperienceDataset(opts.datasetId);
+    this.assertActor(opts.createdBy);
+    const dataset = this.ownedDataset(opts.datasetId);
     if (!dataset) throw new EvolutionError("unknown_dataset", `经验集 ${opts.datasetId} 不存在`);
     if (dataset.purpose !== "development") {
       throw new EvolutionError(
@@ -915,12 +978,18 @@ export class Evolution {
       ? this.deps.blobs.write(canonicalJson(opts.goldMatches)).ref
       : null;
     const paramsDigest = digestOf(
-      canonicalJson({ datasetId: opts.datasetId, mode, consolidation, goldRef }),
+      canonicalJson({
+        datasetId: opts.datasetId,
+        mode,
+        consolidation,
+        goldRef,
+        validationSetId: opts.validationSetId ?? null,
+      }),
     );
 
     return this.deps.storage.tx(() => {
       const existing = this.deps.storage
-        .listConsolidationJobs({ datasetId: opts.datasetId }, 50)
+        .listConsolidationJobs({ datasetId: opts.datasetId, organismId: this.deps.organismId }, 50)
         .find(
           (j) =>
             j.paramsDigest === paramsDigest &&
@@ -929,6 +998,9 @@ export class Evolution {
       if (existing) return { job: existing, created: false };
       const now = this.deps.clock.now();
       const job: ConsolidationJobRecord = {
+        organismId: this.deps.organismId,
+        validationSetId: opts.validationSetId ?? null,
+        cancelRequested: false,
         id: this.deps.ids.next(),
         datasetId: opts.datasetId,
         mode,
@@ -961,15 +1033,20 @@ export class Evolution {
   async runPendingConsolidationJobs(
     limit = 1,
   ): Promise<Array<{ jobId: string; outcome: string; detail: string }>> {
-    const queued = this.deps.storage.listConsolidationJobs({ state: "queued" }, limit);
+    if (!Number.isSafeInteger(limit) || limit < 1)
+      throw new EvolutionError("invalid_limit", "作业数量必须是正整数");
+    const queued = this.deps.storage.listConsolidationJobs(
+      { state: "queued", organismId: this.deps.organismId },
+      limit,
+    );
     const results: Array<{
       jobId: string;
       outcome: "completed" | "failed" | "skipped" | "cancelled";
       detail: string;
     }> = [];
     for (const job of queued) {
-      // 启动迁移（queued → running）
-      this.deps.storage.tx(() => {
+      const claimed = this.deps.storage.tx(() => {
+        if (this.deps.storage.getConsolidationJob(job.id)?.state !== "queued") return false;
         this.deps.storage.updateConsolidationJob(job.id, {
           state: "running",
           updatedAt: this.deps.clock.now(),
@@ -981,7 +1058,9 @@ export class Evolution {
           organismId: this.deps.organismId,
           occurredAt: this.deps.clock.now(),
         });
+        return true;
       });
+      if (!claimed) continue;
       try {
         const goldMatches = job.params.goldRef
           ? (JSON.parse(this.deps.blobs.read(job.params.goldRef)) as Array<{
@@ -991,6 +1070,8 @@ export class Evolution {
           : undefined;
         const executed = await this.executeConsolidation({
           datasetId: job.datasetId,
+          validationSetId: job.validationSetId ?? undefined,
+          jobId: job.id,
           params: job.params.consolidation,
           goldMatches,
           mode: job.mode,
@@ -1028,178 +1109,340 @@ export class Evolution {
         });
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
+        const cancelled = this.deps.storage.getConsolidationJob(job.id)?.cancelRequested === true;
         this.deps.storage.tx(() => {
           this.deps.storage.updateConsolidationJob(job.id, {
-            state: "failed",
+            state: cancelled ? "cancelled" : "failed",
             error: message,
             updatedAt: this.deps.clock.now(),
           });
           this.deps.storage.appendEvent({
             streamId: `job-${job.id}`,
-            type: "consolidation.job.failed",
+            type: cancelled ? "consolidation.job.cancelled" : "consolidation.job.failed",
             payload: { jobId: job.id, error: message },
             organismId: this.deps.organismId,
             occurredAt: this.deps.clock.now(),
           });
         });
-        results.push({ jobId: job.id, outcome: "failed", detail: message });
+        results.push({
+          jobId: job.id,
+          outcome: cancelled ? "cancelled" : "failed",
+          detail: message,
+        });
       }
     }
     return results;
   }
 
-  /** 取消作业：仅 queued 可取消（执行为纯函数短操作，running 不可中断） */
+  /** 取消排队或执行中的作业；远程调用保留未知费用并中止请求。 */
   cancelConsolidationJob(jobId: string): { jobId: string; state: string; note: string } {
-    const job = this.deps.storage.getConsolidationJob(jobId);
-    if (!job) throw new EvolutionError("unknown_job", `作业 ${jobId} 不存在`);
-    if (job.state !== "queued") {
-      return {
-        jobId,
-        state: job.state,
-        note: `作业已处于 ${job.state}，不能取消（执行为短操作不可中断）`,
-      };
-    }
+    const job = this.consolidationJob(jobId);
+    if (job.state !== "queued" && job.state !== "running")
+      return { jobId, state: job.state, note: `作业已处于 ${job.state}，不能取消` };
     this.deps.storage.tx(() => {
       this.deps.storage.updateConsolidationJob(jobId, {
-        state: "cancelled",
+        cancelRequested: true,
+        state: job.state === "queued" ? "cancelled" : "running",
         updatedAt: this.deps.clock.now(),
       });
       this.deps.storage.appendEvent({
         streamId: `job-${jobId}`,
-        type: "consolidation.job.cancelled",
+        type:
+          job.state === "queued"
+            ? "consolidation.job.cancelled"
+            : "consolidation.job.cancel_requested",
         payload: { jobId },
         organismId: this.deps.organismId,
         occurredAt: this.deps.clock.now(),
       });
     });
-    return { jobId, state: "cancelled", note: "已取消（未开始执行）" };
+    this.activeLearningAborts.get(jobId)?.abort(new Error("学习作业已取消"));
+    return {
+      jobId,
+      state: job.state === "queued" ? "cancelled" : "running",
+      note:
+        job.state === "queued" ? "已取消（未开始执行）" : "已请求取消；可能计费的调用保留未知成本",
+    };
   }
 
   consolidationJob(jobId: string): ConsolidationJobRecord {
     const job = this.deps.storage.getConsolidationJob(jobId);
     if (!job) throw new EvolutionError("unknown_job", `作业 ${jobId} 不存在`);
+    if (job.organismId !== this.deps.organismId)
+      throw new EvolutionError("forbidden", "作业属于其他个体");
     return job;
   }
 
-  /**
-   * 注册验证集（移交验证负责人机制，实验文档 §12）：
-   * - family 与开发集完全隔离（显式断言，防 held-out 泄漏为开发反馈）
-   * - 固定成员与来源引用，immutable；使用计数与降级语义可审计
-   * devFamiliesDigest 是注册时的开发集 family 指纹——后续开发集扩张
-   * 后重放隔离断言的依据。
-   */
   registerValidationSet(opts: {
     familyIds: string[];
     sourceRef: string;
     preparedBy: string;
-    /** 注册时开发集全部 family（隔离断言基准） */
     devFamilyIds: string[];
+    plan: PolicyEvaluationPlan;
   }): ValidationSetRecord {
-    const overlap = opts.familyIds.filter((f) => opts.devFamilyIds.includes(f));
-    if (overlap.length > 0) {
-      throw new EvolutionError(
-        "validation_family_overlap",
-        `验证集 family 与开发集重叠：${overlap.join(", ")}（held-out 不得参与开发反馈）`,
-      );
-    }
-    const devFamiliesDigest = digestOf(canonicalJson([...opts.devFamilyIds].sort()));
-    const now = this.deps.clock.now();
+    this.assertActor(opts.preparedBy);
+    this.assertActor(opts.plan.requestedBy);
+    assertPolicyEvaluationPlan(opts.plan);
+    const families = [...new Set(opts.plan.cases.map((c) => c.familyId))].sort();
+    if (canonicalJson([...new Set(opts.familyIds)].sort()) !== canonicalJson(families))
+      throw new EvolutionError("validation_family_mismatch", "注册 family 必须与固定计划一致");
+    const planDigest = policyEvaluationPlanDigest(opts.plan);
+    const planRef = this.deps.blobs.write(canonicalJson(opts.plan)).ref;
     const record: ValidationSetRecord = {
       id: this.deps.ids.next(),
-      familyIds: [...new Set(opts.familyIds)].sort(),
+      organismId: this.deps.organismId,
+      familyIds: families,
       sourceRef: opts.sourceRef,
       preparedBy: opts.preparedBy,
-      devFamiliesDigest,
+      devFamilyIds: [...new Set(opts.devFamilyIds)].sort(),
+      devFamiliesDigest: digestOf(canonicalJson([...new Set(opts.devFamilyIds)].sort())),
+      planDigest,
+      planRef,
+      candidateId: null,
       state: "ready",
       usageCount: 0,
       firstUsedAt: null,
       retiredAt: null,
-      createdAt: now,
+      createdAt: this.deps.clock.now(),
     };
     return this.deps.storage.tx(() => {
+      this.assertValidationIsolation(record, opts.plan);
       this.deps.storage.insertValidationSet(record);
       this.deps.storage.appendEvent({
         streamId: `validation-set-${record.id}`,
         type: "validation.set.registered",
-        payload: {
-          validationSetId: record.id,
-          familyCount: record.familyIds.length,
-          preparedBy: record.preparedBy,
-          devFamiliesDigest,
-        },
+        payload: { validationSetId: record.id, planDigest, familyIds: families },
         organismId: this.deps.organismId,
-        occurredAt: now,
+        occurredAt: record.createdAt,
       });
       return record;
-    });
-  }
-
-  /**
-   * 领用验证集做正式评估：ready 或"首次使用中"可领用（计数 +1）；
-   * 正式结果公开后（第二次领用）拒绝——必须先显式 retire 转为回归集。
-   */
-  claimValidationSet(id: string): ValidationSetRecord {
-    const set = this.deps.storage.getValidationSet(id);
-    if (!set) throw new EvolutionError("unknown_validation_set", `验证集 ${id} 不存在`);
-    if (set.state === "retired") {
-      throw new EvolutionError(
-        "validation_set_retired",
-        `验证集 ${id} 已退休为回归集（正式结果已公开，不得继续充当未见验证集）`,
-      );
-    }
-    if (set.usageCount >= 1) {
-      throw new EvolutionError(
-        "validation_set_exhausted",
-        `验证集 ${id} 已被一次正式评估使用（usage=${set.usageCount}）；正式结果公开后须 retire 转为回归集，下一轮另备新 family`,
-      );
-    }
-    return this.deps.storage.tx(() => {
-      const now = this.deps.clock.now();
-      this.deps.storage.updateValidationSet(id, {
-        state: "in_use",
-        usageCount: set.usageCount + 1,
-        firstUsedAt: set.firstUsedAt ?? now,
-        updatedAt: now,
-      });
-      this.deps.storage.appendEvent({
-        streamId: `validation-set-${id}`,
-        type: "validation.set.claimed",
-        payload: { validationSetId: id, usageCount: set.usageCount + 1 },
-        organismId: this.deps.organismId,
-        occurredAt: now,
-      });
-      return this.deps.storage.getValidationSet(id)!;
-    });
-  }
-
-  /** 退休验证集（正式结果公开后显式降级为回归集；此后仅可 purpose=regression 引用） */
-  retireValidationSet(id: string, note?: string): ValidationSetRecord {
-    const set = this.deps.storage.getValidationSet(id);
-    if (!set) throw new EvolutionError("unknown_validation_set", `验证集 ${id} 不存在`);
-    if (set.state === "retired") return set;
-    return this.deps.storage.tx(() => {
-      const now = this.deps.clock.now();
-      this.deps.storage.updateValidationSet(id, { state: "retired", retiredAt: now, updatedAt: now });
-      this.deps.storage.appendEvent({
-        streamId: `validation-set-${id}`,
-        type: "validation.set.retired",
-        payload: { validationSetId: id, note: note ?? null, usageCount: set.usageCount },
-        organismId: this.deps.organismId,
-        occurredAt: now,
-      });
-      return this.deps.storage.getValidationSet(id)!;
     });
   }
 
   validationSet(id: string): ValidationSetRecord {
     const set = this.deps.storage.getValidationSet(id);
     if (!set) throw new EvolutionError("unknown_validation_set", `验证集 ${id} 不存在`);
+    if (set.organismId !== this.deps.organismId)
+      throw new EvolutionError("forbidden", "验证集属于其他个体");
     return set;
+  }
+
+  claimValidationSet(id: string, candidateId?: string): ValidationSetRecord {
+    return this.deps.storage.tx(() => this.claimValidationSetInTransaction(id, candidateId));
+  }
+
+  private claimValidationSetInTransaction(id: string, candidateId?: string): ValidationSetRecord {
+    const set = this.validationSet(id);
+    if (set.state === "retired")
+      throw new EvolutionError("validation_set_retired", "验证集已退休为回归集");
+    if (set.usageCount !== 0)
+      throw new EvolutionError("validation_set_exhausted", "验证集已正式使用，须另备新 family");
+    if (!set.planRef || !set.planDigest)
+      throw new EvolutionError("validation_plan_missing", "旧验证集未固定完整计划，请重新注册");
+    if (set.candidateId && set.candidateId !== candidateId)
+      throw new EvolutionError("validation_set_bound", "验证集已绑定另一候选");
+    this.assertValidationIsolation(
+      set,
+      JSON.parse(this.deps.blobs.read(set.planRef)) as PolicyEvaluationPlan,
+    );
+    this.deps.storage.updateValidationSet(id, {
+      state: "in_use",
+      usageCount: 1,
+      firstUsedAt: this.deps.clock.now(),
+      candidateId: candidateId ?? null,
+      updatedAt: this.deps.clock.now(),
+    });
+    this.deps.storage.appendEvent({
+      streamId: `validation-set-${id}`,
+      type: "validation.set.claimed",
+      payload: { validationSetId: id, candidateId: candidateId ?? null },
+      organismId: this.deps.organismId,
+      occurredAt: this.deps.clock.now(),
+    });
+    return this.validationSet(id);
+  }
+
+  retireValidationSet(id: string, note?: string): ValidationSetRecord {
+    return this.deps.storage.tx(() => {
+      const set = this.validationSet(id);
+      if (set.state === "retired") return set;
+      this.deps.storage.updateValidationSet(id, {
+        state: "retired",
+        retiredAt: this.deps.clock.now(),
+        updatedAt: this.deps.clock.now(),
+      });
+      this.deps.storage.appendEvent({
+        streamId: `validation-set-${id}`,
+        type: "validation.set.retired",
+        payload: { validationSetId: id, note: note ?? null },
+        organismId: this.deps.organismId,
+        occurredAt: this.deps.clock.now(),
+      });
+      return this.validationSet(id);
+    });
+  }
+
+  policyEvaluationPlan(candidateId: string): PolicyEvaluationPlan {
+    const candidate = this.mustGetCandidate(candidateId);
+    const set = this.validationSet(candidate.sourceRefs["validationSetId"] ?? "");
+    if (!set.planRef || !set.planDigest || !this.deps.blobs.has(set.planRef))
+      throw new EvolutionError("validation_plan_missing", "固定验证方案缺失");
+    const plan = JSON.parse(this.deps.blobs.read(set.planRef)) as PolicyEvaluationPlan;
+    assertPolicyEvaluationPlan(plan);
+    if (
+      policyEvaluationPlanDigest(plan) !== set.planDigest ||
+      candidate.sourceRefs["policyEvaluationPlanDigest"] !== set.planDigest
+    )
+      throw new EvolutionError("evaluation_plan_drift", "固定计划或输入内容漂移");
+    return plan;
+  }
+
+  private assertValidationIsolation(set: ValidationSetRecord, plan: PolicyEvaluationPlan): void {
+    const development = this.deps.storage
+      .listExperiences(100_000, this.deps.organismId)
+      .map((e) => this.memberView(e.id, e.runId))
+      .filter((m) => m?.runPurpose === "normal");
+    const devFamilies = new Set([
+      ...set.devFamilyIds,
+      ...development.flatMap((m) =>
+        m ? [m.familyId ?? goalFamily(m.taskGoal), goalFamily(m.taskGoal)] : [],
+      ),
+    ]);
+    if (
+      plan.cases.some(
+        (c) => devFamilies.has(c.familyId) || devFamilies.has(goalFamily(c.task.goal)),
+      )
+    )
+      throw new EvolutionError("validation_family_overlap", "验证集 family 与开发经历重叠");
+    for (const used of this.deps.storage.listValidationSets(100_000)) {
+      if (
+        used.organismId === this.deps.organismId &&
+        used.id !== set.id &&
+        used.usageCount > 0 &&
+        used.familyIds.some((f) => set.familyIds.includes(f))
+      )
+        throw new EvolutionError(
+          "validation_family_exposed",
+          "正式验证 family 已使用，不得包装成新验证集",
+        );
+    }
+  }
+
+  private async callRouteProposer(
+    input: Parameters<RouteProposer["propose"]>[0],
+    jobId?: string,
+  ): ReturnType<RouteProposer["propose"]> {
+    const proposer = this.deps.routeProposer!;
+    const callId = this.deps.ids.next();
+    const abort = new AbortController();
+    this.deps.storage.tx(() => {
+      if (
+        this.deps.storage.learningCalls(this.deps.organismId).length >=
+        this.deps.storage.learningCallLimit(this.deps.organismId)
+      )
+        throw new EvolutionError(
+          "learning_budget_exhausted",
+          "学习调用额度耗尽（独立于在线/评估预算）",
+        );
+      if (jobId && this.consolidationJob(jobId).cancelRequested)
+        throw new EvolutionError("cancelled", "学习作业已取消");
+      this.deps.storage.insertLearningCall({
+        id: callId,
+        organismId: this.deps.organismId,
+        jobId: jobId ?? null,
+        state: "reserved",
+        usage: null,
+        error: null,
+        createdAt: this.deps.clock.now(),
+        endedAt: null,
+      });
+      this.deps.storage.appendEvent({
+        streamId: `learning-call-${callId}`,
+        type: "learning.call.reserved",
+        payload: { callId, jobId: jobId ?? null, proposer: proposer.name },
+        organismId: this.deps.organismId,
+        occurredAt: this.deps.clock.now(),
+      });
+    });
+    if (jobId) this.activeLearningAborts.set(jobId, abort);
+    const timeoutMs = this.deps.learningCallTimeoutMs ?? 30_000;
+    const timeout = setTimeout(
+      () => abort.abort(new Error("学习调用超时，保留未知成本")),
+      timeoutMs,
+    );
+    const poll = jobId
+      ? setInterval(() => {
+          if (this.consolidationJob(jobId).cancelRequested)
+            abort.abort(new Error("学习作业已取消"));
+        }, 50)
+      : null;
+    let abortListener: (() => void) | undefined;
+    try {
+      const interrupted = new Promise<never>((_, reject) => {
+        abortListener = () => reject(abort.signal.reason);
+        abort.signal.addEventListener("abort", abortListener, { once: true });
+      });
+      const result = await Promise.race([
+        proposer.propose(input, { signal: abort.signal }),
+        interrupted,
+      ]);
+      if (abort.signal.aborted || (jobId && this.consolidationJob(jobId).cancelRequested))
+        throw new Error("学习作业已取消");
+      this.deps.storage.tx(() => {
+        this.deps.storage.finishLearningCall(
+          callId,
+          "completed",
+          proposer.lastUsage ?? null,
+          null,
+          this.deps.clock.now(),
+        );
+        this.deps.storage.appendEvent({
+          streamId: `learning-call-${callId}`,
+          type: "learning.call.completed",
+          payload: { callId, usage: proposer.lastUsage ?? null, cost: null },
+          organismId: this.deps.organismId,
+          occurredAt: this.deps.clock.now(),
+        });
+      });
+      return result;
+    } catch (err) {
+      const error = err instanceof Error ? err.message : String(err);
+      this.deps.storage.tx(() => {
+        this.deps.storage.finishLearningCall(callId, "unknown", null, error, this.deps.clock.now());
+        this.deps.storage.appendEvent({
+          streamId: `learning-call-${callId}`,
+          type: "learning.call.unknown",
+          payload: { callId, error, cost: null },
+          organismId: this.deps.organismId,
+          occurredAt: this.deps.clock.now(),
+        });
+      });
+      throw err;
+    } finally {
+      clearTimeout(timeout);
+      if (poll) clearInterval(poll);
+      if (abortListener) abort.signal.removeEventListener("abort", abortListener);
+      if (jobId) this.activeLearningAborts.delete(jobId);
+    }
+  }
+
+  private assertActor(actor: string): void {
+    this.deps.kernel.assertOrganismAccess(this.deps.organismId, this.deps.actorId ?? actor);
+    this.deps.kernel.assertOrganismAccess(this.deps.organismId, actor);
+  }
+
+  private ownedDataset(id: string): ExperienceDatasetRecord {
+    const dataset = this.deps.storage.getExperienceDataset(id);
+    if (!dataset) throw new EvolutionError("unknown_dataset", `经验集 ${id} 不存在`);
+    if (dataset.organismId !== this.deps.organismId)
+      throw new EvolutionError("forbidden", "经验集属于其他个体");
+    return dataset;
   }
 
   /** 同步便捷入口（不经队列）：提交语义见 executeConsolidation */
   proposePolicyCandidate(opts: {
     datasetId: string;
+    validationSetId?: string;
     params?: ConsolidationParams;
     /** 开发集标注（goal → 正确选项）：失败/弃权成员 join 为正例；验证 family 不得传入 */
     goldMatches?: Array<{ goal: string; choice: string }>;
@@ -1211,6 +1454,7 @@ export class Evolution {
   }> {
     return this.executeConsolidation({
       datasetId: opts.datasetId,
+      validationSetId: opts.validationSetId,
       params: opts.params ?? DEFAULT_CONSOLIDATION_PARAMS,
       goldMatches: opts.goldMatches,
       mode: opts.mode ?? "rule",
@@ -1221,6 +1465,8 @@ export class Evolution {
   /** 归纳执行核心（队列与同步入口共用）；mode 记入候选来源 */
   private async executeConsolidation(input: {
     datasetId: string;
+    validationSetId?: string;
+    jobId?: string;
     params: ConsolidationParams;
     goldMatches?: Array<{ goal: string; choice: string }>;
     mode: ConsolidationMode;
@@ -1229,6 +1475,7 @@ export class Evolution {
     candidate: CandidateRecord | null;
     consolidation: ConsolidationResult;
   }> {
+    this.assertActor(input.createdBy);
     const { dataset, members } = this.experienceDatasetView(input.datasetId);
     if (dataset.purpose !== "development") {
       throw new EvolutionError(
@@ -1286,11 +1533,10 @@ export class Evolution {
               : `路由后 Run 失败（${member.result}）`,
           };
         });
-      const rawProposals = await this.deps.routeProposer.propose({
-        gapSamples,
-        options: routeContext.options,
-        features: routeContext.features,
-      });
+      const rawProposals = await this.callRouteProposer(
+        { gapSamples, options: routeContext.options, features: routeContext.features },
+        input.jobId,
+      );
       const refined = refineProposals(samples, rawProposals, params);
       const proposer = this.deps.routeProposer as {
         name: string;
@@ -1334,6 +1580,27 @@ export class Evolution {
       return { candidate: null, consolidation };
     }
 
+    if (!input.validationSetId)
+      throw new EvolutionError(
+        "validation_plan_missing",
+        "构造策略候选前必须注册完整验证计划并指定 validationSetId",
+      );
+    const validationSet = this.validationSet(input.validationSetId);
+    if (
+      !validationSet.planDigest ||
+      !validationSet.planRef ||
+      validationSet.state !== "ready" ||
+      validationSet.usageCount !== 0
+    )
+      throw new EvolutionError("validation_set_exhausted", "验证集未固定方案或已使用");
+    const frozenPlan = JSON.parse(
+      this.deps.blobs.read(validationSet.planRef),
+    ) as PolicyEvaluationPlan;
+    this.assertValidationIsolation(validationSet, frozenPlan);
+    if (policyEvaluationPlanDigest(frozenPlan) !== validationSet.planDigest)
+      throw new EvolutionError("evaluation_plan_drift", "验证内容已漂移");
+    if (input.jobId && this.consolidationJob(input.jobId).cancelRequested)
+      throw new EvolutionError("cancelled", "作业取消，禁止创建候选");
     const organism = this.deps.kernel.getOrganism(this.deps.organismId);
     const baseSnapshotId = organism?.activeGenomeId ?? null;
     if (!organism || !baseSnapshotId) {
@@ -1408,7 +1675,16 @@ export class Evolution {
         this.deps.organismId,
         snapshot.id,
       );
-      if (existing) return { candidate: existing, consolidation };
+      if (
+        existing &&
+        existing.baseRevision === organism.revision &&
+        existing.baseSnapshotId === baseSnapshotId &&
+        existing.sourceRefs["validationSetId"] === validationSet.id
+      )
+        return { candidate: existing, consolidation };
+      const freshSet = this.validationSet(validationSet.id);
+      if (freshSet.candidateId)
+        throw new EvolutionError("validation_set_bound", "验证方案已绑定候选，须另备方案");
       const now = this.deps.clock.now();
       const candidate: CandidateRecord = {
         id: this.deps.ids.next(),
@@ -1420,6 +1696,9 @@ export class Evolution {
         proposedBy: input.createdBy,
         sourceRefs: {
           candidateType: "policy",
+          validationSetId: validationSet.id,
+          policyEvaluationPlanDigest: validationSet.planDigest!,
+          evaluatorVersionId: base.bindings["acceptance-evaluator"]!,
           datasetId: dataset.id,
           datasetDigest: dataset.digest,
           consolidationMode: input.mode,
@@ -1437,6 +1716,10 @@ export class Evolution {
         createdAt: now,
       };
       this.deps.storage.insertCandidate(candidate);
+      this.deps.storage.updateValidationSet(validationSet.id, {
+        candidateId: candidate.id,
+        updatedAt: now,
+      });
       this.deps.storage.appendEvent({
         streamId: `candidate-${candidate.id}`,
         type: "candidate.proposed",
@@ -1468,7 +1751,7 @@ export class Evolution {
    */
   async evaluatePolicyCandidate(
     candidateId: string,
-    plan: PolicyEvaluationPlan,
+    suppliedPlan?: PolicyEvaluationPlan,
   ): Promise<{ evaluation: EvaluationRecord; status: CandidateStatus }> {
     const candidate = this.mustGetCandidate(candidateId);
     if (candidate.sourceRefs["candidateType"] !== "policy") {
@@ -1477,6 +1760,15 @@ export class Evolution {
         `候选 ${candidateId} 不是策略候选（sourceRefs.candidateType != policy）`,
       );
     }
+    const plan = this.policyEvaluationPlan(candidateId);
+    if (
+      suppliedPlan &&
+      policyEvaluationPlanDigest(suppliedPlan) !== policyEvaluationPlanDigest(plan)
+    )
+      throw new EvolutionError("evaluation_plan_drift", "验证方案不得在候选生成后修改");
+    const previous = this.deps.storage.listEvaluationsByCandidate(candidateId, 1)[0];
+    if (previous && previous.protocolDigest === candidate.sourceRefs["policyEvaluationPlanDigest"])
+      return { evaluation: previous, status: this.candidateStatus(candidateId).status };
     if (plan.cases.length === 0) {
       throw new EvolutionError("evaluation_plan_missing_cases", "验证集至少需要一个 case");
     }
@@ -1485,6 +1777,7 @@ export class Evolution {
     }
 
     this.deps.storage.tx(() => {
+      this.claimValidationSetInTransaction(candidate.sourceRefs["validationSetId"]!, candidateId);
       this.deps.storage.appendEvent({
         streamId: `candidate-${candidateId}`,
         type: "candidate.evaluating",
@@ -1499,6 +1792,7 @@ export class Evolution {
     const armSuccess = { base: [] as boolean[], candidate: [] as boolean[] };
     const armRouteOk = { base: [] as boolean[], candidate: [] as boolean[] };
     const armAbstain = { base: [] as boolean[], candidate: [] as boolean[] };
+    const regressionHealth = { base: [] as boolean[], candidate: [] as boolean[] };
     // 确定性顺序：case 序 × repeat 序 × 双臂（base 先）
     for (let caseIndex = 0; caseIndex < plan.cases.length; caseIndex++) {
       const c = plan.cases[caseIndex]!;
@@ -1507,8 +1801,12 @@ export class Evolution {
           const snapshotId =
             arm === "base" ? candidate.baseSnapshotId : candidate.proposedSnapshotId;
           const summary = await this.deps.runtime.submitTask(
-            { ...c.task, requestedBy: plan.requestedBy },
-            { purpose: "evaluation", snapshotId },
+            { ...c.task, familyId: c.familyId, requestedBy: plan.requestedBy },
+            {
+              purpose: "evaluation",
+              snapshotId,
+              evaluatorVersionId: candidate.sourceRefs["evaluatorVersionId"],
+            },
           );
           const experience = this.deps.storage.getExperienceByRun(summary.runId);
           const durationMs = experience?.outcome.durationMs ?? 0;
@@ -1529,6 +1827,8 @@ export class Evolution {
           armSuccess[arm].push(succeeded);
           armAbstain[arm].push(abstained);
           if (c.expectedChoice !== null) armRouteOk[arm].push(routeOk);
+          if (c.role === "regression")
+            regressionHealth[arm].push(succeeded && (c.expectedChoice === null || routeOk));
         }
       }
     }
@@ -1546,14 +1846,12 @@ export class Evolution {
     };
     const armMetrics = (arm: "base" | "candidate"): PolicyArmMetrics => {
       const sortedLatency = [...armLatency[arm]].sort((a, b) => a - b);
-      // 数组按 (case → repeat → arm) 顺序交错：该臂第 ci 个 case 第 r 次重复
-      // 的索引 = ci*repeats*2 + r*2 + (base?0:1)
-      const armOffset = arm === "base" ? 0 : 1;
+      // 每个臂独立存储：第 ci 个 case 第 r 次重复的索引 = ci*repeats+r
       const perRepeat: number[] = [];
       for (let r = 0; r < plan.repeats; r++) {
         const flags: boolean[] = [];
         for (let ci = 0; ci < plan.cases.length; ci++) {
-          flags.push(armSuccess[arm][ci * plan.repeats * 2 + r * 2 + armOffset] === true);
+          flags.push(armSuccess[arm][ci * plan.repeats + r] === true);
         }
         perRepeat.push(rate(flags));
       }
@@ -1575,9 +1873,20 @@ export class Evolution {
 
     let verdict: EvaluationRecord["verdict"];
     let note: string;
-    if (totalSamples < thresholds.minSamples) {
+    const baselineHealthy = regressionHealth.base.every(Boolean);
+    const regressionPassed = regressionHealth.candidate.every(Boolean);
+    if (!baselineHealthy) {
+      verdict = "inconclusive";
+      note = "基线回归任务失败：评估环境不可信，不能判通过";
+    } else if (!regressionPassed) {
+      verdict = "rejected";
+      note = "候选未通过全部既有行为回归";
+    } else if (totalSamples < thresholds.minSamples) {
       verdict = "inconclusive";
       note = `样本不足（${totalSamples} < ${thresholds.minSamples}）：证据不足，不判通过`;
+    } else if (candidateArm.routeAccuracy !== null && candidateArm.routeAccuracy < 1) {
+      verdict = "rejected";
+      note = "候选未通过预先标注的路由正确性验收";
     } else if (candidateArm.successRate < thresholds.minSuccessRate) {
       verdict = "rejected";
       note = `候选臂成功率 ${(candidateArm.successRate * 100).toFixed(0)}% 低于门槛 ${(thresholds.minSuccessRate * 100).toFixed(0)}%`;
@@ -1592,26 +1901,19 @@ export class Evolution {
     const evaluation: EvaluationRecord = {
       id: this.deps.ids.next(),
       candidateId,
-      protocolDigest: digestOf(
-        canonicalJson({
-          protocol: "m3-policy-eval-v1",
-          cases: plan.cases.length,
-          repeats: plan.repeats,
-          thresholds,
-        }),
-      ),
+      protocolDigest: policyEvaluationPlanDigest(plan),
       baselineSnapshotId: candidate.baseSnapshotId,
       runs: outcomes,
       verdict,
       metrics: {
         newCapability: { passed: verdict === "eligible", durationMs: 0 },
-        regression: { passed: base.successRate >= 0, durationMs: base.latencyP50Ms },
-        baseline: { passed: true, durationMs: candidateArm.latencyP50Ms },
+        regression: { passed: regressionPassed, durationMs: candidateArm.latencyP50Ms },
+        baseline: { passed: baselineHealthy, durationMs: base.latencyP50Ms },
         cost: null,
       },
       policy: { base, candidate: candidateArm, thresholds, repeats: plan.repeats },
-      datasetRef: candidate.datasetRef,
-      datasetSplitRefs: plan.cases.map((_, i) => `case-${i + 1}`),
+      datasetRef: candidate.sourceRefs["validationSetId"],
+      datasetSplitRefs: plan.cases.map((c) => c.id),
       createdAt: this.deps.clock.now(),
     };
     this.deps.storage.tx(() => {
@@ -1690,7 +1992,13 @@ export class Evolution {
   private memberView(experienceId: string, runId: string): ExperienceMemberView | null {
     const run = this.deps.storage.getRun(runId);
     const experience = this.deps.storage.getExperienceByRun(runId);
-    if (!run || !experience || experience.id !== experienceId) return null;
+    if (
+      !run ||
+      run.organismId !== this.deps.organismId ||
+      !experience ||
+      experience.id !== experienceId
+    )
+      return null;
     const task = this.deps.storage.getTask(run.taskId);
     const decisionValue = new Map<string, string>();
     for (const event of this.deps.storage.listEvents({ runId }, 500)) {
@@ -1712,6 +2020,7 @@ export class Evolution {
       runId,
       experienceId,
       taskGoal: task?.goal ?? "(task 缺失)",
+      familyId: task?.familyId ?? null,
       requires: task?.requires ?? [],
       runPurpose: run.purpose,
       snapshotId: run.snapshotId,
@@ -1738,6 +2047,9 @@ export type PromoteOutcome =
 /** 策略评估计划（m3-policy-eval-v1）：验证集 cases × repeats × 显式门槛 */
 export interface PolicyEvaluationPlan {
   cases: Array<{
+    id: string;
+    familyId: string;
+    role?: "validation" | "regression";
     task: TaskSubmissionLike;
     /** 期望路由选项（路由准确率分母）；无期望为 null */
     expectedChoice: string | null;
@@ -1771,6 +2083,8 @@ export interface EvaluationPlan {
 }
 
 export interface EvolutionRuntimeDeps {
+  actorId?: string;
+  learningCallTimeoutMs?: number;
   kernel: Kernel;
   storage: Storage;
   blobs: BlobStore;
@@ -1908,4 +2222,83 @@ function assertEvaluationPlan(
       `评估计划未覆盖已有能力回归：${uncovered.join(", ")}`,
     );
   }
+}
+
+function goalFamily(goal: string): string {
+  return `goal:${digestOf(canonicalJson(goal.trim()))}`;
+}
+
+export function assertPolicyEvaluationPlan(plan: PolicyEvaluationPlan): void {
+  const t = plan?.thresholds;
+  if (
+    !plan ||
+    !Array.isArray(plan.cases) ||
+    plan.cases.length === 0 ||
+    !Number.isSafeInteger(plan.repeats) ||
+    plan.repeats < 1 ||
+    !t ||
+    !Number.isFinite(t.minSuccessRate) ||
+    t.minSuccessRate <= 0 ||
+    t.minSuccessRate > 1 ||
+    !Number.isFinite(t.minImprovement) ||
+    t.minImprovement < 0 ||
+    t.minImprovement > 1 ||
+    !Number.isSafeInteger(t.minSamples) ||
+    t.minSamples < 1
+  )
+    throw new EvolutionError(
+      "evaluation_plan_invalid",
+      "评估方案必须有有效用例、正整数重复数/样本门槛及有效成功率门槛",
+    );
+  const ids = new Set<string>();
+  for (const c of plan.cases) {
+    if (
+      !c.id ||
+      !c.familyId ||
+      ids.has(c.id) ||
+      !c.task ||
+      typeof c.task.goal !== "string" ||
+      !Array.isArray(c.task.inputs) ||
+      !c.task.acceptance ||
+      !c.task.budget ||
+      !Number.isSafeInteger(c.task.budget.maxAttempts) ||
+      c.task.budget.maxAttempts < 1 ||
+      !Number.isFinite(c.task.budget.maxWallClockSeconds) ||
+      c.task.budget.maxWallClockSeconds <= 0 ||
+      (c.role && c.role !== "validation" && c.role !== "regression") ||
+      (c.expectedChoice !== null && typeof c.expectedChoice !== "string")
+    )
+      throw new EvolutionError(
+        "evaluation_plan_invalid",
+        "用例需要唯一 ID、family、有效任务及明确期望路由",
+      );
+    ids.add(c.id);
+  }
+  if (!plan.cases.some((c) => c.role === "regression"))
+    throw new EvolutionError(
+      "evaluation_plan_missing_regression",
+      "策略验证必须包含独立回归任务，确认基线健康及候选无回归",
+    );
+}
+
+export function policyEvaluationPlanDigest(plan: PolicyEvaluationPlan): string {
+  assertPolicyEvaluationPlan(plan);
+  return digestOf(
+    canonicalJson({
+      protocol: "m3-policy-eval-v1",
+      repeats: plan.repeats,
+      thresholds: plan.thresholds,
+      cases: plan.cases.map((c) => ({
+        id: c.id,
+        familyId: c.familyId,
+        role: c.role ?? "validation",
+        expectedChoice: c.expectedChoice,
+        taskDigest: evaluationPlanDigest({
+          newCapability: c.task,
+          regression: c.task,
+          requestedBy: plan.requestedBy,
+        }),
+      })),
+    }),
+  );
 }

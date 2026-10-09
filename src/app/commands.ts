@@ -1,24 +1,30 @@
 import { readFileSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 import { openInstance, resolveInstanceRoot } from "./instance.ts";
-import { PRINCIPAL_ID, installSeed } from "./seed.ts";
+import { ORGANISM_ID, PRINCIPAL_ID, installSeed } from "./seed.ts";
+import type { PolicyEvaluationPlan } from "../evolution/index.ts";
 import { loadTaskFile, resolveFrom } from "./task-file.ts";
 
 export interface CommonOpts {
   home?: string;
   json?: boolean;
+  organism?: string;
+  actor?: string;
 }
 
 export async function initCommand(opts: CommonOpts): Promise<void> {
   const root = resolveInstanceRoot(opts.home);
-  const inst = openInstance(root);
+  const inst = openInstance(root, { organismId: opts.organism, actorId: opts.actor });
   try {
-    const result = installSeed({
-      kernel: inst.kernel,
-      storage: inst.storage,
-      blobs: inst.blobs,
-      clock: { now: Date.now },
-    });
+    const result = installSeed(
+      {
+        kernel: inst.kernel,
+        storage: inst.storage,
+        blobs: inst.blobs,
+        clock: { now: Date.now },
+      },
+      { organismId: opts.organism, ownerId: opts.actor },
+    );
     if (opts.json) {
       console.log(JSON.stringify({ root, ...result }, null, 2));
       return;
@@ -40,10 +46,13 @@ export async function initCommand(opts: CommonOpts): Promise<void> {
 
 export async function submitCommand(taskPath: string, opts: CommonOpts): Promise<void> {
   const { file, budget, baseDir } = loadTaskFile(taskPath);
-  const inst = openInstance(resolveInstanceRoot(opts.home));
+  const inst = openInstance(resolveInstanceRoot(opts.home), {
+    organismId: opts.organism,
+    actorId: opts.actor,
+  });
   try {
     const summary = await inst.runtime.submitTask({
-      requestedBy: PRINCIPAL_ID,
+      requestedBy: opts.actor ?? PRINCIPAL_ID,
       goal: file.goal,
       inputs: file.inputs.map((p) => resolveFrom(baseDir, p)),
       budget,
@@ -96,10 +105,13 @@ export async function submitCommand(taskPath: string, opts: CommonOpts): Promise
 }
 
 export async function runsCommand(id: string | undefined, opts: CommonOpts): Promise<void> {
-  const inst = openInstance(resolveInstanceRoot(opts.home));
+  const inst = openInstance(resolveInstanceRoot(opts.home), {
+    organismId: opts.organism,
+    actorId: opts.actor,
+  });
   try {
     if (!id) {
-      const runs = inst.storage.listRuns(20);
+      const runs = inst.storage.listRuns(20, opts.organism ?? ORGANISM_ID);
       if (opts.json) {
         console.log(JSON.stringify(runs, null, 2));
         return;
@@ -146,7 +158,10 @@ export async function runsCommand(id: string | undefined, opts: CommonOpts): Pro
 }
 
 export async function cancelCommand(id: string, opts: CommonOpts): Promise<void> {
-  const inst = openInstance(resolveInstanceRoot(opts.home));
+  const inst = openInstance(resolveInstanceRoot(opts.home), {
+    organismId: opts.organism,
+    actorId: opts.actor,
+  });
   try {
     const result = await inst.runtime.cancel(id);
     if (opts.json) {
@@ -161,7 +176,10 @@ export async function cancelCommand(id: string, opts: CommonOpts): Promise<void>
 }
 
 export async function advanceCommand(id: string, opts: CommonOpts): Promise<void> {
-  const inst = openInstance(resolveInstanceRoot(opts.home));
+  const inst = openInstance(resolveInstanceRoot(opts.home), {
+    organismId: opts.organism,
+    actorId: opts.actor,
+  });
   try {
     const result = await inst.runtime.advanceRun(id);
     if (opts.json) {
@@ -193,9 +211,12 @@ export async function buildCommand(opts: BuildOpts): Promise<void> {
     regression: optionFiles(opts.regressionTask).map((file) =>
       taskSubmissionFrom(file, process.cwd()),
     ),
-    requestedBy: PRINCIPAL_ID,
+    requestedBy: opts.actor ?? PRINCIPAL_ID,
   };
-  const inst = openInstance(resolveInstanceRoot(opts.home));
+  const inst = openInstance(resolveInstanceRoot(opts.home), {
+    organismId: opts.organism,
+    actorId: opts.actor,
+  });
   try {
     const summary = await inst.evolution.build({
       capability: opts.capability,
@@ -210,7 +231,7 @@ export async function buildCommand(opts: BuildOpts): Promise<void> {
       ],
       budget: { maxAttempts: 3, maxWallClockSeconds: 600 },
       outputSchema: resolve(opts.spec), // test-runner 裁判不消费 schema；仅满足路径校验
-      requestedBy: PRINCIPAL_ID,
+      requestedBy: opts.actor ?? PRINCIPAL_ID,
     });
     if (summary.state !== "succeeded") {
       if (opts.json) {
@@ -227,7 +248,7 @@ export async function buildCommand(opts: BuildOpts): Promise<void> {
     const { candidate, created } = inst.evolution.collectCandidate(summary.runId, {
       capability: opts.capability,
       hypothesis: `为 ${opts.capability} 增加派生能力（构建来源 run ${summary.runId}）`,
-      proposedBy: PRINCIPAL_ID,
+      proposedBy: opts.actor ?? PRINCIPAL_ID,
       evaluationPlan,
     });
     const status = inst.evolution.candidateStatus(candidate.id);
@@ -260,7 +281,10 @@ export interface JudgeUpgradeOpts extends CommonOpts {
  */
 export async function judgeUpgradeCommand(opts: JudgeUpgradeOpts): Promise<void> {
   const regression = taskSubmissionFrom(opts.regressionTask, process.cwd());
-  const inst = openInstance(resolveInstanceRoot(opts.home));
+  const inst = openInstance(resolveInstanceRoot(opts.home), {
+    organismId: opts.organism,
+    actorId: opts.actor,
+  });
   try {
     const { HYBRID_EVALUATOR_CONTENT } = await import("../evolution/assets.ts");
     const { candidate, created } = inst.evolution.proposeJudgeCandidate({
@@ -306,7 +330,10 @@ export async function datasetFreezeCommand(
     cutoff?: string;
   },
 ): Promise<void> {
-  const inst = openInstance(resolveInstanceRoot(opts.home));
+  const inst = openInstance(resolveInstanceRoot(opts.home), {
+    organismId: opts.organism,
+    actorId: opts.actor,
+  });
   try {
     const cutoffAt = opts.cutoff ? Date.parse(opts.cutoff) : undefined;
     if (opts.cutoff && Number.isNaN(cutoffAt))
@@ -314,7 +341,7 @@ export async function datasetFreezeCommand(
     const result = inst.evolution.freezeExperienceWindow({
       purpose: opts.purpose as "development" | "validation" | "regression",
       cutoffAt,
-      createdBy: PRINCIPAL_ID,
+      createdBy: opts.actor ?? PRINCIPAL_ID,
     });
     if (opts.json) {
       console.log(JSON.stringify(result, null, 2));
@@ -333,9 +360,14 @@ export async function datasetFreezeCommand(
 }
 
 export async function datasetListCommand(opts: CommonOpts): Promise<void> {
-  const inst = openInstance(resolveInstanceRoot(opts.home));
+  const inst = openInstance(resolveInstanceRoot(opts.home), {
+    organismId: opts.organism,
+    actorId: opts.actor,
+  });
   try {
-    const datasets = inst.storage.listExperienceDatasets(undefined, 20);
+    const datasets = inst.storage
+      .listExperienceDatasets(undefined, 20)
+      .filter((dataset) => dataset.organismId === (opts.organism ?? ORGANISM_ID));
     if (opts.json) {
       console.log(JSON.stringify(datasets, null, 2));
       return;
@@ -355,7 +387,10 @@ export async function datasetListCommand(opts: CommonOpts): Promise<void> {
 }
 
 export async function datasetInspectCommand(id: string, opts: CommonOpts): Promise<void> {
-  const inst = openInstance(resolveInstanceRoot(opts.home));
+  const inst = openInstance(resolveInstanceRoot(opts.home), {
+    organismId: opts.organism,
+    actorId: opts.actor,
+  });
   try {
     const view = inst.evolution.experienceDatasetView(id);
     if (opts.json) {
@@ -383,6 +418,7 @@ export async function datasetInspectCommand(id: string, opts: CommonOpts): Promi
 
 export interface ConsolidateOpts extends CommonOpts {
   gold?: string;
+  validationSet?: string;
 }
 
 /**
@@ -398,12 +434,16 @@ export async function consolidateCommand(datasetId: string, opts: ConsolidateOpt
       choice: string;
     }>;
   }
-  const inst = openInstance(resolveInstanceRoot(opts.home));
+  const inst = openInstance(resolveInstanceRoot(opts.home), {
+    organismId: opts.organism,
+    actorId: opts.actor,
+  });
   try {
     const result = await inst.evolution.proposePolicyCandidate({
       datasetId,
       goldMatches,
-      createdBy: PRINCIPAL_ID,
+      createdBy: opts.actor ?? PRINCIPAL_ID,
+      validationSetId: opts.validationSet,
     });
     if (opts.json) {
       console.log(JSON.stringify(result, null, 2));
@@ -427,9 +467,44 @@ export async function consolidateCommand(datasetId: string, opts: ConsolidateOpt
   }
 }
 
-export interface EvaluatePolicyOpts extends CommonOpts {
+export interface ValidationRegisterOpts extends CommonOpts {
   cases: string;
-  repeats: string;
+  repeats?: string;
+  devFamily?: string[];
+  source?: string;
+}
+
+export async function validationRegisterCommand(opts: ValidationRegisterOpts): Promise<void> {
+  const cases = JSON.parse(
+    readFileSync(resolve(opts.cases), "utf8"),
+  ) as PolicyEvaluationPlan["cases"];
+  const plan: PolicyEvaluationPlan = {
+    cases,
+    repeats: opts.repeats ? Math.max(1, Number.parseInt(opts.repeats, 10)) : 1,
+    thresholds: { minSuccessRate: 0.75, minImprovement: 0.25, minSamples: 4 },
+    requestedBy: opts.actor ?? PRINCIPAL_ID,
+  };
+  const inst = openInstance(resolveInstanceRoot(opts.home), {
+    organismId: opts.organism,
+    actorId: opts.actor,
+  });
+  try {
+    const record = inst.evolution.registerValidationSet({
+      familyIds: [...new Set(cases.map((c) => c.familyId))],
+      devFamilyIds: opts.devFamily ?? [],
+      sourceRef: opts.source ?? resolve(opts.cases),
+      preparedBy: opts.actor ?? PRINCIPAL_ID,
+      plan,
+    });
+    console.log(JSON.stringify({ validationSet: record }, null, 2));
+  } finally {
+    inst.close();
+  }
+}
+
+export interface EvaluatePolicyOpts extends CommonOpts {
+  cases?: string;
+  repeats?: string;
 }
 
 /** 策略候选评估（m3-policy-eval-v1）：双臂 × 验证集 × 重复，指标分列 */
@@ -437,25 +512,25 @@ export async function evaluatePolicyCommand(
   candidateId: string,
   opts: EvaluatePolicyOpts,
 ): Promise<void> {
-  const cases = JSON.parse(readFileSync(resolve(opts.cases), "utf8")) as Array<{
-    task: {
-      goal: string;
-      inputs: string[];
-      budget: { maxAttempts: number; maxWallClockSeconds: number };
-      requires?: string[];
-      acceptance: { outputSchema: string; verifier: string };
-    };
-    expectedChoice: string | null;
-  }>;
-  const repeats = Number.parseInt(opts.repeats, 10);
-  const plan = {
-    cases,
-    repeats: Number.isNaN(repeats) ? 1 : Math.max(1, repeats),
-    thresholds: { minSuccessRate: 0.75, minImprovement: 0.25, minSamples: 4 },
-    requestedBy: PRINCIPAL_ID,
-  };
-  const inst = openInstance(resolveInstanceRoot(opts.home));
+  const cases = opts.cases
+    ? (JSON.parse(readFileSync(resolve(opts.cases), "utf8")) as PolicyEvaluationPlan["cases"])
+    : undefined;
+  const inst = openInstance(resolveInstanceRoot(opts.home), {
+    organismId: opts.organism,
+    actorId: opts.actor,
+  });
   try {
+    const frozenPlan = cases ? await inst.evolution.policyEvaluationPlan(candidateId) : undefined;
+    const plan = frozenPlan
+      ? {
+          ...frozenPlan,
+          cases: cases ?? frozenPlan.cases,
+          repeats: opts.repeats
+            ? Math.max(1, Number.parseInt(opts.repeats, 10))
+            : frozenPlan.repeats,
+          requestedBy: opts.actor ?? PRINCIPAL_ID,
+        }
+      : undefined;
     const { evaluation, status } = await inst.evolution.evaluatePolicyCandidate(candidateId, plan);
     if (opts.json) {
       console.log(JSON.stringify({ evaluation, status }, null, 2));
@@ -495,6 +570,7 @@ export async function evaluatePolicyCommand(
 
 export interface ConsolidateSubmitOpts extends CommonOpts {
   gold?: string;
+  validationSet?: string;
   mode?: string;
   minSupport?: string;
   minPrecision?: string;
@@ -538,14 +614,18 @@ export async function consolidateSubmitCommand(
 ): Promise<void> {
   const { params } = readConsolidationParams(opts);
   const mode = opts.mode === "llm" ? "llm" : "rule";
-  const inst = openInstance(resolveInstanceRoot(opts.home));
+  const inst = openInstance(resolveInstanceRoot(opts.home), {
+    organismId: opts.organism,
+    actorId: opts.actor,
+  });
   try {
     const { job, created } = inst.evolution.submitConsolidationJob({
       datasetId,
       params,
       goldMatches: readGoldMatches(opts.gold),
       mode,
-      createdBy: PRINCIPAL_ID,
+      createdBy: opts.actor ?? PRINCIPAL_ID,
+      validationSetId: opts.validationSet,
     });
     if (opts.json) {
       console.log(JSON.stringify({ job, created }, null, 2));
@@ -564,7 +644,10 @@ export async function consolidateSubmitCommand(
 /** 驱动队列：queued → running → completed/failed（串行，operator 显式） */
 export async function consolidateRunCommand(opts: CommonOpts & { limit?: string }): Promise<void> {
   const limit = opts.limit ? Number.parseInt(opts.limit, 10) : 1;
-  const inst = openInstance(resolveInstanceRoot(opts.home));
+  const inst = openInstance(resolveInstanceRoot(opts.home), {
+    organismId: opts.organism,
+    actorId: opts.actor,
+  });
   try {
     const results = await inst.evolution.runPendingConsolidationJobs(
       Number.isNaN(limit) ? 1 : limit,
@@ -589,9 +672,15 @@ export async function consolidateJobsCommand(
   datasetId: string | undefined,
   opts: CommonOpts,
 ): Promise<void> {
-  const inst = openInstance(resolveInstanceRoot(opts.home));
+  const inst = openInstance(resolveInstanceRoot(opts.home), {
+    organismId: opts.organism,
+    actorId: opts.actor,
+  });
   try {
-    const jobs = inst.storage.listConsolidationJobs(datasetId ? { datasetId } : {}, 20);
+    const jobs = inst.storage.listConsolidationJobs(
+      { ...(datasetId ? { datasetId } : {}), organismId: opts.organism ?? ORGANISM_ID },
+      20,
+    );
     if (opts.json) {
       console.log(JSON.stringify(jobs, null, 2));
       return;
@@ -611,7 +700,10 @@ export async function consolidateJobsCommand(
 }
 
 export async function consolidateJobCommand(id: string, opts: CommonOpts): Promise<void> {
-  const inst = openInstance(resolveInstanceRoot(opts.home));
+  const inst = openInstance(resolveInstanceRoot(opts.home), {
+    organismId: opts.organism,
+    actorId: opts.actor,
+  });
   try {
     const job = inst.evolution.consolidationJob(id);
     const events = inst.storage.listEvents({ streamId: `job-${id}` }, 50);
@@ -622,7 +714,10 @@ export async function consolidateJobCommand(id: string, opts: CommonOpts): Promi
 }
 
 export async function consolidateCancelCommand(id: string, opts: CommonOpts): Promise<void> {
-  const inst = openInstance(resolveInstanceRoot(opts.home));
+  const inst = openInstance(resolveInstanceRoot(opts.home), {
+    organismId: opts.organism,
+    actorId: opts.actor,
+  });
   try {
     const result = inst.evolution.cancelConsolidationJob(id);
     if (opts.json) {
@@ -637,7 +732,10 @@ export async function consolidateCancelCommand(id: string, opts: CommonOpts): Pr
 }
 
 export async function candidatesCommand(id: string | undefined, opts: CommonOpts): Promise<void> {
-  const inst = openInstance(resolveInstanceRoot(opts.home));
+  const inst = openInstance(resolveInstanceRoot(opts.home), {
+    organismId: opts.organism,
+    actorId: opts.actor,
+  });
   try {
     if (id) {
       const candidate = inst.storage.getCandidate(id);
@@ -690,7 +788,10 @@ export async function candidatesCommand(id: string | undefined, opts: CommonOpts
 }
 
 export async function inspectCommand(id: string, opts: CommonOpts): Promise<void> {
-  const inst = openInstance(resolveInstanceRoot(opts.home));
+  const inst = openInstance(resolveInstanceRoot(opts.home), {
+    organismId: opts.organism,
+    actorId: opts.actor,
+  });
   try {
     const found =
       withKind("run", inst.storage.getRun(id)) ??
@@ -721,7 +822,10 @@ export async function inspectCommand(id: string, opts: CommonOpts): Promise<void
 }
 
 export async function recoverCommand(id: string | undefined, opts: CommonOpts): Promise<void> {
-  const inst = openInstance(resolveInstanceRoot(opts.home));
+  const inst = openInstance(resolveInstanceRoot(opts.home), {
+    organismId: opts.organism,
+    actorId: opts.actor,
+  });
   try {
     const actions = await inst.runtime.recoverRun(id);
     if (opts.json) {
@@ -747,7 +851,10 @@ export async function recoverCommand(id: string | undefined, opts: CommonOpts): 
 }
 
 export async function reconcileCommand(id: string, opts: CommonOpts): Promise<void> {
-  const inst = openInstance(resolveInstanceRoot(opts.home));
+  const inst = openInstance(resolveInstanceRoot(opts.home), {
+    organismId: opts.organism,
+    actorId: opts.actor,
+  });
   try {
     const report = await inst.runtime.reconcileRun(id);
     if (opts.json) {
@@ -796,14 +903,17 @@ export interface EvaluateOpts extends CommonOpts {
 }
 
 export async function evaluateCommand(id: string, opts: EvaluateOpts): Promise<void> {
-  const inst = openInstance(resolveInstanceRoot(opts.home));
+  const inst = openInstance(resolveInstanceRoot(opts.home), {
+    organismId: opts.organism,
+    actorId: opts.actor,
+  });
   try {
     const { evaluation, status } = await inst.evolution.evaluateCandidate(id, {
       newCapability: taskSubmissionFrom(opts.newCapabilityTask, process.cwd()),
       regression: optionFiles(opts.regressionTask).map((file) =>
         taskSubmissionFrom(file, process.cwd()),
       ),
-      requestedBy: PRINCIPAL_ID,
+      requestedBy: opts.actor ?? PRINCIPAL_ID,
     });
     if (opts.json) {
       console.log(JSON.stringify({ evaluation, status }, null, 2));
@@ -840,7 +950,10 @@ export interface PromoteOpts extends CommonOpts {
 }
 
 export async function promoteCommand(id: string, opts: PromoteOpts): Promise<void> {
-  const inst = openInstance(resolveInstanceRoot(opts.home));
+  const inst = openInstance(resolveInstanceRoot(opts.home), {
+    organismId: opts.organism,
+    actorId: opts.actor,
+  });
   try {
     const outcome = inst.evolution.promote(id, {
       authorizedBy: opts.as,
@@ -872,7 +985,10 @@ export async function promoteCommand(id: string, opts: PromoteOpts): Promise<voi
 }
 
 export async function rollbackCommand(opts: PromoteOpts & { to: string }): Promise<void> {
-  const inst = openInstance(resolveInstanceRoot(opts.home));
+  const inst = openInstance(resolveInstanceRoot(opts.home), {
+    organismId: opts.organism,
+    actorId: opts.actor,
+  });
   try {
     const target = inst.kernel.getSnapshot(opts.to) ?? inst.storage.findSnapshotByDigest(opts.to);
     if (!target) throw new Error(`快照 ${opts.to}（id 或 digest）不存在`);
@@ -904,7 +1020,10 @@ export async function supersedeCommand(
   id: string,
   opts: CommonOpts & { note?: string },
 ): Promise<void> {
-  const inst = openInstance(resolveInstanceRoot(opts.home));
+  const inst = openInstance(resolveInstanceRoot(opts.home), {
+    organismId: opts.organism,
+    actorId: opts.actor,
+  });
   try {
     const { superseded, successor } = await inst.evolution.supersedeAndReplace(id, {
       note: opts.note,
@@ -984,7 +1103,10 @@ export async function experimentReportCommand(
   opts: CommonOpts & { dataset?: string },
 ): Promise<void> {
   const { generateReport } = await import("./experiment/reporter.ts");
-  const inst = openInstance(resolveInstanceRoot(opts.home));
+  const inst = openInstance(resolveInstanceRoot(opts.home), {
+    organismId: opts.organism,
+    actorId: opts.actor,
+  });
   try {
     const outcome = generateReport({
       dir: resolve(dir),
@@ -1016,7 +1138,10 @@ export async function settleDecisionCommand(
   decisionId: string,
   opts: CommonOpts & { note?: string },
 ): Promise<void> {
-  const inst = openInstance(resolveInstanceRoot(opts.home));
+  const inst = openInstance(resolveInstanceRoot(opts.home), {
+    organismId: opts.organism,
+    actorId: opts.actor,
+  });
   try {
     const result = inst.runtime.settleDecisionCall(decisionId, { note: opts.note });
     if (opts.json) {

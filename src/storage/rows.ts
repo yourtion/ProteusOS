@@ -52,6 +52,7 @@ export interface SnapshotRow {
 }
 
 export interface TaskRow {
+  family_id: string | null;
   id: string;
   revision: number;
   requested_by: string;
@@ -218,6 +219,7 @@ export interface DecisionCallLimitRow {
 }
 
 export interface ExperienceDatasetRow {
+  organism_id: string;
   id: string;
   digest: string;
   purpose: string;
@@ -231,6 +233,9 @@ export interface ExperienceDatasetRow {
 }
 
 export interface ConsolidationJobRow {
+  organism_id: string;
+  validation_set_id: string | null;
+  cancel_requested: number;
   id: string;
   dataset_id: string;
   mode: string;
@@ -245,6 +250,11 @@ export interface ConsolidationJobRow {
 }
 
 export interface ValidationSetRow {
+  organism_id: string;
+  dev_family_ids: string;
+  plan_digest: string | null;
+  plan_ref: string | null;
+  candidate_id: string | null;
   id: string;
   family_ids: string;
   source_ref: string;

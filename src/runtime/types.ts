@@ -35,6 +35,7 @@ export interface TaskRecord {
   revision: number;
   requestedBy: string;
   goal: string;
+  familyId?: string | null;
   /** 输入路径（相对 task 文件所在目录；admission 时解析为绝对路径再写入记录） */
   inputs: string[];
   budget: TaskBudget;

@@ -94,6 +94,7 @@ export type ExperienceDatasetPurpose = "development" | "validation" | "regressio
  */
 export interface ExperienceDatasetRecord {
   id: string;
+  organismId: string;
   digest: string;
   purpose: ExperienceDatasetPurpose;
   cutoffAt: number;
@@ -124,6 +125,7 @@ export interface ExperienceMemberView {
   runId: string;
   experienceId: string;
   taskGoal: string;
+  familyId: string | null;
   requires: string[];
   runPurpose: string;
   snapshotId: string;
@@ -145,6 +147,9 @@ export type ConsolidationMode = "rule" | "llm";
 
 export interface ConsolidationJobRecord {
   id: string;
+  organismId: string;
+  validationSetId: string | null;
+  cancelRequested: boolean;
   datasetId: string;
   mode: ConsolidationMode;
   paramsDigest: string;
@@ -163,15 +168,31 @@ export type ValidationSetState = "ready" | "in_use" | "retired";
 
 export interface ValidationSetRecord {
   id: string;
+  organismId: string;
   familyIds: string[];
   /** 数据集来源引用（目录/生成参数摘要，供验证负责人定位） */
   sourceRef: string;
   preparedBy: string;
   /** 注册时的开发集 family 指纹（隔离基准；隔离断言依据） */
   devFamiliesDigest: string;
+  devFamilyIds: string[];
+  planDigest: string | null;
+  planRef: string | null;
+  candidateId: string | null;
   state: ValidationSetState;
   usageCount: number;
   firstUsedAt: number | null;
   retiredAt: number | null;
   createdAt: number;
+}
+
+export interface LearningCallRecord {
+  id: string;
+  organismId: string;
+  jobId: string | null;
+  state: "reserved" | "completed" | "unknown";
+  usage: { inputTokens: number; outputTokens: number } | null;
+  error: string | null;
+  createdAt: number;
+  endedAt: number | null;
 }

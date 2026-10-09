@@ -152,14 +152,18 @@ export function consolidateRoutes(
  */
 export interface RouteProposer {
   readonly name: string;
-  propose(input: {
-    /** 弃权/失败样本摘要（goal + 视图特征 + 原因；不含正确答案） */
-    gapSamples: Array<{ goal: string; features: Record<string, boolean>; reason: string }>;
-    /** 可路由选项（图中 decision options） */
-    options: string[];
-    /** 可用特征名（decision-view 词表） */
-    features: string[];
-  }): Promise<Array<{ feature: string; choose: string; rationale: string }>>;
+  propose(
+    input: {
+      /** 弃权/失败样本摘要（goal + 视图特征 + 原因；不含正确答案） */
+      gapSamples: Array<{ goal: string; features: Record<string, boolean>; reason: string }>;
+      /** 可路由选项（图中 decision options） */
+      options: string[];
+      /** 可用特征名（decision-view 词表） */
+      features: string[];
+    },
+    options?: { signal?: AbortSignal },
+  ): Promise<Array<{ feature: string; choose: string; rationale: string }>>;
+  readonly lastUsage?: { inputTokens: number; outputTokens: number } | null;
 }
 
 /**

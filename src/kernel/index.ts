@@ -65,6 +65,8 @@ export class KernelError extends Error {
     | "duplicate_slot"
     | "unknown_organism"
     | "unknown_principal"
+    | "forbidden"
+    | "operation_conflict"
     | "promotion_target_unresolvable";
 
   constructor(code: KernelError["code"], message: string) {
@@ -222,6 +224,14 @@ export class Kernel {
     return this.store.getPrincipal(id);
   }
 
+  assertOrganismAccess(organismId: string, actor: string): void {
+    const organism = this.store.getOrganism(organismId);
+    if (!organism) throw new KernelError("unknown_organism", `organism ${organismId} 不存在`);
+    if (!this.store.getPrincipal(actor))
+      throw new KernelError("unknown_principal", `principal ${actor} 不存在`);
+    if (organism.ownerId !== actor) throw new KernelError("forbidden", "当前主体无权操作该个体");
+  }
+
   getSnapshot(id: string): GenomeSnapshot | undefined {
     return this.store.getSnapshot(id);
   }
@@ -278,8 +288,18 @@ export class Kernel {
     | { result: "promoted"; promotion: PromotionRecord }
     | { result: "already"; promotion: PromotionRecord }
     | { result: "stale"; currentRevision: number } {
+    this.assertOrganismAccess(input.organismId, input.authorizedBy);
     const existing = this.store.getPromotionByOperationId(input.operationId);
-    if (existing) return { result: "already", promotion: existing };
+    if (existing) {
+      if (
+        existing.organismId !== input.organismId ||
+        existing.toSnapshotId !== input.toSnapshotId ||
+        existing.actor !== input.authorizedBy ||
+        existing.kind !== input.kind
+      )
+        throw new KernelError("operation_conflict", "operationId 已用于不同晋升");
+      return { result: "already", promotion: existing };
+    }
 
     const organism = this.store.getOrganism(input.organismId);
     if (!organism) {

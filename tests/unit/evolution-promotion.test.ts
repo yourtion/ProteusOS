@@ -47,7 +47,7 @@ describe("Evolution 晋升事务边界", () => {
     };
     const evolution = new Evolution({
       storage,
-      kernel: { promote },
+      kernel: { promote, assertOrganismAccess: vi.fn() },
       ids: { next: () => "operation-1" },
       clock: { now: () => 3 },
       organismId: candidate.organismId,

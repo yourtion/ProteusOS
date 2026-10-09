@@ -365,4 +365,41 @@ CREATE TABLE validation_sets (
 CREATE INDEX idx_validation_sets_state ON validation_sets(state);
 `,
   },
+  {
+    version: 10,
+    name: "m3-frozen-policy-evidence-and-learning-ledger",
+    sql: `
+ALTER TABLE tasks ADD COLUMN family_id TEXT;
+ALTER TABLE experience_datasets ADD COLUMN organism_id TEXT NOT NULL DEFAULT 'organism-default';
+UPDATE experience_datasets SET organism_id = substr(permission_scope, 10) WHERE permission_scope LIKE 'organism:%';
+ALTER TABLE consolidation_jobs ADD COLUMN organism_id TEXT NOT NULL DEFAULT 'organism-default';
+UPDATE consolidation_jobs SET organism_id = COALESCE((SELECT organism_id FROM experience_datasets WHERE id = dataset_id), 'organism-default');
+ALTER TABLE consolidation_jobs ADD COLUMN validation_set_id TEXT;
+ALTER TABLE consolidation_jobs ADD COLUMN cancel_requested INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE validation_sets ADD COLUMN organism_id TEXT NOT NULL DEFAULT 'organism-default';
+ALTER TABLE validation_sets ADD COLUMN dev_family_ids TEXT NOT NULL DEFAULT '[]';
+ALTER TABLE validation_sets ADD COLUMN plan_digest TEXT;
+ALTER TABLE validation_sets ADD COLUMN plan_ref TEXT;
+ALTER TABLE validation_sets ADD COLUMN candidate_id TEXT;
+CREATE TABLE experience_dataset_members (
+  dataset_id TEXT NOT NULL REFERENCES experience_datasets(id),
+  experience_id TEXT NOT NULL,
+  PRIMARY KEY(dataset_id, experience_id)
+);
+INSERT INTO experience_dataset_members SELECT d.id, j.value FROM experience_datasets d, json_each(d.member_experience_ids) j;
+CREATE INDEX idx_dataset_members_experience ON experience_dataset_members(experience_id);
+CREATE TABLE learning_calls (
+  id TEXT PRIMARY KEY,
+  organism_id TEXT NOT NULL,
+  job_id TEXT,
+  state TEXT NOT NULL,
+  usage TEXT,
+  error TEXT,
+  created_at INTEGER NOT NULL,
+  ended_at INTEGER
+);
+CREATE INDEX idx_learning_calls_organism ON learning_calls(organism_id);
+CREATE TABLE learning_call_limits (organism_id TEXT PRIMARY KEY, max_calls INTEGER NOT NULL);
+`,
+  },
 ];

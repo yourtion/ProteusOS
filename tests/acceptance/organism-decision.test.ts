@@ -215,20 +215,24 @@ describe("D15：旧实例迁移与历史 decision.recorded 恢复", () => {
       next: () => `legacy-${Math.random().toString(36).slice(2)}`,
     });
     const seed = installSeed({ kernel, storage, blobs, clock });
-    storage.insertTask({
-      id: "task-legacy",
-      revision: 1,
-      requestedBy: "principal-local",
-      goal: "对 fixtures/stats/input-a 下的文本文件生成统计摘要",
-      inputs: [join(REPO_ROOT, "tests/fixtures/stats/input-a")],
-      budget: { maxAttempts: 3, maxWallClockSeconds: 60 },
-      acceptance: {
+    // 直接插入 v4 旧 schema 行：当前 Storage.insertTask 会写入 v5 family_id，
+    // 不能用于构造尚未迁移的数据库。
+    db.run(
+      `INSERT INTO tasks (id, revision, requested_by, goal, inputs, budget, acceptance, requires, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      "task-legacy",
+      1,
+      "principal-local",
+      "对 fixtures/stats/input-a 下的文本文件生成统计摘要",
+      JSON.stringify([join(REPO_ROOT, "tests/fixtures/stats/input-a")]),
+      JSON.stringify({ maxAttempts: 3, maxWallClockSeconds: 60 }),
+      JSON.stringify({
         outputSchema: join(REPO_ROOT, "tests/fixtures/stats/schemas/stats-summary.schema.json"),
         verifier: "stats-acceptance",
-      },
-      requires: [],
-      createdAt: clock.now(),
-    });
+      }),
+      JSON.stringify([]),
+      clock.now(),
+    );
     const createdAt = clock.now();
     db.run(
       `INSERT INTO runs (id, task_id, task_revision, organism_id, purpose, snapshot_id, graph_digest, state, supersedes_run_id, budget, failure_reason, created_at, updated_at)

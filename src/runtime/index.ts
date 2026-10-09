@@ -51,6 +51,7 @@ import { isCapabilityName, parseCapabilityModule, runCapabilityModule } from "./
 import type { SandboxBackend } from "./sandbox.ts";
 
 export interface TaskSubmission {
+  familyId?: string;
   requestedBy: string;
   goal: string;
   /** 绝对路径（由 CLI 相对 task 文件解析） */
@@ -120,6 +121,7 @@ export class RuntimeError extends Error {
 }
 
 export interface RuntimeDeps {
+  actorId?: string;
   storage: Storage;
   kernel: Kernel;
   organismId: string;
@@ -251,6 +253,11 @@ export class Runtime {
 
   /** 提交任务并内联执行到终态；options 提供评估 Run 的显式授权入口（M2） */
   async submitTask(input: TaskSubmission, options: SubmitOptions = {}): Promise<RunSummary> {
+    this.deps.kernel.assertOrganismAccess(
+      this.deps.organismId,
+      this.deps.actorId ?? input.requestedBy,
+    );
+    this.deps.kernel.assertOrganismAccess(this.deps.organismId, input.requestedBy);
     for (const p of input.inputs) {
       assertInputPath(p);
     }
@@ -330,6 +337,7 @@ export class Runtime {
         revision: taskRevision,
         requestedBy: input.requestedBy,
         goal: input.goal,
+        familyId: input.familyId ?? null,
         inputs: [...input.inputs],
         budget: { ...input.budget },
         acceptance: { ...input.acceptance },
@@ -729,7 +737,9 @@ export class Runtime {
   async recoverRun(runId?: string): Promise<RecoveryAction[]> {
     const runs = runId
       ? [this.mustGetRun(runId)]
-      : this.deps.storage.listRunsByStates(["pending", "running", "waiting"], 100);
+      : this.deps.storage
+          .listRunsByStates(["pending", "running", "waiting"], 100)
+          .filter((r) => r.organismId === this.deps.organismId);
     const actions: RecoveryAction[] = [];
     for (const run of runs) {
       if (isTerminal(run.state)) {
@@ -2159,6 +2169,8 @@ export class Runtime {
   private mustGetRun(runId: string): RunRecord {
     const run = this.deps.storage.getRun(runId);
     if (!run) throw new RuntimeError("unknown_run", `run ${runId} 不存在`);
+    if (run.organismId !== this.deps.organismId)
+      throw new RuntimeError("unknown_run", "Run 属于其他个体");
     return run;
   }
 

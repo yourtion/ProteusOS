@@ -3,8 +3,16 @@ import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import type { AppInstance } from "../../src/app/instance.ts";
+import { openInstance } from "../../src/app/instance.ts";
+import { installSeed } from "../../src/app/seed.ts";
 import type { RouteProposer } from "../../src/evolution/consolidation.ts";
-import { bootSeededInstance, upgradeJudgeToActive } from "../helpers.ts";
+import {
+  bootSeededInstance,
+  policyValidationPlan,
+  registerPolicyValidationSet,
+  tempInstanceRoot,
+  upgradeJudgeToActive,
+} from "../helpers.ts";
 
 /**
  * Consolidation 异步队列 + LLM 归纳模式（fake proposer）。
@@ -38,7 +46,30 @@ class FakeRouteProposer implements RouteProposer {
   }
 }
 
-async function setup(fresh = false): Promise<AppInstance> {
+class SlowAbortableProposer implements RouteProposer {
+  readonly name = "slow-abortable-proposer";
+  called = false;
+  aborted = false;
+
+  async propose(
+    _input: Parameters<RouteProposer["propose"]>[0],
+    options?: { signal?: AbortSignal },
+  ): Promise<Array<{ feature: string; choose: string; rationale: string }>> {
+    this.called = true;
+    return new Promise((_, reject) => {
+      const signal = options?.signal;
+      if (!signal) return reject(new Error("missing abort signal"));
+      const abort = () => {
+        this.aborted = true;
+        reject(signal.reason);
+      };
+      if (signal.aborted) abort();
+      else signal.addEventListener("abort", abort, { once: true });
+    });
+  }
+}
+
+async function setup(fresh = false, routeProposer?: RouteProposer): Promise<AppInstance> {
   if (fresh) {
     const previous = inst;
     inst = undefined;
@@ -46,7 +77,17 @@ async function setup(fresh = false): Promise<AppInstance> {
   }
   if (inst) return inst;
   const { ensureCapabilityGenome } = await import("../../src/evolution/assets.ts");
-  const app = bootSeededInstance();
+  const app = routeProposer
+    ? openInstance(tempInstanceRoot(), { routeProposer })
+    : bootSeededInstance();
+  if (routeProposer) {
+    installSeed({
+      kernel: app.kernel,
+      storage: app.storage,
+      blobs: app.blobs,
+      clock: { now: Date.now },
+    });
+  }
   upgradeJudgeToActive(app);
   const genome = ensureCapabilityGenome(
     { kernel: app.kernel, storage: app.storage, blobs: app.blobs, clock: { now: Date.now } },
@@ -155,9 +196,11 @@ describe("Consolidation 异步队列", () => {
       goal: string;
       choice: string;
     }>;
+    const validationSetId = registerPolicyValidationSet(app, policyValidationPlan());
 
     const { job } = app.evolution.submitConsolidationJob({
       datasetId: frozen.dataset.id,
+      validationSetId,
       goldMatches: gold,
       createdBy: "principal-local",
     });
@@ -167,6 +210,7 @@ describe("Consolidation 异步队列", () => {
     expect(cancelled.state).toBe("cancelled");
     const { job: job2 } = app.evolution.submitConsolidationJob({
       datasetId: frozen.dataset.id,
+      validationSetId,
       goldMatches: gold,
       createdBy: "principal-local",
     });
@@ -184,9 +228,10 @@ describe("Consolidation 异步队列", () => {
   });
 
   it("非 development 数据集拒绝入队", async () => {
-    const app = await setup();
+    const app = bootSeededInstance();
     const regression = app.evolution.freezeExperienceWindow({
       purpose: "regression",
+      runIds: [],
       createdBy: "principal-local",
     });
     expect(() =>
@@ -195,6 +240,7 @@ describe("Consolidation 异步队列", () => {
         createdBy: "principal-local",
       }),
     ).toThrowError(/仅 development 许可/);
+    app.close();
   });
 });
 
@@ -225,6 +271,7 @@ describe("LLM 归纳模式（fake proposer）", () => {
       purpose: "development",
       createdBy: "principal-local",
     });
+    const validationSetId = registerPolicyValidationSet(app, policyValidationPlan());
 
     const fake = new FakeRouteProposer();
     // 达标提议（成功经验支撑）+ 不达标提议（无证据的猜测）
@@ -251,6 +298,7 @@ describe("LLM 归纳模式（fake proposer）", () => {
 
     const result = await evo.proposePolicyCandidate({
       datasetId: frozen.dataset.id,
+      validationSetId,
       mode: "llm",
       createdBy: "principal-local",
     });
@@ -330,9 +378,11 @@ describe("LLM 归纳模式（fake proposer）", () => {
       purpose: "development",
       createdBy: "principal-local",
     });
+    const validationSetId = registerPolicyValidationSet(app, policyValidationPlan());
     // 默认实例（openInstance 未注入 proposer）提交 llm 作业并执行
     const { job } = app.evolution.submitConsolidationJob({
       datasetId: frozen.dataset.id,
+      validationSetId,
       mode: "llm",
       createdBy: "principal-local",
     });
@@ -342,5 +392,59 @@ describe("LLM 归纳模式（fake proposer）", () => {
     const done = app.evolution.consolidationJob(job.id);
     expect(done.state).toBe("failed");
     expect(done.error).toContain("PROTEUS_LLM_API_KEY");
+  });
+
+  it("额度为零不调用 proposer；运行中取消传递 abort 并保留 unknown 额度", async () => {
+    const deniedProposer = new SlowAbortableProposer();
+    const denied = await setup(true, deniedProposer);
+    await seedFailingExperiences(denied);
+    const dev = denied.evolution.freezeExperienceWindow({
+      purpose: "development",
+      createdBy: "principal-local",
+    });
+    const deniedSet = registerPolicyValidationSet(denied, policyValidationPlan());
+    denied.storage.setLearningCallLimit("organism-default", 0);
+    const deniedJob = denied.evolution.submitConsolidationJob({
+      datasetId: dev.dataset.id,
+      validationSetId: deniedSet,
+      mode: "llm",
+      createdBy: "principal-local",
+    }).job;
+    const deniedResult = await denied.evolution.runPendingConsolidationJobs(1);
+    expect(deniedResult[0]!.outcome).toBe("failed");
+    expect(deniedResult[0]!.detail).toContain("学习调用额度耗尽");
+    expect(deniedProposer.called).toBe(false);
+    expect(denied.storage.learningCalls("organism-default")).toHaveLength(0);
+    expect(denied.evolution.consolidationJob(deniedJob.id).state).toBe("failed");
+
+    const slow = new SlowAbortableProposer();
+    const app = await setup(true, slow);
+    await seedFailingExperiences(app);
+    const dataset = app.evolution.freezeExperienceWindow({
+      purpose: "development",
+      createdBy: "principal-local",
+    });
+    const validationSetId = registerPolicyValidationSet(app, policyValidationPlan());
+    app.storage.setLearningCallLimit("organism-default", 1);
+    const job = app.evolution.submitConsolidationJob({
+      datasetId: dataset.dataset.id,
+      validationSetId,
+      mode: "llm",
+      createdBy: "principal-local",
+    }).job;
+    const running = app.evolution.runPendingConsolidationJobs(1);
+    for (let attempt = 0; attempt < 100 && !slow.called; attempt++) {
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+    expect(slow.called).toBe(true);
+    const cancel = app.evolution.cancelConsolidationJob(job.id);
+    expect(cancel.note).toContain("未知成本");
+    const results = await running;
+    expect(results[0]!.outcome).toBe("cancelled");
+    expect(slow.aborted).toBe(true);
+    const calls = app.storage.learningCalls("organism-default");
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.state).toBe("unknown");
+    expect(app.storage.learningCallLimit("organism-default")).toBe(1);
   });
 });

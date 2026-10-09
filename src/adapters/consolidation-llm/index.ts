@@ -23,6 +23,7 @@ export class LlmRouteProposer implements RouteProposer {
   /** 最近一次调用的 provenance（evolution 记入候选 sourceRefs） */
   lastProvenance: { promptDigest: string; responseDigest: string; servedModel: string } | null =
     null;
+  lastUsage: { inputTokens: number; outputTokens: number } | null = null;
 
   constructor(config: LlmAdapterConfig) {
     this.config = config;
@@ -34,11 +35,16 @@ export class LlmRouteProposer implements RouteProposer {
     });
   }
 
-  async propose(input: {
-    gapSamples: Array<{ goal: string; features: Record<string, boolean>; reason: string }>;
-    options: string[];
-    features: string[];
-  }): Promise<Array<{ feature: string; choose: string; rationale: string }>> {
+  async propose(
+    input: {
+      gapSamples: Array<{ goal: string; features: Record<string, boolean>; reason: string }>;
+      options: string[];
+      features: string[];
+    },
+    options?: { signal?: AbortSignal },
+  ): Promise<Array<{ feature: string; choose: string; rationale: string }>> {
+    this.lastProvenance = null;
+    this.lastUsage = null;
     if (input.gapSamples.length === 0) return [];
     const prompt = this.buildPrompt(input);
     const response = await this.client.messages.create(
@@ -48,7 +54,7 @@ export class LlmRouteProposer implements RouteProposer {
         temperature: 0,
         messages: [{ role: "user", content: prompt }],
       },
-      { signal: undefined },
+      { signal: options?.signal },
     );
     const text = response.content
       .filter((block): block is Anthropic.TextBlock => block.type === "text")
@@ -58,6 +64,10 @@ export class LlmRouteProposer implements RouteProposer {
       promptDigest: digestOf(prompt),
       responseDigest: digestOf(text),
       servedModel: response.model,
+    };
+    this.lastUsage = {
+      inputTokens: response.usage.input_tokens,
+      outputTokens: response.usage.output_tokens,
     };
     return this.parseProposals(text, input);
   }

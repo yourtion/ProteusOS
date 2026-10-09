@@ -16,6 +16,7 @@ import {
   consolidateRunCommand,
   consolidateSubmitCommand,
   evaluatePolicyCommand,
+  validationRegisterCommand,
   datasetFreezeCommand,
   datasetInspectCommand,
   datasetListCommand,
@@ -39,6 +40,8 @@ program
 function withCommon(cmd: Command): Command {
   return cmd
     .option("--home <dir>", "实例根目录（默认 ~/.proteus 或 PROTEUS_HOME）")
+    .option("--organism <id>", "个体 ID", "organism-default")
+    .option("--actor <principal>", "当前主体 Principal ID", "principal-local")
     .option("--json", "以 JSON 输出");
 }
 
@@ -106,10 +109,22 @@ withCommon(
     .command("evaluate-policy")
     .description("策略候选评估：双臂 × 验证集 × 重复（m3-policy-eval-v1，指标分列）")
     .argument("<id>", "Candidate ID")
-    .requiredOption("--cases <file>", "验证集 JSON（[{task, expectedChoice}]，新 family）")
-    .option("--repeats <n>", "每 case 重复次数（默认 1）", "1"),
+    .option("--cases <file>", "验证集 JSON（[{id, familyId, task, expectedChoice}]）")
+    .option("--repeats <n>", "每 case 重复次数（未提供时使用冻结计划）"),
 ).action(async (id: string, opts) => {
   await evaluatePolicyCommand(id, opts);
+});
+
+withCommon(
+  program
+    .command("validation-register")
+    .description("注册不可变策略验证集及冻结评估计划")
+    .requiredOption("--cases <file>", "验证集 JSON（[{id, familyId, task, expectedChoice}]）")
+    .option("--repeats <n>", "每 case 重复次数", "1")
+    .option("--dev-family <ids...>", "当前开发集 family ID")
+    .option("--source <ref>", "来源引用（默认 cases 文件路径）"),
+).action(async (opts) => {
+  await validationRegisterCommand(opts);
 });
 
 withCommon(
@@ -118,6 +133,7 @@ withCommon(
     .description("异步提交 Consolidation 作业（提交即返回；consolidate-run 驱动执行）")
     .argument("<datasetId>", "development 用途的经验集 ID")
     .option("--gold <file>", "开发集标注 JSON（验证 family 不得传入）")
+    .option("--validation-set <id>", "绑定验证集 ID")
     .option("--mode <mode>", "rule | llm（llm 需 PROTEUS_LLM_API_KEY）", "rule")
     .option("--min-support <n>", "最小支持数（默认 2）")
     .option("--min-precision <f>", "最小精度 0-1（默认 0.8）")
@@ -164,7 +180,8 @@ withCommon(
     .command("consolidate")
     .description("从冻结经验集归纳策略候选（确定性规则归纳，只改 routing-policy）")
     .argument("<datasetId>", "development 用途的经验集 ID")
-    .option("--gold <file>", "开发集标注 JSON（[{goal, choice}]；验证 family 不得传入）"),
+    .option("--gold <file>", "开发集标注 JSON（[{goal, choice}]；验证 family 不得传入）")
+    .option("--validation-set <id>", "绑定验证集 ID"),
 ).action(async (datasetId: string, opts) => {
   await consolidateCommand(datasetId, opts);
 });

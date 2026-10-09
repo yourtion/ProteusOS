@@ -88,14 +88,20 @@ export interface SeedDeps {
  * 安装 seed。幂等性来自三层去重：版本按内容摘要、快照按闭包摘要、
  * active 指针仅在为空时装载；已安装其他快照的实例拒绝覆盖。
  */
-export function installSeed(deps: SeedDeps): SeedResult {
+export function installSeed(
+  deps: SeedDeps,
+  options: { organismId?: string; ownerId?: string } = {},
+): SeedResult {
+  const organismId = options.organismId ?? ORGANISM_ID;
+  const ownerId = options.ownerId ?? PRINCIPAL_ID;
   return deps.storage.tx(() => {
     const { kernel, storage, blobs, clock } = deps;
-    const principal = kernel.createPrincipal(PRINCIPAL_ID, "user");
-    const scope = `organism:${ORGANISM_ID}`;
+    const principal = kernel.createPrincipal(ownerId, "user");
+    const scope = `organism:${organismId}`;
     kernel.createLineage(LINEAGE_ID, principal.id, scope);
-    const organism = kernel.createOrganism(ORGANISM_ID, principal.id, scope);
+    const organism = kernel.createOrganism(organismId, principal.id, scope);
 
+    kernel.assertOrganismAccess(organismId, ownerId);
     const bindings: Record<string, string> = {};
     const resolved: Array<{ slot: string; version: { id: string; contentDigest: string } }> = [];
     const versions: SeedVersion[] = [];
@@ -145,23 +151,23 @@ export function installSeed(deps: SeedDeps): SeedResult {
       });
     }
 
-    const current = kernel.getOrganism(ORGANISM_ID)!;
+    const current = kernel.getOrganism(organismId)!;
     let installed = false;
     if (current.activeGenomeId === snapshot.id) {
       // 幂等复用：同 seed 内容产生同快照
     } else if (current.activeGenomeId === null) {
-      const result = kernel.installAsActive(ORGANISM_ID, snapshot.id, current.revision);
+      const result = kernel.installAsActive(organismId, snapshot.id, current.revision);
       if (!result.ok) throw new Error("seed 安装的 CAS 提交冲突，请重试 init");
       installed = true;
       storage.appendEvent({
-        streamId: `organism-${ORGANISM_ID}`,
+        streamId: `organism-${organismId}`,
         type: "organism.genome.installed",
         payload: {
           snapshotId: snapshot.id,
           fromRevision: current.revision,
           toRevision: result.revision,
         },
-        organismId: ORGANISM_ID,
+        organismId,
         occurredAt: clock.now(),
       });
     } else {
@@ -175,7 +181,7 @@ export function installSeed(deps: SeedDeps): SeedResult {
       organismId: organism.id,
       snapshotId: snapshot.id,
       snapshotDigest: digest,
-      revision: kernel.getOrganism(ORGANISM_ID)!.revision,
+      revision: kernel.getOrganism(organismId)!.revision,
       installed,
       versions,
     };

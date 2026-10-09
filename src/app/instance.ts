@@ -8,6 +8,8 @@ import { RuleDecisionProvider } from "../adapters/decision-rule/index.ts";
 import { AcpExecutor } from "../adapters/executor-acp/index.ts";
 import { LocalProcessExecutor } from "../adapters/executor-process/index.ts";
 import { PiExecutor } from "../adapters/executor-pi/index.ts";
+import { llmProposerFromEnv } from "../adapters/consolidation-llm/index.ts";
+import type { RouteProposer } from "../evolution/consolidation.ts";
 import { Evolution } from "../evolution/index.ts";
 import { Kernel } from "../kernel/index.ts";
 import { Runtime } from "../runtime/index.ts";
@@ -19,7 +21,7 @@ import { MIGRATIONS } from "../storage/migrations.ts";
 import { SqliteDb } from "../storage/sqlite.ts";
 import { Storage } from "../storage/store.ts";
 import { createLogger, type Logger } from "./logger.ts";
-import { ORGANISM_ID } from "./seed.ts";
+import { ORGANISM_ID, PRINCIPAL_ID } from "./seed.ts";
 
 export function resolveInstanceRoot(flag?: string): string {
   if (flag) return flag;
@@ -112,6 +114,10 @@ export function buildDecisions(
 export function openInstance(
   root: string,
   options: {
+    organismId?: string;
+    actorId?: string;
+    routeProposer?: RouteProposer;
+    learningCallTimeoutMs?: number;
     logger?: Logger;
     organismBudget?: OrganismBudget;
     executors?: Map<string, ExecutorProvider>;
@@ -134,13 +140,16 @@ export function openInstance(
   const clock = { now: () => Date.now() };
   const ids = { next: () => uuidv7() };
   const kernel = new Kernel(storage, clock, ids);
+  const organismId = options.organismId ?? ORGANISM_ID;
+  const actorId = options.actorId ?? PRINCIPAL_ID;
+  if (kernel.getOrganism(organismId)) kernel.assertOrganismAccess(organismId, actorId);
   const capabilitySandbox =
     options.capabilitySandbox ??
     (process.env.PROTEUS_SANDBOX === "microsandbox" ? new MicrosandboxBackend() : undefined);
   const runtime = new Runtime({
     storage,
     kernel,
-    organismId: ORGANISM_ID,
+    organismId,
     executors: options.executors ?? buildExecutors(),
     decisions: buildDecisions(options.decisions),
     blobs,
@@ -148,15 +157,19 @@ export function openInstance(
     clock,
     ids,
     organismBudget: options.organismBudget ?? DEFAULT_ORGANISM_BUDGET,
+    actorId,
     decisionCallTimeoutMs: options.decisionCallTimeoutMs,
     capabilitySandbox,
   });
   const evolution = new Evolution({
+    actorId,
+    routeProposer: options.routeProposer ?? llmProposerFromEnv() ?? undefined,
+    learningCallTimeoutMs: options.learningCallTimeoutMs,
     kernel,
     storage,
     blobs,
     runtime,
-    organismId: ORGANISM_ID,
+    organismId,
     instanceRoot: root,
     clock,
     ids,
