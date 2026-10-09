@@ -400,7 +400,7 @@ export async function consolidateCommand(datasetId: string, opts: ConsolidateOpt
   }
   const inst = openInstance(resolveInstanceRoot(opts.home));
   try {
-    const result = inst.evolution.proposePolicyCandidate({
+    const result = await inst.evolution.proposePolicyCandidate({
       datasetId,
       goldMatches,
       createdBy: PRINCIPAL_ID,
@@ -488,6 +488,149 @@ export async function evaluatePolicyCommand(
           ? "  ✗ 未达标：禁止晋升，旧默认行为继续有效"
           : "  ? 证据不足（inconclusive）：不判通过，可补充验证后重评",
     );
+  } finally {
+    inst.close();
+  }
+}
+
+export interface ConsolidateSubmitOpts extends CommonOpts {
+  gold?: string;
+  mode?: string;
+  minSupport?: string;
+  minPrecision?: string;
+  maxRules?: string;
+}
+
+function readConsolidationParams(opts: {
+  minSupport?: string;
+  minPrecision?: string;
+  maxRules?: string;
+}): { params: { minSupport: number; minPrecision: number; maxRules: number }; overrides: boolean } {
+  const minSupport = opts.minSupport ? Number.parseInt(opts.minSupport, 10) : undefined;
+  const minPrecision = opts.minPrecision ? Number.parseFloat(opts.minPrecision) : undefined;
+  const maxRules = opts.maxRules ? Number.parseInt(opts.maxRules, 10) : undefined;
+  const invalid =
+    (minSupport !== undefined && (Number.isNaN(minSupport) || minSupport < 1)) ||
+    (minPrecision !== undefined &&
+      (Number.isNaN(minPrecision) || minPrecision <= 0 || minPrecision > 1)) ||
+    (maxRules !== undefined && (Number.isNaN(maxRules) || maxRules < 1));
+  if (invalid)
+    throw new Error("归纳参数不合法（--min-support ≥1、0<--min-precision≤1、--max-rules ≥1）");
+  return {
+    params: {
+      minSupport: minSupport ?? 2,
+      minPrecision: minPrecision ?? 0.8,
+      maxRules: maxRules ?? 4,
+    },
+    overrides: Boolean(minSupport || minPrecision || maxRules),
+  };
+}
+
+function readGoldMatches(file?: string): Array<{ goal: string; choice: string }> | undefined {
+  if (!file) return undefined;
+  return JSON.parse(readFileSync(resolve(file), "utf8")) as Array<{ goal: string; choice: string }>;
+}
+
+/** 异步提交 Consolidation 作业（提交即返回；执行用 consolidate-run 驱动） */
+export async function consolidateSubmitCommand(
+  datasetId: string,
+  opts: ConsolidateSubmitOpts,
+): Promise<void> {
+  const { params } = readConsolidationParams(opts);
+  const mode = opts.mode === "llm" ? "llm" : "rule";
+  const inst = openInstance(resolveInstanceRoot(opts.home));
+  try {
+    const { job, created } = inst.evolution.submitConsolidationJob({
+      datasetId,
+      params,
+      goldMatches: readGoldMatches(opts.gold),
+      mode,
+      createdBy: PRINCIPAL_ID,
+    });
+    if (opts.json) {
+      console.log(JSON.stringify({ job, created }, null, 2));
+      return;
+    }
+    console.log(
+      `${created ? "✓" : "·"} job ${job.id}${created ? "" : "（同参数作业已存在，幂等复用）"} → ${job.state}`,
+    );
+    console.log(`  dataset    ${job.datasetId}（mode=${job.mode}）`);
+    console.log(`  驱动       proteus consolidate-run`);
+  } finally {
+    inst.close();
+  }
+}
+
+/** 驱动队列：queued → running → completed/failed（串行，operator 显式） */
+export async function consolidateRunCommand(opts: CommonOpts & { limit?: string }): Promise<void> {
+  const limit = opts.limit ? Number.parseInt(opts.limit, 10) : 1;
+  const inst = openInstance(resolveInstanceRoot(opts.home));
+  try {
+    const results = await inst.evolution.runPendingConsolidationJobs(
+      Number.isNaN(limit) ? 1 : limit,
+    );
+    if (opts.json) {
+      console.log(JSON.stringify({ results }, null, 2));
+      return;
+    }
+    if (results.length === 0) {
+      console.log("（队列空闲，没有待执行作业）");
+      return;
+    }
+    for (const r of results) {
+      console.log(`job ${r.jobId} → ${r.outcome}：${r.detail}`);
+    }
+  } finally {
+    inst.close();
+  }
+}
+
+export async function consolidateJobsCommand(
+  datasetId: string | undefined,
+  opts: CommonOpts,
+): Promise<void> {
+  const inst = openInstance(resolveInstanceRoot(opts.home));
+  try {
+    const jobs = inst.storage.listConsolidationJobs(datasetId ? { datasetId } : {}, 20);
+    if (opts.json) {
+      console.log(JSON.stringify(jobs, null, 2));
+      return;
+    }
+    if (jobs.length === 0) {
+      console.log("（无作业）");
+      return;
+    }
+    for (const j of jobs) {
+      console.log(
+        `${j.id}  ${j.state.padEnd(9)} ${j.mode.padEnd(4)} ${new Date(j.createdAt).toISOString()}  ${j.result?.hypothesis?.slice(0, 50) ?? j.error?.slice(0, 50) ?? ""}`,
+      );
+    }
+  } finally {
+    inst.close();
+  }
+}
+
+export async function consolidateJobCommand(id: string, opts: CommonOpts): Promise<void> {
+  const inst = openInstance(resolveInstanceRoot(opts.home));
+  try {
+    const job = inst.evolution.consolidationJob(id);
+    const events = inst.storage.listEvents({ streamId: `job-${id}` }, 50);
+    console.log(JSON.stringify({ job, events }, null, 2));
+  } finally {
+    inst.close();
+  }
+}
+
+export async function consolidateCancelCommand(id: string, opts: CommonOpts): Promise<void> {
+  const inst = openInstance(resolveInstanceRoot(opts.home));
+  try {
+    const result = inst.evolution.cancelConsolidationJob(id);
+    if (opts.json) {
+      console.log(JSON.stringify(result, null, 2));
+      return;
+    }
+    console.log(`job ${result.jobId} → ${result.state}`);
+    console.log(`  ${result.note}`);
   } finally {
     inst.close();
   }

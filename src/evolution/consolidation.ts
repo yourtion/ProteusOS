@@ -144,3 +144,80 @@ export function consolidateRoutes(
         : `从 ${positives.length} 个正例（经验 ${experienceCount} + 开发集标注 ${goldCount}）归纳 ${limited.length} 条特征路由（弃权 ${abstains.length}、失败 ${failures.length}）：${summary}`,
   };
 }
+
+/**
+ * 路由规则提议者（LLM 归纳的可替换接口）：只看缺口样本（不给 gold、
+ * 不给成功样本的选项分布），产出候选规则；提议必须经统计门槛重算
+ * （refineProposals）——LLM 无法绕过统计证据，只能缩小搜索空间。
+ */
+export interface RouteProposer {
+  readonly name: string;
+  propose(input: {
+    /** 弃权/失败样本摘要（goal + 视图特征 + 原因；不含正确答案） */
+    gapSamples: Array<{ goal: string; features: Record<string, boolean>; reason: string }>;
+    /** 可路由选项（图中 decision options） */
+    options: string[];
+    /** 可用特征名（decision-view 词表） */
+    features: string[];
+  }): Promise<Array<{ feature: string; choose: string; rationale: string }>>;
+}
+
+/**
+ * 提议的统计门槛重算：对每条 (feature→choose) 在全部样本上重算
+ * 支持数与精度（与 consolidateRoutes 相同口径），不达标丢弃并记录原因。
+ * 返回的提议与统计归纳结果同构，可并入同一候选构造流程。
+ */
+export function refineProposals(
+  samples: RouteSample[],
+  proposals: Array<{ feature: string; choose: string; rationale?: string }>,
+  params: ConsolidationParams,
+): {
+  accepted: RouteRuleProposal[];
+  rejected: Array<{ feature: string; choose: string; reason: string }>;
+} {
+  const positives = samples.filter(
+    (s) => s.chosen !== null && (s.succeeded || s.origin === "gold"),
+  );
+  const accepted: RouteRuleProposal[] = [];
+  const rejected: Array<{ feature: string; choose: string; reason: string }> = [];
+  for (const proposal of proposals) {
+    if (!proposal.feature || !proposal.choose) {
+      rejected.push({ ...proposal, reason: "字段缺失" });
+      continue;
+    }
+    let support = 0;
+    let total = 0;
+    const evidenceRunIds: string[] = [];
+    let experience = 0;
+    let gold = 0;
+    for (const s of positives) {
+      if (s.features[proposal.feature] !== true || !s.chosen) continue;
+      total += 1;
+      if (s.chosen === proposal.choose) {
+        support += 1;
+        evidenceRunIds.push(s.runId);
+        if ((s.origin ?? "experience") === "experience") experience += 1;
+        else gold += 1;
+      }
+    }
+    const precision = total === 0 ? 0 : support / total;
+    if (support >= params.minSupport && precision >= params.minPrecision) {
+      accepted.push({
+        feature: proposal.feature,
+        choose: proposal.choose,
+        support,
+        precision,
+        evidenceRunIds: evidenceRunIds.sort(),
+        byOrigin: { experience, gold },
+      });
+    } else {
+      rejected.push({
+        feature: proposal.feature,
+        choose: proposal.choose,
+        reason: `支持 ${support}/${params.minSupport} 或精度 ${precision.toFixed(2)}/${params.minPrecision} 未达门槛`,
+      });
+    }
+  }
+  accepted.sort((a, b) => b.support - a.support || (a.feature < b.feature ? -1 : 1));
+  return { accepted: accepted.slice(0, params.maxRules), rejected };
+}

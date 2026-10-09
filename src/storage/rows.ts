@@ -229,3 +229,17 @@ export interface ExperienceDatasetRow {
   created_by: string;
   created_at: number;
 }
+
+export interface ConsolidationJobRow {
+  id: string;
+  dataset_id: string;
+  mode: string;
+  params_digest: string;
+  params: string;
+  state: string;
+  result: string | null;
+  error: string | null;
+  requested_by: string;
+  created_at: number;
+  updated_at: number;
+}

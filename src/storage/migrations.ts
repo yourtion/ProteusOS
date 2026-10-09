@@ -319,4 +319,28 @@ CREATE INDEX idx_experience_datasets_purpose ON experience_datasets(purpose);
     name: "m3-evaluation-dataset-ref",
     sql: "ALTER TABLE evaluations ADD COLUMN dataset_ref TEXT;",
   },
+  {
+    // M3+：Consolidation 异步作业队列（evolution.md §3"受独立队列、预算与取消
+    // 策略约束"）。提交与执行分离：queued → running → completed/failed；
+    // cancel 仅作用于 queued（执行内为纯函数短操作，不可中断，如实记录）。
+    version: 8,
+    name: "consolidation-jobs",
+    sql: `
+CREATE TABLE consolidation_jobs (
+  id TEXT PRIMARY KEY,
+  dataset_id TEXT NOT NULL,
+  mode TEXT NOT NULL,
+  params_digest TEXT NOT NULL,
+  params TEXT NOT NULL,
+  state TEXT NOT NULL,
+  result TEXT,
+  error TEXT,
+  requested_by TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+CREATE INDEX idx_consolidation_jobs_state ON consolidation_jobs(state);
+CREATE INDEX idx_consolidation_jobs_dataset ON consolidation_jobs(dataset_id, params_digest);
+`,
+  },
 ];

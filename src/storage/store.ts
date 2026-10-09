@@ -3,6 +3,8 @@ import type { ArtifactVersion, GenomeSnapshot, KernelStore } from "../kernel/ind
 import type { PromotionRecord } from "../kernel/index.ts";
 import type {
   CandidateRecord,
+  ConsolidationJobRecord,
+  ConsolidationJobState,
   EvaluationRecord,
   ExperienceDatasetPurpose,
   ExperienceDatasetRecord,
@@ -34,6 +36,7 @@ import type {
   DecisionCallRow,
   DispatchRow,
   EvaluationRow,
+  ConsolidationJobRow,
   ExperienceDatasetRow,
   EventRow,
   ExperienceRow,
@@ -872,6 +875,82 @@ export class Storage implements KernelStore, RuntimeStore {
       .map((row) => ({ id: row.id, runId: row.run_id, createdAt: row.created_at }));
   }
 
+  // ---- M3+：Consolidation 作业队列 ----
+
+  insertConsolidationJob(j: ConsolidationJobRecord): void {
+    this.db.run(
+      `INSERT INTO consolidation_jobs (id, dataset_id, mode, params_digest, params, state, result, error, requested_by, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      j.id,
+      j.datasetId,
+      j.mode,
+      j.paramsDigest,
+      JSON.stringify(j.params),
+      j.state,
+      j.result ? JSON.stringify(j.result) : null,
+      j.error,
+      j.requestedBy,
+      j.createdAt,
+      j.updatedAt,
+    );
+  }
+
+  getConsolidationJob(id: string): ConsolidationJobRecord | undefined {
+    const row = this.db.get<ConsolidationJobRow>(
+      "SELECT * FROM consolidation_jobs WHERE id = ?",
+      id,
+    );
+    return row ? mapConsolidationJob(row) : undefined;
+  }
+
+  listConsolidationJobs(
+    filter: { state?: ConsolidationJobState; datasetId?: string },
+    limit: number,
+  ): ConsolidationJobRecord[] {
+    const conditions: string[] = [];
+    const params: SQLInputValue[] = [];
+    if (filter.state) {
+      conditions.push("state = ?");
+      params.push(filter.state);
+    }
+    if (filter.datasetId) {
+      conditions.push("dataset_id = ?");
+      params.push(filter.datasetId);
+    }
+    const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+    params.push(limit);
+    return this.db
+      .all<ConsolidationJobRow>(
+        `SELECT * FROM consolidation_jobs ${where} ORDER BY created_at LIMIT ?`,
+        ...params,
+      )
+      .map(mapConsolidationJob);
+  }
+
+  updateConsolidationJob(
+    id: string,
+    patch: Partial<Pick<ConsolidationJobRecord, "state" | "result" | "error">> & {
+      updatedAt: number;
+    },
+  ): void {
+    const sets: string[] = [];
+    const params: SQLInputValue[] = [];
+    for (const [key, column] of [
+      ["state", "state"],
+      ["result", "result"],
+      ["error", "error"],
+    ] as const) {
+      if (patch[key] !== undefined) {
+        sets.push(`${column} = ?`);
+        const value = patch[key];
+        params.push(typeof value === "object" && value !== null ? JSON.stringify(value) : value);
+      }
+    }
+    sets.push("updated_at = ?");
+    params.push(patch.updatedAt, id);
+    this.db.run(`UPDATE consolidation_jobs SET ${sets.join(", ")} WHERE id = ?`, ...params);
+  }
+
   insertPromotion(p: PromotionRecord): void {
     this.db.run(
       `INSERT INTO promotions (id, operation_id, kind, organism_id, from_snapshot_id, to_snapshot_id, expected_revision, result_revision, evaluation_ref, authorization_ref, actor, note, created_at)
@@ -1139,5 +1218,21 @@ function mapExperienceDataset(row: ExperienceDatasetRow): ExperienceDatasetRecor
     permissionScope: row.permission_scope,
     createdBy: row.created_by,
     createdAt: row.created_at,
+  };
+}
+
+function mapConsolidationJob(row: ConsolidationJobRow): ConsolidationJobRecord {
+  return {
+    id: row.id,
+    datasetId: row.dataset_id,
+    mode: row.mode as ConsolidationJobRecord["mode"],
+    paramsDigest: row.params_digest,
+    params: JSON.parse(row.params) as ConsolidationJobRecord["params"],
+    state: row.state as ConsolidationJobRecord["state"],
+    result: row.result ? (JSON.parse(row.result) as ConsolidationJobRecord["result"]) : null,
+    error: row.error,
+    requestedBy: row.requested_by,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
   };
 }

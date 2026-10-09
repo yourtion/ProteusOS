@@ -19,13 +19,17 @@ import {
 import {
   consolidateRoutes,
   DEFAULT_CONSOLIDATION_PARAMS,
+  refineProposals,
   type ConsolidationParams,
   type ConsolidationResult,
+  type RouteProposer,
   type RouteSample,
 } from "./consolidation.ts";
 import type {
   CandidateRecord,
   CandidateStatus,
+  ConsolidationJobRecord,
+  ConsolidationMode,
   EvaluationRecord,
   EvaluationRunOutcome,
   ExperienceDatasetPurpose,
@@ -884,24 +888,237 @@ export class Evolution {
    * featureRoutes 优先，基准兜底 routes 继承（回归约束）。
    * 零提议是正常结果（证据不足，不提议候选）。
    */
-  proposePolicyCandidate(opts: {
+  /**
+   * 提交 Consolidation 作业（异步队列，evolution.md §3"独立队列与取消策略"）：
+   * 参数内容寻址（门槛 + gold 的 blob 引用）；同参数存在非终态或已完成作业时
+   * 幂等返回既有。提交即返回，执行由 runPendingConsolidationJobs 驱动。
+   */
+  submitConsolidationJob(opts: {
     datasetId: string;
     params?: ConsolidationParams;
-    /** 开发集标注（goal → 正确选项）：失败/弃权成员 join 为正例；验证 family 不得传入 */
     goldMatches?: Array<{ goal: string; choice: string }>;
+    mode?: ConsolidationMode;
     createdBy: string;
-  }): {
-    candidate: CandidateRecord | null;
-    consolidation: ConsolidationResult;
-  } {
-    const { dataset, members } = this.experienceDatasetView(opts.datasetId);
+  }): { job: ConsolidationJobRecord; created: boolean } {
+    const dataset = this.deps.storage.getExperienceDataset(opts.datasetId);
+    if (!dataset) throw new EvolutionError("unknown_dataset", `经验集 ${opts.datasetId} 不存在`);
     if (dataset.purpose !== "development") {
       throw new EvolutionError(
         "dataset_purpose_forbidden",
         `经验集 ${opts.datasetId} 用途为 ${dataset.purpose}，仅 development 许可作为学习来源`,
       );
     }
-    const params = opts.params ?? DEFAULT_CONSOLIDATION_PARAMS;
+    const consolidation = opts.params ?? DEFAULT_CONSOLIDATION_PARAMS;
+    const mode = opts.mode ?? "rule";
+    const goldRef = opts.goldMatches
+      ? this.deps.blobs.write(canonicalJson(opts.goldMatches)).ref
+      : null;
+    const paramsDigest = digestOf(
+      canonicalJson({ datasetId: opts.datasetId, mode, consolidation, goldRef }),
+    );
+
+    return this.deps.storage.tx(() => {
+      const existing = this.deps.storage
+        .listConsolidationJobs({ datasetId: opts.datasetId }, 50)
+        .find(
+          (j) =>
+            j.paramsDigest === paramsDigest &&
+            (j.state === "queued" || j.state === "running" || j.state === "completed"),
+        );
+      if (existing) return { job: existing, created: false };
+      const now = this.deps.clock.now();
+      const job: ConsolidationJobRecord = {
+        id: this.deps.ids.next(),
+        datasetId: opts.datasetId,
+        mode,
+        paramsDigest,
+        params: { consolidation, goldRef },
+        state: "queued",
+        result: null,
+        error: null,
+        requestedBy: opts.createdBy,
+        createdAt: now,
+        updatedAt: now,
+      };
+      this.deps.storage.insertConsolidationJob(job);
+      this.deps.storage.appendEvent({
+        streamId: `job-${job.id}`,
+        type: "consolidation.job.submitted",
+        payload: { jobId: job.id, datasetId: opts.datasetId, mode, paramsDigest },
+        organismId: this.deps.organismId,
+        occurredAt: now,
+      });
+      return { job, created: true };
+    });
+  }
+
+  /**
+   * 驱动队列（operator 显式调用；串行执行，单 writer 语义）：
+   * queued → running → completed/failed。执行体为纯函数短操作，
+   * cancel 仅作用于 queued（不可中断如实记录）。失败保留证据可重提。
+   */
+  async runPendingConsolidationJobs(
+    limit = 1,
+  ): Promise<Array<{ jobId: string; outcome: string; detail: string }>> {
+    const queued = this.deps.storage.listConsolidationJobs({ state: "queued" }, limit);
+    const results: Array<{
+      jobId: string;
+      outcome: "completed" | "failed" | "skipped" | "cancelled";
+      detail: string;
+    }> = [];
+    for (const job of queued) {
+      // 启动迁移（queued → running）
+      this.deps.storage.tx(() => {
+        this.deps.storage.updateConsolidationJob(job.id, {
+          state: "running",
+          updatedAt: this.deps.clock.now(),
+        });
+        this.deps.storage.appendEvent({
+          streamId: `job-${job.id}`,
+          type: "consolidation.job.started",
+          payload: { jobId: job.id },
+          organismId: this.deps.organismId,
+          occurredAt: this.deps.clock.now(),
+        });
+      });
+      try {
+        const goldMatches = job.params.goldRef
+          ? (JSON.parse(this.deps.blobs.read(job.params.goldRef)) as Array<{
+              goal: string;
+              choice: string;
+            }>)
+          : undefined;
+        const executed = await this.executeConsolidation({
+          datasetId: job.datasetId,
+          params: job.params.consolidation,
+          goldMatches,
+          mode: job.mode,
+          createdBy: job.requestedBy,
+        });
+        this.deps.storage.tx(() => {
+          this.deps.storage.updateConsolidationJob(job.id, {
+            state: "completed",
+            result: {
+              candidateId: executed.candidate?.id ?? null,
+              hypothesis: executed.consolidation.hypothesis,
+              proposals: executed.consolidation.proposals.length,
+            },
+            updatedAt: this.deps.clock.now(),
+          });
+          this.deps.storage.appendEvent({
+            streamId: `job-${job.id}`,
+            type: "consolidation.job.completed",
+            payload: {
+              jobId: job.id,
+              candidateId: executed.candidate?.id ?? null,
+              proposals: executed.consolidation.proposals.length,
+              hypothesis: executed.consolidation.hypothesis,
+            },
+            organismId: this.deps.organismId,
+            occurredAt: this.deps.clock.now(),
+          });
+        });
+        results.push({
+          jobId: job.id,
+          outcome: "completed",
+          detail: executed.candidate
+            ? `候选 ${executed.candidate.id}（${executed.consolidation.proposals.length} 条规则）`
+            : "零提议（证据不足，正常结果）",
+        });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        this.deps.storage.tx(() => {
+          this.deps.storage.updateConsolidationJob(job.id, {
+            state: "failed",
+            error: message,
+            updatedAt: this.deps.clock.now(),
+          });
+          this.deps.storage.appendEvent({
+            streamId: `job-${job.id}`,
+            type: "consolidation.job.failed",
+            payload: { jobId: job.id, error: message },
+            organismId: this.deps.organismId,
+            occurredAt: this.deps.clock.now(),
+          });
+        });
+        results.push({ jobId: job.id, outcome: "failed", detail: message });
+      }
+    }
+    return results;
+  }
+
+  /** 取消作业：仅 queued 可取消（执行为纯函数短操作，running 不可中断） */
+  cancelConsolidationJob(jobId: string): { jobId: string; state: string; note: string } {
+    const job = this.deps.storage.getConsolidationJob(jobId);
+    if (!job) throw new EvolutionError("unknown_job", `作业 ${jobId} 不存在`);
+    if (job.state !== "queued") {
+      return {
+        jobId,
+        state: job.state,
+        note: `作业已处于 ${job.state}，不能取消（执行为短操作不可中断）`,
+      };
+    }
+    this.deps.storage.tx(() => {
+      this.deps.storage.updateConsolidationJob(jobId, {
+        state: "cancelled",
+        updatedAt: this.deps.clock.now(),
+      });
+      this.deps.storage.appendEvent({
+        streamId: `job-${jobId}`,
+        type: "consolidation.job.cancelled",
+        payload: { jobId },
+        organismId: this.deps.organismId,
+        occurredAt: this.deps.clock.now(),
+      });
+    });
+    return { jobId, state: "cancelled", note: "已取消（未开始执行）" };
+  }
+
+  consolidationJob(jobId: string): ConsolidationJobRecord {
+    const job = this.deps.storage.getConsolidationJob(jobId);
+    if (!job) throw new EvolutionError("unknown_job", `作业 ${jobId} 不存在`);
+    return job;
+  }
+
+  /** 同步便捷入口（不经队列）：提交语义见 executeConsolidation */
+  proposePolicyCandidate(opts: {
+    datasetId: string;
+    params?: ConsolidationParams;
+    /** 开发集标注（goal → 正确选项）：失败/弃权成员 join 为正例；验证 family 不得传入 */
+    goldMatches?: Array<{ goal: string; choice: string }>;
+    createdBy: string;
+  }): Promise<{
+    candidate: CandidateRecord | null;
+    consolidation: ConsolidationResult;
+  }> {
+    return this.executeConsolidation({
+      datasetId: opts.datasetId,
+      params: opts.params ?? DEFAULT_CONSOLIDATION_PARAMS,
+      goldMatches: opts.goldMatches,
+      mode: "rule",
+      createdBy: opts.createdBy,
+    });
+  }
+
+  /** 归纳执行核心（队列与同步入口共用）；mode 记入候选来源 */
+  private async executeConsolidation(input: {
+    datasetId: string;
+    params: ConsolidationParams;
+    goldMatches?: Array<{ goal: string; choice: string }>;
+    mode: ConsolidationMode;
+    createdBy: string;
+  }): Promise<{
+    candidate: CandidateRecord | null;
+    consolidation: ConsolidationResult;
+  }> {
+    const { dataset, members } = this.experienceDatasetView(input.datasetId);
+    if (dataset.purpose !== "development") {
+      throw new EvolutionError(
+        "dataset_purpose_forbidden",
+        `经验集 ${input.datasetId} 用途为 ${dataset.purpose}，仅 development 许可作为学习来源`,
+      );
+    }
+    const params = input.params;
 
     // 组装归纳样本：决策视图特征来自请求 blob（请求内容不可回放的调用计入缺口统计）
     const samples: RouteSample[] = [];
@@ -916,7 +1133,7 @@ export class Evolution {
         const succeeded = member.result === "succeeded";
         const gold = succeeded
           ? undefined
-          : opts.goldMatches?.find((g) => g.goal === member.taskGoal);
+          : input.goldMatches?.find((g) => g.goal === member.taskGoal);
         samples.push({
           runId: member.runId,
           experienceId: member.experienceId,
@@ -927,7 +1144,71 @@ export class Evolution {
         });
       }
     }
-    const consolidation = consolidateRoutes(samples, params);
+    let consolidation: ConsolidationResult;
+    let llmProvenance: { promptDigest: string; responseDigest: string; proposer: string } | null =
+      null;
+    if (input.mode === "llm") {
+      // LLM 归纳：提议者只看缺口样本（不含正确答案），提议必须经统计门槛重算
+      if (!this.deps.routeProposer) {
+        throw new EvolutionError(
+          "llm_proposer_unavailable",
+          "mode=llm 需要装配 RouteProposer（PROTEUS_LLM_API_KEY 未配置或未注入）",
+        );
+      }
+      const routeContext = this.routeOptionsAndFeatures();
+      const gapSamples = samples
+        .filter((s) => !s.succeeded && s.origin !== "gold")
+        .map((s) => {
+          const member = members.find((m) => m.experienceId === s.experienceId)!;
+          return {
+            goal: member.taskGoal,
+            features: s.features,
+            reason: member.decisionCalls.find((c) => c.chosenOption === null)
+              ? "规则弃权（信息不足）"
+              : `路由后 Run 失败（${member.result}）`,
+          };
+        });
+      const rawProposals = await this.deps.routeProposer.propose({
+        gapSamples,
+        options: routeContext.options,
+        features: routeContext.features,
+      });
+      const refined = refineProposals(samples, rawProposals, params);
+      const proposer = this.deps.routeProposer as {
+        name: string;
+        lastProvenance?: { promptDigest: string; responseDigest: string } | null;
+      };
+      if (proposer.lastProvenance) {
+        llmProvenance = {
+          proposer: this.deps.routeProposer.name,
+          promptDigest: proposer.lastProvenance.promptDigest,
+          responseDigest: proposer.lastProvenance.responseDigest,
+        };
+      }
+      consolidation = {
+        proposals: refined.accepted,
+        stats: {
+          samples: samples.length,
+          positiveMembers: samples.filter(
+            (x) => x.chosen !== null && (x.succeeded || x.origin === "gold"),
+          ).length,
+          abstainMembers: samples.filter((x) => x.chosen === null && x.origin !== "gold").length,
+          failedMembers: samples.filter((x) => !x.succeeded && x.origin !== "gold").length,
+          featuresScanned: routeContext.features,
+        },
+        hypothesis:
+          refined.accepted.length === 0
+            ? `LLM（${this.deps.routeProposer.name}）提议 ${rawProposals.length} 条，统计重算后全部未达门槛（${refined.rejected.map((r) => `${r.feature}→${r.choose}:${r.reason}`).join("; ") || "无有效提议"}）：证据不足，不提议候选`
+            : `LLM（${this.deps.routeProposer.name}）提议 ${rawProposals.length} 条，统计重算保留 ${refined.accepted.length} 条（丢弃 ${refined.rejected.length} 条未达门槛）：${refined.accepted
+                .map(
+                  (p) =>
+                    `${p.feature}→${p.choose}(支持 ${p.support}/精度 ${p.precision.toFixed(2)})`,
+                )
+                .join("; ")}`,
+      };
+    } else {
+      consolidation = consolidateRoutes(samples, params);
+    }
     if (unreplayable > 0) {
       consolidation.hypothesis += `；${unreplayable} 个决策调用请求不可回放，未计入`;
     }
@@ -1000,11 +1281,11 @@ export class Evolution {
           slot: "routing-policy",
           baseVersion: basePolicy,
           content: policyContent,
-          createdBy: opts.createdBy,
+          createdBy: input.createdBy,
         },
       );
       const bindings = { ...base.bindings, "routing-policy": policyVersion.id };
-      const snapshot = this.deps.kernel.createSnapshot(bindings, opts.createdBy);
+      const snapshot = this.deps.kernel.createSnapshot(bindings, input.createdBy);
       const existing = this.deps.storage.findCandidateByProposedSnapshot(
         this.deps.organismId,
         snapshot.id,
@@ -1018,13 +1299,21 @@ export class Evolution {
         baseRevision: organism.revision,
         proposedSnapshotId: snapshot.id,
         hypothesis: consolidation.hypothesis,
-        proposedBy: opts.createdBy,
+        proposedBy: input.createdBy,
         sourceRefs: {
           candidateType: "policy",
           datasetId: dataset.id,
           datasetDigest: dataset.digest,
+          consolidationMode: input.mode,
           consolidationParamsDigest: digestOf(canonicalJson(params)),
           rulesDigest: digestOf(canonicalJson(policyContent)),
+          ...(llmProvenance
+            ? {
+                llmProposer: llmProvenance.proposer,
+                llmPromptDigest: llmProvenance.promptDigest,
+                llmResponseDigest: llmProvenance.responseDigest,
+              }
+            : {}),
         },
         datasetRef: dataset.id,
         createdAt: now,
@@ -1232,6 +1521,37 @@ export class Evolution {
     return null;
   }
 
+  /** active 快照的路由选项与视图特征名（LLM 提议者的受限词表） */
+  private routeOptionsAndFeatures(): { options: string[]; features: string[] } {
+    const organism = this.deps.kernel.getOrganism(this.deps.organismId);
+    if (!organism?.activeGenomeId) {
+      throw new EvolutionError("no_active_genome", "默认快照未安装");
+    }
+    const { versions } = this.deps.kernel.resolveSnapshot(organism.activeGenomeId);
+    const graph = versions.get("task-graph");
+    const view = versions.get("decision-view");
+    if (!graph || !view) {
+      throw new EvolutionError("missing_binding", "基准快照缺少 task-graph 或 decision-view 槽位");
+    }
+    const graphContent = JSON.parse(this.deps.blobs.read(graph.contentRef)) as {
+      nodes?: Array<{ type?: string; options?: string[] }>;
+    };
+    const routeNode = graphContent.nodes?.find((n) => n.type === "decision" && n.options);
+    const viewContent = JSON.parse(this.deps.blobs.read(view.contentRef)) as {
+      features?: Record<string, unknown>;
+      optionDescriptions?: Record<string, string>;
+    };
+    return {
+      options: [
+        ...new Set([
+          ...(routeNode?.options ?? []),
+          ...Object.keys(viewContent.optionDescriptions ?? {}),
+        ]),
+      ].sort(),
+      features: Object.keys(viewContent.features ?? {}).sort(),
+    };
+  }
+
   /** 决策调用的视图特征（请求 blob 重放；缺失/损坏返回 null） */
   private callFeatures(decisionCallId: string): Record<string, boolean> | null {
     const call = this.deps.storage.getDecisionCall(decisionCallId);
@@ -1341,6 +1661,8 @@ export interface EvolutionRuntimeDeps {
   instanceRoot: string;
   clock: Clock;
   ids: IdGen;
+  /** LLM 归纳的提议者（mode=llm 时必需；未装配明确报错） */
+  routeProposer?: RouteProposer;
 }
 
 export interface BuildInput {

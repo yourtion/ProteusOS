@@ -9,7 +9,12 @@ import {
   experimentRunCommand,
   initCommand,
   inspectCommand,
+  consolidateCancelCommand,
   consolidateCommand,
+  consolidateJobCommand,
+  consolidateJobsCommand,
+  consolidateRunCommand,
+  consolidateSubmitCommand,
   evaluatePolicyCommand,
   datasetFreezeCommand,
   datasetInspectCommand,
@@ -105,6 +110,53 @@ withCommon(
     .option("--repeats <n>", "每 case 重复次数（默认 1）", "1"),
 ).action(async (id: string, opts) => {
   await evaluatePolicyCommand(id, opts);
+});
+
+withCommon(
+  program
+    .command("consolidate-submit")
+    .description("异步提交 Consolidation 作业（提交即返回；consolidate-run 驱动执行）")
+    .argument("<datasetId>", "development 用途的经验集 ID")
+    .option("--gold <file>", "开发集标注 JSON（验证 family 不得传入）")
+    .option("--mode <mode>", "rule | llm（llm 需 PROTEUS_LLM_API_KEY）", "rule")
+    .option("--min-support <n>", "最小支持数（默认 2）")
+    .option("--min-precision <f>", "最小精度 0-1（默认 0.8）")
+    .option("--max-rules <n>", "规则数上限（默认 4）"),
+).action(async (datasetId: string, opts) => {
+  await consolidateSubmitCommand(datasetId, opts);
+});
+
+withCommon(
+  program
+    .command("consolidate-run")
+    .description("驱动 Consolidation 队列（queued → running → completed/failed）")
+    .option("--limit <n>", "一次最多处理的作业数（默认 1）", "1"),
+).action(async (opts) => {
+  await consolidateRunCommand(opts);
+});
+
+withCommon(
+  program
+    .command("consolidate-jobs")
+    .description("列出 Consolidation 作业")
+    .argument("[datasetId]", "按经验集过滤"),
+).action(async (datasetId: string | undefined, opts) => {
+  await consolidateJobsCommand(datasetId, opts);
+});
+
+withCommon(
+  program.command("consolidate-job").description("查看作业详情与事件").argument("<id>", "Job ID"),
+).action(async (id: string, opts) => {
+  await consolidateJobCommand(id, opts);
+});
+
+withCommon(
+  program
+    .command("consolidate-cancel")
+    .description("取消排队中的作业（仅 queued 可取消）")
+    .argument("<id>", "Job ID"),
+).action(async (id: string, opts) => {
+  await consolidateCancelCommand(id, opts);
 });
 
 withCommon(

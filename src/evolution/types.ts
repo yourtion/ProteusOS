@@ -1,3 +1,5 @@
+import type { ConsolidationParams } from "./consolidation.ts";
+
 /**
  * Evolution 领域类型（M2）。三种记录分别表达的事实不可合并（docs/evolution.md §5）：
  * Candidate 提议、Evaluation 证据、Promotion 决定（Promotion 归 kernel 领域，此处 re-export）。
@@ -133,4 +135,25 @@ export interface ExperienceMemberView {
   decisionCalls: ExperienceDecisionCallView[];
   budget: { reservedAttempts: number; reservedSeconds: number };
   createdAt: number;
+}
+
+/** Consolidation 作业（异步队列，evolution.md §3：独立队列与取消策略） */
+export type ConsolidationJobState = "queued" | "running" | "completed" | "failed" | "cancelled";
+
+/** 归纳模式：rule=确定性统计归纳；llm=LLM 提议 + 统计门槛重算 */
+export type ConsolidationMode = "rule" | "llm";
+
+export interface ConsolidationJobRecord {
+  id: string;
+  datasetId: string;
+  mode: ConsolidationMode;
+  paramsDigest: string;
+  /** 队列参数（内容寻址）：归纳门槛 + gold 的 blob 引用（不内联大数组） */
+  params: { consolidation: ConsolidationParams; goldRef: string | null };
+  state: ConsolidationJobState;
+  result: { candidateId: string | null; hypothesis: string; proposals: number } | null;
+  error: string | null;
+  requestedBy: string;
+  createdAt: number;
+  updatedAt: number;
 }
