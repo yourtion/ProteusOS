@@ -215,3 +215,16 @@ export interface DecisionCallLimitRow {
   max_calls: number;
   created_at: number;
 }
+
+export interface ExperienceDatasetRow {
+  id: string;
+  digest: string;
+  purpose: string;
+  cutoff_at: number;
+  member_experience_ids: string;
+  member_digest: string;
+  filter_version: string;
+  permission_scope: string;
+  created_by: string;
+  created_at: number;
+}

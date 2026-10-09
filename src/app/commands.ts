@@ -300,6 +300,87 @@ export async function judgeUpgradeCommand(opts: JudgeUpgradeOpts): Promise<void>
   }
 }
 
+export async function datasetFreezeCommand(
+  opts: CommonOpts & {
+    purpose: string;
+    cutoff?: string;
+  },
+): Promise<void> {
+  const inst = openInstance(resolveInstanceRoot(opts.home));
+  try {
+    const cutoffAt = opts.cutoff ? Date.parse(opts.cutoff) : undefined;
+    if (opts.cutoff && Number.isNaN(cutoffAt))
+      throw new Error(`--cutoff 不是合法时间：${opts.cutoff}`);
+    const result = inst.evolution.freezeExperienceWindow({
+      purpose: opts.purpose as "development" | "validation" | "regression",
+      cutoffAt,
+      createdBy: PRINCIPAL_ID,
+    });
+    if (opts.json) {
+      console.log(JSON.stringify(result, null, 2));
+      return;
+    }
+    console.log(
+      `${result.created ? "✓" : "·"} dataset ${result.dataset.id}${result.created ? "" : "（digest 幂等，复用既有冻结）"}`,
+    );
+    console.log(`  purpose    ${result.dataset.purpose}`);
+    console.log(`  members    ${result.memberCount} 条 experience`);
+    console.log(`  cutoff     ${new Date(result.dataset.cutoffAt).toISOString()}`);
+    console.log(`  digest     ${result.dataset.digest.slice(0, 16)}…`);
+  } finally {
+    inst.close();
+  }
+}
+
+export async function datasetListCommand(opts: CommonOpts): Promise<void> {
+  const inst = openInstance(resolveInstanceRoot(opts.home));
+  try {
+    const datasets = inst.storage.listExperienceDatasets(undefined, 20);
+    if (opts.json) {
+      console.log(JSON.stringify(datasets, null, 2));
+      return;
+    }
+    if (datasets.length === 0) {
+      console.log("（无冻结经验集）");
+      return;
+    }
+    for (const d of datasets) {
+      console.log(
+        `${d.id}  ${d.purpose.padEnd(12)} ${String(d.memberExperienceIds.length).padStart(4)} 条  ${new Date(d.createdAt).toISOString()}`,
+      );
+    }
+  } finally {
+    inst.close();
+  }
+}
+
+export async function datasetInspectCommand(id: string, opts: CommonOpts): Promise<void> {
+  const inst = openInstance(resolveInstanceRoot(opts.home));
+  try {
+    const view = inst.evolution.experienceDatasetView(id);
+    if (opts.json) {
+      console.log(JSON.stringify(view, null, 2));
+      return;
+    }
+    const { dataset, members } = view;
+    console.log(`dataset     ${dataset.id}`);
+    console.log(`purpose     ${dataset.purpose}  filter ${dataset.filterVersion}`);
+    console.log(`digest      ${dataset.digest}`);
+    console.log(`cutoff      ${new Date(dataset.cutoffAt).toISOString()}`);
+    console.log(`members (${members.length}):`);
+    for (const m of members) {
+      const decisions = m.decisionCalls
+        .map((c) => `${c.nodeId}→${c.chosenOption ?? `(${c.state})`}`)
+        .join(", ");
+      console.log(
+        `  ${m.experienceId}  ${m.result.padEnd(9)} ${m.taskGoal.slice(0, 40)}${decisions ? `  [${decisions}]` : ""}`,
+      );
+    }
+  } finally {
+    inst.close();
+  }
+}
+
 export async function candidatesCommand(id: string | undefined, opts: CommonOpts): Promise<void> {
   const inst = openInstance(resolveInstanceRoot(opts.home));
   try {

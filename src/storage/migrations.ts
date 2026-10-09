@@ -290,4 +290,27 @@ CREATE TABLE decision_call_limits (
 );
 `,
   },
+  {
+    // M3 经验驱动演化：冻结经验集（ExperienceDataset，docs/domain-model.md §Experience）。
+    // 固定成员而非查询语句：成员为终态 Run 的 experience 显式清单 + 内容摘要；
+    // purpose 声明用途许可（development=学习 / validation=独立验证 / regression=回归），
+    // held-out 复用跟踪经 evaluations.dataset_ref 查询。
+    version: 6,
+    name: "m3-experience-datasets",
+    sql: `
+CREATE TABLE experience_datasets (
+  id TEXT PRIMARY KEY,
+  digest TEXT NOT NULL UNIQUE,
+  purpose TEXT NOT NULL,
+  cutoff_at INTEGER NOT NULL,
+  member_experience_ids TEXT NOT NULL,
+  member_digest TEXT NOT NULL,
+  filter_version TEXT NOT NULL,
+  permission_scope TEXT NOT NULL,
+  created_by TEXT NOT NULL,
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX idx_experience_datasets_purpose ON experience_datasets(purpose);
+`,
+  },
 ];

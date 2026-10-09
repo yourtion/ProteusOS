@@ -20,6 +20,10 @@ import type {
   CandidateStatus,
   EvaluationRecord,
   EvaluationRunOutcome,
+  ExperienceDatasetPurpose,
+  ExperienceDatasetRecord,
+  ExperienceDecisionCallView,
+  ExperienceMemberView,
 } from "./types.ts";
 
 /**
@@ -27,6 +31,10 @@ import type {
  * 它只产出候选与证据，不改写 active 指针——晋升必须跨过 Kernel 的 CAS 与一致性检查
  * （docs/architecture.md Evolution 职责边界）。M3 前允许人工提出候选，流程仍记录来源。
  */
+/** 冻结成员筛选语义版本（成员扫描规则的显式记录） */
+const EXPERIENCE_FILTER_VERSION_CUTOFF = "v1:cutoff-terminal-experiences";
+const EXPERIENCE_FILTER_VERSION_EXPLICIT = "v1:explicit-run-ids";
+
 export class Evolution {
   readonly deps: EvolutionRuntimeDeps;
 
@@ -770,6 +778,137 @@ export class Evolution {
     const candidate = this.deps.storage.getCandidate(candidateId);
     if (!candidate) throw new EvolutionError("unknown_candidate", `候选 ${candidateId} 不存在`);
     return candidate;
+  }
+
+  /**
+   * 冻结经验窗口（M3，evolution.md §3"只读取一个已确定的经验窗口，后续经验留给下一轮"）：
+   * 显式固定成员清单（默认 cutoff 前全部终态 Run 的 experience）与内容摘要，
+   * 固定成员而非查询语句（docs/domain-model.md §Experience）。不可变、按 digest 幂等。
+   */
+  freezeExperienceWindow(opts: {
+    purpose: ExperienceDatasetPurpose;
+    cutoffAt?: number;
+    runIds?: string[];
+    createdBy: string;
+    permissionScope?: string;
+  }): { dataset: ExperienceDatasetRecord; created: boolean; memberCount: number } {
+    const cutoff = opts.cutoffAt ?? this.deps.clock.now();
+    const scan = this.deps.storage.listExperiences(100_000);
+    const selected = scan
+      .filter((e) => (opts.runIds ? opts.runIds.includes(e.runId) : e.createdAt <= cutoff))
+      .map((e) => this.memberView(e.id, e.runId))
+      .filter((m): m is ExperienceMemberView => m !== null)
+      .sort((a, b) => (a.experienceId < b.experienceId ? -1 : 1));
+
+    const memberDigest = digestOf(canonicalJson(selected.map((m) => digestOf(canonicalJson(m)))));
+    const memberExperienceIds = selected.map((m) => m.experienceId);
+    const filterVersion = opts.runIds
+      ? EXPERIENCE_FILTER_VERSION_EXPLICIT
+      : EXPERIENCE_FILTER_VERSION_CUTOFF;
+    const digest = digestOf(
+      canonicalJson({
+        purpose: opts.purpose,
+        cutoffAt: cutoff,
+        memberExperienceIds,
+        memberDigest,
+        filterVersion,
+      }),
+    );
+
+    return this.deps.storage.tx(() => {
+      const existing = this.deps.storage.findExperienceDatasetByDigest(digest);
+      if (existing) return { dataset: existing, created: false, memberCount: selected.length };
+      const now = this.deps.clock.now();
+      const dataset: ExperienceDatasetRecord = {
+        id: this.deps.ids.next(),
+        digest,
+        purpose: opts.purpose,
+        cutoffAt: cutoff,
+        memberExperienceIds,
+        memberDigest,
+        filterVersion,
+        permissionScope: opts.permissionScope ?? `organism:${this.deps.organismId}`,
+        createdBy: opts.createdBy,
+        createdAt: now,
+      };
+      this.deps.storage.insertExperienceDataset(dataset);
+      this.deps.storage.appendEvent({
+        streamId: `dataset-${dataset.id}`,
+        type: "dataset.frozen",
+        payload: {
+          datasetId: dataset.id,
+          digest,
+          purpose: dataset.purpose,
+          cutoffAt: cutoff,
+          memberCount: memberExperienceIds.length,
+          memberDigest,
+          filterVersion,
+        },
+        organismId: this.deps.organismId,
+        occurredAt: now,
+      });
+      return { dataset, created: true, memberCount: selected.length };
+    });
+  }
+
+  /** 冻结经验集的学习投影（Consolidation 的唯一输入）：成员 × 决策调用 × 预算 */
+  experienceDatasetView(datasetId: string): {
+    dataset: ExperienceDatasetRecord;
+    members: ExperienceMemberView[];
+  } {
+    const dataset = this.deps.storage.getExperienceDataset(datasetId);
+    if (!dataset) throw new EvolutionError("unknown_dataset", `经验集 ${datasetId} 不存在`);
+    const members = dataset.memberExperienceIds
+      .map((experienceId) => {
+        // 成员按 experience id 固化；run 关系经存储反查
+        const scan = this.deps.storage.listExperiences(100_000).find((e) => e.id === experienceId);
+        return scan ? this.memberView(experienceId, scan.runId) : null;
+      })
+      .filter((m): m is ExperienceMemberView => m !== null);
+    return { dataset, members };
+  }
+
+  /** 单个成员的学习投影；experience 或关联记录缺失时如实返回 null（不可回放则显式标注） */
+  private memberView(experienceId: string, runId: string): ExperienceMemberView | null {
+    const run = this.deps.storage.getRun(runId);
+    const experience = this.deps.storage.getExperienceByRun(runId);
+    if (!run || !experience || experience.id !== experienceId) return null;
+    const task = this.deps.storage.getTask(run.taskId);
+    const decisionValue = new Map<string, string>();
+    for (const event of this.deps.storage.listEvents({ runId }, 500)) {
+      if (event.type === "decision.recorded") {
+        decisionValue.set(String(event.payload["nodeId"]), String(event.payload["value"]));
+      }
+    }
+    const decisionCalls: ExperienceDecisionCallView[] = this.deps.storage
+      .listDecisionCalls(runId)
+      .map((call) => ({
+        id: call.id,
+        nodeId: call.nodeId,
+        kind: call.kind,
+        state: call.state,
+        chosenOption: decisionValue.get(call.nodeId) ?? null,
+        durationMs: call.durationMs,
+      }));
+    return {
+      runId,
+      experienceId,
+      taskGoal: task?.goal ?? "(task 缺失)",
+      requires: task?.requires ?? [],
+      runPurpose: run.purpose,
+      snapshotId: run.snapshotId,
+      result: experience.outcome.result,
+      checks: experience.outcome.checks,
+      outputDigest: experience.outcome.outputDigest,
+      attemptCount: experience.outcome.attemptCount,
+      durationMs: experience.outcome.durationMs,
+      decisionCalls,
+      budget: {
+        reservedAttempts: run.budget.maxAttempts,
+        reservedSeconds: run.budget.maxWallClockSeconds,
+      },
+      createdAt: experience.createdAt,
+    };
   }
 }
 

@@ -57,3 +57,56 @@ export type CandidateStatus =
   | "rejected"
   | "stale"
   | "adopted";
+
+/** 冻结经验集的用途许可：同一集不得跨用途复用（防 held-out 泄漏为开发反馈） */
+export type ExperienceDatasetPurpose = "development" | "validation" | "regression";
+
+/**
+ * 冻结经验集（M3，docs/domain-model.md §Experience）：
+ * 明确成员、截止点、过滤规则版本与用途许可——固定成员而非查询语句。
+ * 不可变：digest = 元数据 + 成员投影内容摘要；幂等去重靠 digest。
+ */
+export interface ExperienceDatasetRecord {
+  id: string;
+  digest: string;
+  purpose: ExperienceDatasetPurpose;
+  cutoffAt: number;
+  /** 显式成员（experience id 升序） */
+  memberExperienceIds: string[];
+  /** 成员投影内容摘要的摘要（成员内容变化的指纹） */
+  memberDigest: string;
+  /** 过滤规则版本（成员筛选语义，如 "v1: terminal runs with experience"） */
+  filterVersion: string;
+  permissionScope: string;
+  createdBy: string;
+  createdAt: number;
+}
+
+/** 学习投影中的决策调用摘要（Consolidation 的特征来源） */
+export interface ExperienceDecisionCallView {
+  id: string;
+  nodeId: string;
+  kind: "local" | "model";
+  state: string;
+  /** decision.recorded 投影的选择值；abstain/invalid 为 null */
+  chosenOption: string | null;
+  durationMs: number | null;
+}
+
+/** 冻结成员的学习投影视图（experience × run/task × decision_calls × budget） */
+export interface ExperienceMemberView {
+  runId: string;
+  experienceId: string;
+  taskGoal: string;
+  requires: string[];
+  runPurpose: string;
+  snapshotId: string;
+  result: "succeeded" | "failed" | "cancelled";
+  checks: Array<{ name: string; passed: boolean; detail?: string }>;
+  outputDigest: string | null;
+  attemptCount: number;
+  durationMs: number;
+  decisionCalls: ExperienceDecisionCallView[];
+  budget: { reservedAttempts: number; reservedSeconds: number };
+  createdAt: number;
+}

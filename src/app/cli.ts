@@ -9,6 +9,9 @@ import {
   experimentRunCommand,
   initCommand,
   inspectCommand,
+  datasetFreezeCommand,
+  datasetInspectCommand,
+  datasetListCommand,
   judgeUpgradeCommand,
   promoteCommand,
   recoverCommand,
@@ -90,6 +93,34 @@ withCommon(
 ).action(async (id: string | undefined, opts) => {
   await candidatesCommand(id, opts);
 });
+
+withCommon(
+  program
+    .command("dataset")
+    .description("冻结经验集：显式成员 + 内容摘要 + 截止点 + 用途许可（不可变）")
+    .addCommand(
+      withCommon(
+        new Command("freeze")
+          .description("冻结当前经验窗口为数据集")
+          .option("--purpose <purpose>", "development | validation | regression", "development")
+          .option("--cutoff <iso>", "截止时刻（默认现在）"),
+      ).action(async (opts) => {
+        await datasetFreezeCommand(opts);
+      }),
+    )
+    .addCommand(
+      withCommon(new Command("list").description("列出冻结数据集")).action(async (opts) => {
+        await datasetListCommand(opts);
+      }),
+    )
+    .addCommand(
+      withCommon(
+        new Command("inspect").description("查看数据集与学习投影").argument("<id>", "Dataset ID"),
+      ).action(async (id: string, opts) => {
+        await datasetInspectCommand(id, opts);
+      }),
+    ),
+);
 
 withCommon(
   program

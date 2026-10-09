@@ -1,7 +1,12 @@
 import type { SQLInputValue } from "node:sqlite";
 import type { ArtifactVersion, GenomeSnapshot, KernelStore } from "../kernel/index.ts";
 import type { PromotionRecord } from "../kernel/index.ts";
-import type { CandidateRecord, EvaluationRecord } from "../evolution/types.ts";
+import type {
+  CandidateRecord,
+  EvaluationRecord,
+  ExperienceDatasetPurpose,
+  ExperienceDatasetRecord,
+} from "../evolution/types.ts";
 import type {
   AttemptRecord,
   AttemptState,
@@ -29,6 +34,7 @@ import type {
   DecisionCallRow,
   DispatchRow,
   EvaluationRow,
+  ExperienceDatasetRow,
   EventRow,
   ExperienceRow,
   OrganismRow,
@@ -799,6 +805,68 @@ export class Storage implements KernelStore, RuntimeStore {
       .map(mapEvaluation);
   }
 
+  // ---- M3：冻结经验集 ----
+
+  insertExperienceDataset(d: ExperienceDatasetRecord): void {
+    this.db.run(
+      `INSERT INTO experience_datasets (id, digest, purpose, cutoff_at, member_experience_ids, member_digest, filter_version, permission_scope, created_by, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      d.id,
+      d.digest,
+      d.purpose,
+      d.cutoffAt,
+      JSON.stringify(d.memberExperienceIds),
+      d.memberDigest,
+      d.filterVersion,
+      d.permissionScope,
+      d.createdBy,
+      d.createdAt,
+    );
+  }
+
+  getExperienceDataset(id: string): ExperienceDatasetRecord | undefined {
+    const row = this.db.get<ExperienceDatasetRow>(
+      "SELECT * FROM experience_datasets WHERE id = ?",
+      id,
+    );
+    return row ? mapExperienceDataset(row) : undefined;
+  }
+
+  findExperienceDatasetByDigest(digest: string): ExperienceDatasetRecord | undefined {
+    const row = this.db.get<ExperienceDatasetRow>(
+      "SELECT * FROM experience_datasets WHERE digest = ?",
+      digest,
+    );
+    return row ? mapExperienceDataset(row) : undefined;
+  }
+
+  listExperienceDatasets(
+    purpose?: ExperienceDatasetPurpose,
+    limit = 20,
+  ): ExperienceDatasetRecord[] {
+    return purpose
+      ? this.db
+          .all<ExperienceDatasetRow>(
+            "SELECT * FROM experience_datasets WHERE purpose = ? ORDER BY created_at DESC LIMIT ?",
+            purpose,
+            limit,
+          )
+          .map(mapExperienceDataset)
+      : this.db
+          .all<ExperienceDatasetRow>(
+            "SELECT * FROM experience_datasets ORDER BY created_at DESC LIMIT ?",
+            limit,
+          )
+          .map(mapExperienceDataset);
+  }
+
+  /** 列出 organism 全部 experience（冻结成员扫描用）：id 升序确定性 */
+  listExperiences(limit: number): Array<{ id: string; runId: string; createdAt: number }> {
+    return this.db
+      .all<ExperienceRow>("SELECT * FROM experiences ORDER BY created_at, id LIMIT ?", limit)
+      .map((row) => ({ id: row.id, runId: row.run_id, createdAt: row.created_at }));
+  }
+
   insertPromotion(p: PromotionRecord): void {
     this.db.run(
       `INSERT INTO promotions (id, operation_id, kind, organism_id, from_snapshot_id, to_snapshot_id, expected_revision, result_revision, evaluation_ref, authorization_ref, actor, note, created_at)
@@ -1034,6 +1102,21 @@ function mapPromotion(row: PromotionRow): PromotionRecord {
     authorizationRef: row.authorization_ref,
     actor: row.actor,
     note: row.note,
+    createdAt: row.created_at,
+  };
+}
+
+function mapExperienceDataset(row: ExperienceDatasetRow): ExperienceDatasetRecord {
+  return {
+    id: row.id,
+    digest: row.digest,
+    purpose: row.purpose as ExperienceDatasetRecord["purpose"],
+    cutoffAt: row.cutoff_at,
+    memberExperienceIds: JSON.parse(row.member_experience_ids) as string[],
+    memberDigest: row.member_digest,
+    filterVersion: row.filter_version,
+    permissionScope: row.permission_scope,
+    createdBy: row.created_by,
     createdAt: row.created_at,
   };
 }
