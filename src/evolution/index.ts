@@ -644,6 +644,22 @@ export class Evolution {
     const operationId = opts.operationId ?? this.deps.ids.next();
     return this.deps.storage.tx(() => {
       this.assertActor(opts.authorizedBy);
+      const submitted = this.deps.storage.getPromotionByOperationId(operationId);
+      if (submitted) {
+        if (
+          submitted.kind !== "adopt" ||
+          submitted.organismId !== candidate.organismId ||
+          submitted.toSnapshotId !== candidate.proposedSnapshotId ||
+          submitted.actor !== opts.authorizedBy
+        )
+          throw new EvolutionError("operation_conflict", "operationId 已用于不同的晋升请求");
+        return { result: "already", promotion: submitted };
+      }
+      if (
+        candidate.sourceRefs["candidateType"] === "inheritance" &&
+        this.deps.storage.getSharedImport(candidate.sourceRefs["importId"]!)?.state !== "imported"
+      )
+        throw new EvolutionError("import_rejected", "拒绝或缺失的导入不得晋升");
       const latest = this.deps.storage.listEvaluationsByCandidate(candidateId, 1)[0];
       if (
         latest &&
@@ -746,7 +762,8 @@ export class Evolution {
     opts?: { note?: string },
   ): Promise<{ superseded: RunSummary; successor: RunSummary }> {
     const run = this.deps.storage.getRun(runId);
-    if (!run) throw new EvolutionError("unknown_run", `run ${runId} 不存在`);
+    if (!run || run.organismId !== this.deps.organismId)
+      throw new EvolutionError("unknown_run", `run ${runId} 不存在或属于其他个体`);
     const task = this.deps.storage.getTask(run.taskId);
     if (!task) throw new EvolutionError("unknown_run", `run ${runId} 的 task 缺失`);
 
@@ -754,6 +771,7 @@ export class Evolution {
     const successor = await this.deps.runtime.submitTask(
       {
         requestedBy: task.requestedBy,
+        familyId: task.familyId ?? undefined,
         goal: task.goal,
         inputs: task.inputs,
         budget: task.budget,
@@ -1132,6 +1150,51 @@ export class Evolution {
       }
     }
     return results;
+  }
+
+  /** Operator recovery after stopping other learning workers: never replay uncertain calls. */
+  recoverConsolidationJobs(): Array<{ jobId: string; state: string }> {
+    this.assertActor(
+      this.deps.actorId ?? this.deps.kernel.getOrganism(this.deps.organismId)!.ownerId,
+    );
+    return this.deps.storage.tx(() => {
+      const running = this.deps.storage.listConsolidationJobs(
+        { state: "running", organismId: this.deps.organismId },
+        100_000,
+      );
+      if (running.some((j) => this.activeLearningAborts.has(j.id)))
+        throw new EvolutionError(
+          "worker_active",
+          "当前进程仍有归纳调用，先取消并停止工作进程再恢复",
+        );
+      return running.map((job) => {
+        const error = "归纳进程中断，外部调用结果和费用未知；不自动重发";
+        for (const call of this.deps.storage.learningCalls(this.deps.organismId)) {
+          if (call.jobId === job.id && call.state === "reserved")
+            this.deps.storage.finishLearningCall(
+              call.id,
+              "unknown",
+              null,
+              error,
+              this.deps.clock.now(),
+            );
+        }
+        const state = job.cancelRequested ? "cancelled" : "failed";
+        this.deps.storage.updateConsolidationJob(job.id, {
+          state,
+          error,
+          updatedAt: this.deps.clock.now(),
+        });
+        this.deps.storage.appendEvent({
+          streamId: `job-${job.id}`,
+          type: state === "cancelled" ? "consolidation.job.cancelled" : "consolidation.job.failed",
+          payload: { jobId: job.id, error, recovered: true },
+          organismId: this.deps.organismId,
+          occurredAt: this.deps.clock.now(),
+        });
+        return { jobId: job.id, state };
+      });
+    });
   }
 
   /** 取消排队或执行中的作业；远程调用保留未知费用并中止请求。 */
@@ -1754,12 +1817,20 @@ export class Evolution {
     suppliedPlan?: PolicyEvaluationPlan,
   ): Promise<{ evaluation: EvaluationRecord; status: CandidateStatus }> {
     const candidate = this.mustGetCandidate(candidateId);
-    if (candidate.sourceRefs["candidateType"] !== "policy") {
+    if (
+      candidate.sourceRefs["candidateType"] !== "policy" &&
+      candidate.sourceRefs["candidateType"] !== "inheritance"
+    ) {
       throw new EvolutionError(
         "not_a_policy_candidate",
         `候选 ${candidateId} 不是策略候选（sourceRefs.candidateType != policy）`,
       );
     }
+    if (
+      candidate.sourceRefs["candidateType"] === "inheritance" &&
+      this.deps.storage.getSharedImport(candidate.sourceRefs["importId"]!)?.state !== "imported"
+    )
+      throw new EvolutionError("import_rejected", "导入已拒绝或缺失，不得评估继承候选");
     const plan = this.policyEvaluationPlan(candidateId);
     if (
       suppliedPlan &&

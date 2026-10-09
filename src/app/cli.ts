@@ -14,8 +14,18 @@ import {
   consolidateJobCommand,
   consolidateJobsCommand,
   consolidateRunCommand,
+  consolidateRecoverCommand,
   consolidateSubmitCommand,
   evaluatePolicyCommand,
+  teamCreateCommand,
+  teamGrantCommand,
+  shareForkCommand,
+  publishCommand,
+  shareExportCommand,
+  shareImportCommand,
+  inheritCommand,
+  shareRejectCommand,
+  organismsCommand,
   validationRegisterCommand,
   datasetFreezeCommand,
   datasetInspectCommand,
@@ -32,10 +42,7 @@ import {
 } from "./commands.ts";
 
 const program = new Command();
-program
-  .name("proteus")
-  .description("ProteusOS 运行基质 CLI（M0：单 Organism 本地闭环）")
-  .version("0.1.0");
+program.name("proteus").description("ProteusOS：多个体运行、受控演化与选择性共享").version("0.1.0");
 
 function withCommon(cmd: Command): Command {
   return cmd
@@ -146,9 +153,18 @@ withCommon(
   program
     .command("consolidate-run")
     .description("驱动 Consolidation 队列（queued → running → completed/failed）")
-    .option("--limit <n>", "一次最多处理的作业数（默认 1）", "1"),
+    .option("--limit <n>", "一次最多处理的作业数（默认 1）", "1")
+    .option("--learning-calls <n>", "设置本个体独立累计学习调用上限（未知调用保留额度）"),
 ).action(async (opts) => {
   await consolidateRunCommand(opts);
+});
+
+withCommon(
+  program
+    .command("consolidate-recover")
+    .description("停止其他归纳进程后结案崩溃遗留作业；不重发模型调用"),
+).action(async (opts) => {
+  await consolidateRecoverCommand(opts);
 });
 
 withCommon(
@@ -169,7 +185,7 @@ withCommon(
 withCommon(
   program
     .command("consolidate-cancel")
-    .description("取消排队中的作业（仅 queued 可取消）")
+    .description("取消排队或执行中的归纳作业（未知费用保留）")
     .argument("<id>", "Job ID"),
 ).action(async (id: string, opts) => {
   await consolidateCancelCommand(id, opts);
@@ -208,6 +224,88 @@ withCommon(
 ).action(async (id: string, opts) => {
   await datasetInspectCommand(id, opts);
 });
+
+withCommon(
+  program.command("team-create").description("创建共享团队").argument("<teamId>", "Team ID"),
+).action(async (teamId: string, opts) => teamCreateCommand(teamId, opts));
+
+withCommon(
+  program
+    .command("team-grant")
+    .description("向主体授予团队权限")
+    .argument("<teamId>", "Team ID")
+    .argument("<principalId>", "Principal ID")
+    .requiredOption("--permission <permission>", "read | publish | manage"),
+).action(async (teamId: string, principalId: string, opts) => {
+  await teamGrantCommand(teamId, principalId, opts);
+});
+
+withCommon(
+  program
+    .command("share-fork")
+    .description("将共享版本分叉到当前个体")
+    .requiredOption("--versions <ids...>", "源版本 ID")
+    .requiredOption("--scope <scope>", "public | team:<id> | organism:<id>"),
+).action(async (opts) => {
+  await shareForkCommand(opts);
+});
+
+withCommon(
+  program
+    .command("publish")
+    .description("发布版本包到公共或团队范围")
+    .requiredOption("--team <id>", "Team ID")
+    .requiredOption("--versions <ids...>", "要发布的版本 ID")
+    .requiredOption("--scope <scope>", "public | team:<id>")
+    .option("--evidence <evaluationIds...>", "评估记录 ID"),
+).action(async (opts) => {
+  await publishCommand(opts);
+});
+
+withCommon(
+  program
+    .command("share-export")
+    .description("导出已发布的共享包")
+    .argument("<publicationId>", "Publication ID")
+    .requiredOption("--out <file>", "导出 JSON 文件路径"),
+).action(async (publicationId: string, opts) => {
+  await shareExportCommand(publicationId, opts);
+});
+
+withCommon(
+  program
+    .command("share-import")
+    .description("导入共享包（不激活）")
+    .argument("<file>", "Share envelope JSON 路径"),
+).action(async (file: string, opts) => {
+  await shareImportCommand(file, opts);
+});
+
+withCommon(
+  program
+    .command("inherit")
+    .description("基于已导入版本构造继承候选")
+    .argument("<importId>", "Import ID")
+    .requiredOption("--validation-set <id>", "验证集 ID")
+    .option("--versions <localids...>", "继承的本地版本 ID")
+    .option("--hypothesis <text>", "候选假设"),
+).action(async (importId: string, opts) => {
+  await inheritCommand(importId, opts);
+});
+
+withCommon(
+  program
+    .command("share-reject")
+    .description("拒绝导入记录")
+    .argument("<importId>", "Import ID")
+    .option("--note <note>", "拒绝说明"),
+).action(async (importId: string, opts) => {
+  await shareRejectCommand(importId, opts);
+});
+
+withCommon(program.command("organisms").description("列出当前主体拥有或获准访问的个体")).action(
+  async (opts) => organismsCommand(opts),
+);
 
 withCommon(
   program

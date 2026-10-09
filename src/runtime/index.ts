@@ -274,8 +274,14 @@ export class Runtime {
         "evaluatorVersionId 仅评估用途（purpose=evaluation）允许指定：普通 Run 的裁判由快照槽位固定",
       );
     }
-    if (options.supersedesRunId && !this.deps.storage.getRun(options.supersedesRunId)) {
-      throw new RuntimeError("unknown_run", `被接替的 run ${options.supersedesRunId} 不存在`);
+    if (
+      options.supersedesRunId &&
+      this.deps.storage.getRun(options.supersedesRunId)?.organismId !== this.deps.organismId
+    ) {
+      throw new RuntimeError(
+        "unknown_run",
+        `被接替的 run ${options.supersedesRunId} 不存在或属于其他个体`,
+      );
     }
 
     const runId = this.deps.ids.next();
@@ -297,6 +303,8 @@ export class Runtime {
       // 原子固定快照：评估 Run 可显式绑定候选/基线快照，不读也不改 activeGenome
       const boundSnapshotId = options.snapshotId ?? organism.activeGenomeId;
       const { snapshot, versions } = this.deps.kernel.resolveSnapshot(boundSnapshotId);
+      for (const version of versions.values())
+        this.deps.kernel.assertVersionAccess(version.id, input.requestedBy);
       // 生效裁判：评估计划可钉住版本；普通 Run 用快照槽位
       const effectiveEvaluator = this.resolveEvaluator(
         versions,
@@ -737,9 +745,11 @@ export class Runtime {
   async recoverRun(runId?: string): Promise<RecoveryAction[]> {
     const runs = runId
       ? [this.mustGetRun(runId)]
-      : this.deps.storage
-          .listRunsByStates(["pending", "running", "waiting"], 100)
-          .filter((r) => r.organismId === this.deps.organismId);
+      : this.deps.storage.listRunsByStates(
+          ["pending", "running", "waiting"],
+          100,
+          this.deps.organismId,
+        );
     const actions: RecoveryAction[] = [];
     for (const run of runs) {
       if (isTerminal(run.state)) {
@@ -1792,6 +1802,14 @@ export class Runtime {
     if (!executorName) {
       throw new NodeFailure("unknown_executor", `execute ${node.id} 无法解析执行器`);
     }
+    const capabilityVersion = versions.get(executorName);
+    if (
+      executorName.startsWith("capability/") &&
+      capabilityVersion &&
+      this.deps.kernel.hasExternalAncestry(capabilityVersion.id) &&
+      !this.deps.capabilitySandbox?.isolated
+    )
+      throw new NodeFailure("sandbox_required", "导入的能力代码及其派生版本必须在真实隔离后端执行");
     const executor = this.resolveExecutor(executorName, versions);
     if (!executor) {
       const detail = executorName.startsWith("capability/")

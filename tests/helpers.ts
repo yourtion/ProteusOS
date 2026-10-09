@@ -84,23 +84,23 @@ export function bootSeededInstance(
  * 经 ensureJudgeGenome 升级为 hybrid 并 CAS 安装（测试捷径；正式流程走
  * judge-upgrade → evaluate → operator promote）。
  */
-export function upgradeJudgeToActive(inst: AppInstance): string {
-  const base = inst.kernel.getOrganism("organism-default")!.activeGenomeId!;
+export function upgradeJudgeToActive(
+  inst: AppInstance,
+  organismId = "organism-default",
+  createdBy = "principal-local",
+): string {
+  const base = inst.kernel.getOrganism(organismId)!.activeGenomeId!;
   const genome = ensureJudgeGenome(
     { kernel: inst.kernel, storage: inst.storage, blobs: inst.blobs, clock: { now: Date.now } },
     {
       baseSnapshotId: base,
       evaluatorContent: HYBRID_EVALUATOR_CONTENT,
-      createdBy: "principal-local",
+      createdBy,
     },
   );
   inst.storage.tx(() => {
-    const fresh = inst.kernel.getOrganism("organism-default")!;
-    const result = inst.kernel.installAsActive(
-      "organism-default",
-      genome.snapshot.id,
-      fresh.revision,
-    );
+    const fresh = inst.kernel.getOrganism(organismId)!;
+    const result = inst.kernel.installAsActive(organismId, genome.snapshot.id, fresh.revision);
     if (!result.ok) throw new Error("测试装配：裁判升级 CAS 冲突");
   });
   return genome.snapshot.id;

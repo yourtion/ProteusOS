@@ -43,13 +43,13 @@ Task 的目标不随执行器反馈自动改写。对验收条件的授权修改
 | 对象 | 最小字段 | 约束 |
 | --- | --- | --- |
 | Artifact | id、kind、lineageId、owner | 稳定用途标识；kind 标识内容合同，不授予执行权 |
-| ArtifactVersion | id、artifactId、lineageId、schemaVersion、contentDigest、contentRef、parents[]、dependencies[]、createdBy、provenanceRef | 内容、依赖和来源创建后不可变 |
+| ArtifactVersion | id、artifactId、lineageId、schemaVersion、contentDigest、contentRef、scope、parents[]、dependencies[]、createdBy、provenanceRef | 内容、依赖和来源创建后不可变 |
 | Lineage | id、owner、scope、originRefs[] | 表达版本家族的主权；跨谱系 parent 不转移所有权 |
 | GenomeSnapshot | id、digest、bindings、resolvedDependencies、createdBy | slot 到精确版本的映射，以及完整依赖闭包；创建后不可变 |
 
 同一 Artifact 的版本属于同一 Lineage。Fork 创建新的 Lineage 和 Artifact 标识，其首版本的 parents 指向来源版本；后续版本在自己的谱系内演进。语义重组允许多个 parents，不表示自动合并内容或自动获得父版本的访问权。
 
-版本 ID 用于稳定引用，contentDigest 用于完整性与内容去重；相同内容可以有不同来源和权限，不能仅凭摘要合并授权对象。Parents 必须存在且不能形成环；外部导入先保留在待验证区，完成来源、权限和依赖校验后才允许进入运行快照。
+版本 ID 用于稳定引用，contentDigest 用于完整性与内容去重；相同内容可以有不同来源和权限，不能仅凭摘要合并授权对象。Parents 必须存在或具有明确的外部来源引用且不能形成环；外部引用保存版本/谱系/摘要，不能充当可执行依赖。外部导入先保留在待验证区，完成来源、权限和依赖校验后经本地候选评估采用。
 
 ArtifactVersion 不含可变的 `active`、`retired` 或累计 fitness。新证据通过独立记录关联，fitness 是某次 Evaluation 在特定条件下的结论。发现版本有问题时追加撤销/禁用记录，不能修改旧内容；授权撤回可以阻止旧 Run 继续使用已固定的版本。
 
@@ -65,7 +65,7 @@ Organism 的历史由 Run、Promotion 和所选快照串联；持续身份不等
 - `scope` 说明资源所属或分享的范围，如指定 organism/team/organization 或 public。
 - `grantRef` 指向谁可对什么对象执行什么操作、资源上限及有效期的授权记录。
 
-首版只实现本地 user 与 organism 范围；其他 scope 作为可解析但不可启用的扩展，不默认允许访问。Public 只表示可公开读取，不等于允许执行、晋升或进一步分享私有依赖。
+M4 已实现本地 user/organism/team 与 public 范围，以及明确的 read/operate/promote/publish/manage 授权；团队身份登记不自动赋予个人操作权限。网络身份认证尚未实现，本地 CLI 操作者提供受信身份声明。Public 只表示可公开读取，不等于允许执行、晋升或进一步分享私有依赖。
 
 Run 保存准入时的授权引用以便审计，但每次派发仍检查当前撤权和剩余预算。权限不会因为写入快照而永久有效。资源账本至少记录预算预留、消耗、释放与未知成本；多个并发 Run 的配额预留须原子化，不能各自读取同一余额后重复花费。
 

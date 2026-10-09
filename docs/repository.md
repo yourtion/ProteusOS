@@ -1,6 +1,6 @@
 # 仓库架构与实现约束
 
-状态：**active**（2026-09-21）。工程基线已按 [ADR 0004](./adr/0004-m0-engineering-baseline.md) 落地；M0/M1/M2 目录已创建并在用（含 `src/evolution/` 与验证布局 Evaluation 层 `tests/evals/`，M2 起）；examples/ 仍按“需要时才创建”原则留待后续里程碑。
+状态：**active**（2026-10-09）。工程基线已按 [ADR 0004](./adr/0004-m0-engineering-baseline.md) 落地；M0–M4 目录已创建并在用（含 `src/evolution/` 与验证布局 Evaluation 层 `tests/evals/`，M2 起）；examples/ 仍按“需要时才创建”原则留待后续里程碑。
 
 ## 1. 从单包模块化起步
 
@@ -18,6 +18,7 @@ ProteusOS/
 │   │   ├── executor-process/   # 本地受信进程（M0 stats worker）
 │   │   ├── executor-acp/       # ACP client：驱动 claude-agent-acp / codex-acp
 │   │   └── executor-pi/        # pi 官方 SDK 直连（ADR 0005）
+│   ├── federation/             # 白名单分享包、团队发布、导入/fork/本地继承
 │   ├── storage/                # node:sqlite、迁移、事件流、outbox、blob
 │   └── app/                    # 组装依赖、执行器注册表、CLI 命令与 seed
 ├── tests/
@@ -41,7 +42,8 @@ ProteusOS/
 箭头表示“导入/依赖”：
 
 ```text
-app ───────────→ runtime / evolution / storage / adapters
+app ───────────→ runtime / evolution / federation / storage / adapters
+federation ────→ evolution 的固定验证与候选合同 / kernel
 evolution ─────→ runtime 的任务提交合同 / kernel
 runtime ───────→ decision / kernel
 decision ──────→ kernel 的基础引用类型

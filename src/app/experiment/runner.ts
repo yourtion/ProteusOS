@@ -10,7 +10,7 @@ import { parseCapabilityModule } from "../../runtime/capability.ts";
 import { canonicalJson, digestOf } from "../../storage/blobs.ts";
 import type { AppInstance } from "../instance.ts";
 import { openInstance } from "../instance.ts";
-import { PRINCIPAL_ID, installSeed } from "../seed.ts";
+import { ORGANISM_ID, PRINCIPAL_ID, installSeed } from "../seed.ts";
 import type { SubmitOptions, TaskSubmission } from "../../runtime/index.ts";
 import { ensureExperimentGenomes, PROTOCOL_ID, type ExperimentGenomes } from "./assets.ts";
 import { caseBundleDigest, loadDataset, type Dataset, type DatasetCase } from "./dataset.ts";
@@ -27,6 +27,8 @@ export const REPORT_ALGO_VERSION = "organism-decision-report-v1";
 export const FORMAL_WALL_CLOCK_LIMIT_MS = 60 * 60 * 1000;
 
 export interface RunExperimentOptions {
+  organismId?: string;
+  actorId?: string;
   home: string;
   datasetDir: string;
   outDir: string;
@@ -87,6 +89,20 @@ export interface ExperimentRunResult {
 }
 
 export async function runExperiment(opts: RunExperimentOptions): Promise<ExperimentRunResult> {
+  const organismId = opts.organismId ?? ORGANISM_ID;
+  const actorId = opts.actorId ?? PRINCIPAL_ID;
+  const oldManifest = join(opts.outDir, "manifest.json");
+  if (existsSync(oldManifest)) {
+    const previous = JSON.parse(readFileSync(oldManifest, "utf8")) as {
+      organismId?: string;
+      actorId?: string;
+    };
+    if (
+      (previous.organismId ?? ORGANISM_ID) !== organismId ||
+      (previous.actorId ?? PRINCIPAL_ID) !== actorId
+    )
+      return fail(opts, "输出目录属于其他个体/操作者，不能复用其验证记录");
+  }
   mkdirSync(opts.outDir, { recursive: true });
 
   // ---- 装配（fake 或 real LLM；oracle 仅显式请求时装配）----
@@ -113,15 +129,18 @@ export async function runExperiment(opts: RunExperimentOptions): Promise<Experim
   }
   if (oracleProvider) decisions.set("decision-oracle", oracleProvider);
 
-  const inst = openInstance(opts.home, { decisions });
+  const inst = openInstance(opts.home, { decisions, organismId, actorId });
   try {
     // 保留普通 seed 与既有 M0–M2 行为（实验规范 §1）：临时实验实例幂等安装
-    installSeed({
-      kernel: inst.kernel,
-      storage: inst.storage,
-      blobs: inst.blobs,
-      clock: { now: Date.now },
-    });
+    installSeed(
+      {
+        kernel: inst.kernel,
+        storage: inst.storage,
+        blobs: inst.blobs,
+        clock: { now: Date.now },
+      },
+      { organismId, ownerId: actorId },
+    );
     // ---- 数据预检 + capability 模块 + 冻结 manifest ----
     const dataset = loadDataset(opts.datasetDir);
     const moduleContent = JSON.parse(readFileSync(opts.capabilityModulePath, "utf8")) as unknown;
@@ -137,7 +156,7 @@ export async function runExperiment(opts: RunExperimentOptions): Promise<Experim
         clock: { now: Date.now },
       },
       {
-        createdBy: PRINCIPAL_ID,
+        createdBy: actorId,
         capabilityModule: parsed.module,
         llmPolicy: FROZEN_LLM_POLICY,
         withOracle: opts.withOracle,
@@ -149,13 +168,9 @@ export async function runExperiment(opts: RunExperimentOptions): Promise<Experim
     writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
 
     // ---- 额度（持久化，进程重启/换 experimentId 不重置 organism 域）----
+    inst.storage.setDecisionCallLimit({ organismId }, opts.organismCallLimit, Date.now());
     inst.storage.setDecisionCallLimit(
-      { organismId: "organism-default" },
-      opts.organismCallLimit,
-      Date.now(),
-    );
-    inst.storage.setDecisionCallLimit(
-      { organismId: "organism-default", experimentId: opts.experimentId },
+      { organismId, experimentId: opts.experimentId },
       opts.experimentCallLimit,
       Date.now(),
     );
@@ -198,6 +213,7 @@ export async function runExperiment(opts: RunExperimentOptions): Promise<Experim
             break outer;
           }
           const row = await runTrial(inst, {
+            actorId,
             arm,
             caseData,
             dataset,
@@ -243,11 +259,16 @@ async function runOraclePrecheck(
   for (const caseData of executable) {
     for (const forced of [caseData.expectedChoice, wrongOption(caseData.expectedChoice)]) {
       oracle.arm(forced);
-      const { input, options } = trialSubmission(dataset, caseData, {
-        purpose: "evaluation",
-        snapshotId: genomes.oracle!.snapshot.id,
-        experimentId: `oracle-${opts.experimentId}`,
-      });
+      const { input, options } = trialSubmission(
+        dataset,
+        caseData,
+        {
+          purpose: "evaluation",
+          snapshotId: genomes.oracle!.snapshot.id,
+          experimentId: `oracle-${opts.experimentId}`,
+        },
+        opts.actorId ?? PRINCIPAL_ID,
+      );
       const summary = await inst.runtime.submitTask(input, options);
       results.push({ caseId: caseData.caseId, forced, state: summary.state });
       const expectedState = forced === caseData.expectedChoice ? "succeeded" : "failed";
@@ -275,6 +296,7 @@ function wrongOption(expected: string): string {
 async function runTrial(
   inst: AppInstance,
   args: {
+    actorId: string;
     arm: "R" | "L";
     caseData: DatasetCase;
     dataset: Dataset;
@@ -298,11 +320,16 @@ async function runTrial(
     args.fakeProvider.arm(script);
   }
   const snapshotId = arm === "R" ? genomes.rule.snapshot.id : genomes.llm.snapshot.id;
-  const { input, options } = trialSubmission(dataset, caseData, {
-    purpose: "evaluation",
-    snapshotId,
-    experimentId,
-  });
+  const { input, options } = trialSubmission(
+    dataset,
+    caseData,
+    {
+      purpose: "evaluation",
+      snapshotId,
+      experimentId,
+    },
+    args.actorId,
+  );
   const summary = await inst.runtime.submitTask(input, options);
   const calls = inst.storage.listDecisionCalls(summary.runId);
   const call = calls.length > 0 ? calls[calls.length - 1]! : null;
@@ -351,9 +378,11 @@ function trialSubmission(
   dataset: Dataset,
   caseData: DatasetCase,
   options: { purpose: "evaluation"; snapshotId: string; experimentId: string },
+  actorId: string = PRINCIPAL_ID,
 ): { input: TaskSubmission; options: SubmitOptions } {
   const input: TaskSubmission = {
-    requestedBy: PRINCIPAL_ID,
+    requestedBy: actorId,
+    familyId: caseData.familyId,
     goal: caseData.goal,
     inputs: [join(dataset.root, caseData.textDir), join(dataset.root, caseData.changedFiles)],
     budget: { maxAttempts: 1, maxWallClockSeconds: 30 },
@@ -401,6 +430,8 @@ function buildManifest(
   }));
   const manifest = {
     protocolId: PROTOCOL_ID,
+    organismId: opts.organismId ?? ORGANISM_ID,
+    actorId: opts.actorId ?? PRINCIPAL_ID,
     frozenAt: new Date().toISOString(),
     implementationCommit: process.env.PROTEUS_COMMIT ?? null,
     datasetPurpose: dataset.datasetPurpose,

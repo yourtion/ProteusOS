@@ -1,5 +1,12 @@
+import type { PublicationRecord, ImportRecord } from "../federation/types.ts";
 import type { SQLInputValue } from "node:sqlite";
-import type { ArtifactVersion, GenomeSnapshot, KernelStore } from "../kernel/index.ts";
+import type {
+  ArtifactVersion,
+  GenomeSnapshot,
+  KernelStore,
+  AccessAction,
+  ExternalVersionRef,
+} from "../kernel/index.ts";
 import type { PromotionRecord } from "../kernel/index.ts";
 import type {
   LearningCallRecord,
@@ -129,6 +136,104 @@ export class Storage implements KernelStore, RuntimeStore {
     );
   }
 
+  getLineage(id: string) {
+    const row = this.db.get<{ id: string; owner_id: string; scope: string; created_at: number }>(
+      "SELECT * FROM lineages WHERE id = ?",
+      id,
+    );
+    return row
+      ? { id: row.id, ownerId: row.owner_id, scope: row.scope, createdAt: row.created_at }
+      : undefined;
+  }
+
+  hasAccessGrant(scope: string, principalId: string, action: AccessAction): boolean {
+    return !!this.db.get(
+      "SELECT 1 FROM access_grants WHERE scope = ? AND principal_id = ? AND action = ?",
+      scope,
+      principalId,
+      action,
+    );
+  }
+
+  insertAccessGrant(
+    scope: string,
+    principalId: string,
+    action: AccessAction,
+    grantedBy: string,
+    createdAt: number,
+  ): void {
+    this.db.run(
+      "INSERT OR IGNORE INTO access_grants VALUES (?, ?, ?, ?, ?)",
+      scope,
+      principalId,
+      action,
+      grantedBy,
+      createdAt,
+    );
+  }
+
+  getExternalVersionRef(id: string): ExternalVersionRef | undefined {
+    const r = this.db.get<{
+      id: string;
+      content_digest: string;
+      lineage_id: string;
+      publication_digest: string;
+    }>("SELECT * FROM external_version_refs WHERE id = ?", id);
+    return r
+      ? {
+          id: r.id,
+          contentDigest: r.content_digest,
+          lineageId: r.lineage_id,
+          publicationDigest: r.publication_digest,
+        }
+      : undefined;
+  }
+
+  isImportedVersion(id: string): boolean {
+    return !!this.db.get(
+      "SELECT 1 FROM shared_imports i, json_each(i.versions) v WHERE v.value = ?",
+      id,
+    );
+  }
+
+  insertExternalVersionRef(ref: ExternalVersionRef): void {
+    const existing = this.getArtifactVersion(ref.id) ?? this.getExternalVersionRef(ref.id);
+    if (
+      existing &&
+      (existing.contentDigest !== ref.contentDigest || existing.lineageId !== ref.lineageId)
+    )
+      throw new Error("外部版本标识与已知版本冲突");
+    this.db.run(
+      "INSERT OR IGNORE INTO external_version_refs VALUES (?, ?, ?, ?)",
+      ref.id,
+      ref.contentDigest,
+      ref.lineageId,
+      ref.publicationDigest,
+    );
+  }
+
+  findSnapshotByBindings(bindings: Record<string, string>): GenomeSnapshot | undefined {
+    const keys = Object.keys(bindings).sort();
+    return this.db
+      .all<SnapshotRow>("SELECT * FROM genome_snapshots")
+      .map(mapSnapshot)
+      .find(
+        (s) =>
+          Object.keys(s.bindings).length === keys.length &&
+          keys.every((k) => s.bindings[k] === bindings[k]),
+      );
+  }
+
+  listOrganisms(actor: string) {
+    return this.db
+      .all<OrganismRow>(
+        "SELECT * FROM organisms WHERE owner_id = ? OR id IN (SELECT substr(scope,10) FROM access_grants WHERE principal_id = ? AND scope LIKE 'organism:%') ORDER BY created_at, id",
+        actor,
+        actor,
+      )
+      .map((row) => this.getOrganism(row.id)!);
+  }
+
   // ---- KernelStore：版本与快照 ----
 
   insertArtifact(a: {
@@ -164,8 +269,8 @@ export class Storage implements KernelStore, RuntimeStore {
   insertArtifactVersion(v: ArtifactVersion): "inserted" | "exists" {
     const changes = this.db.run(
       `INSERT OR IGNORE INTO artifact_versions
-       (id, artifact_id, lineage_id, schema_version, content_digest, content_ref, parents, dependencies, created_by, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       (id, artifact_id, lineage_id, schema_version, content_digest, content_ref, parents, dependencies, created_by, created_at, scope)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       v.id,
       v.artifactId,
       v.lineageId,
@@ -176,6 +281,7 @@ export class Storage implements KernelStore, RuntimeStore {
       JSON.stringify(v.dependencies),
       v.createdBy,
       v.createdAt,
+      v.scope ?? `principal:${this.getArtifact(v.artifactId)?.ownerId ?? v.createdBy}`,
     );
     return changes === 1 ? "inserted" : "exists";
   }
@@ -185,11 +291,16 @@ export class Storage implements KernelStore, RuntimeStore {
     return row ? mapVersion(row) : undefined;
   }
 
-  findArtifactVersionByDigest(artifactId: string, digest: string): ArtifactVersion | undefined {
+  findArtifactVersionByDigest(
+    artifactId: string,
+    digest: string,
+    scope?: string,
+  ): ArtifactVersion | undefined {
     const row = this.db.get<VersionRow>(
-      "SELECT * FROM artifact_versions WHERE artifact_id = ? AND content_digest = ?",
+      `SELECT * FROM artifact_versions WHERE artifact_id = ? AND content_digest = ? ${scope ? "AND scope = ?" : ""}`,
       artifactId,
       digest,
+      ...(scope ? [scope] : []),
     );
     return row ? mapVersion(row) : undefined;
   }
@@ -309,12 +420,13 @@ export class Storage implements KernelStore, RuntimeStore {
     return rows.map((row) => ({ ...mapRun(row), goal: row.goal }));
   }
 
-  listRunsByStates(states: RunState[], limit: number): RunRecord[] {
+  listRunsByStates(states: RunState[], limit: number, organismId?: string): RunRecord[] {
     const placeholders = states.map(() => "?").join(", ");
     return this.db
       .all<RunRow>(
-        `SELECT * FROM runs WHERE state IN (${placeholders}) ORDER BY created_at LIMIT ?`,
+        `SELECT * FROM runs WHERE state IN (${placeholders}) ${organismId ? "AND organism_id = ?" : ""} ORDER BY created_at LIMIT ?`,
         ...states,
+        ...(organismId ? [organismId] : []),
         limit,
       )
       .map(mapRun);
@@ -701,9 +813,10 @@ export class Storage implements KernelStore, RuntimeStore {
     // prepared 未发送即取消（cancelled + sent=0）不计数
     if (scope.experimentId) {
       const row = this.db.get<{ n: number }>(
-        `SELECT COUNT(*) AS n FROM decision_calls
-         WHERE kind = 'model' AND experiment_id = ? AND (sent = 1 OR state = 'prepared')`,
+        `SELECT COUNT(*) AS n FROM decision_calls dc JOIN runs r ON r.id = dc.run_id
+         WHERE dc.kind = 'model' AND dc.experiment_id = ? AND r.organism_id = ? AND (dc.sent = 1 OR dc.state = 'prepared')`,
         scope.experimentId,
+        scope.organismId,
       )!;
       return row.n;
     }
@@ -860,21 +973,33 @@ export class Storage implements KernelStore, RuntimeStore {
   listExperienceDatasets(
     purpose?: ExperienceDatasetPurpose,
     limit = 20,
+    organismId?: string,
   ): ExperienceDatasetRecord[] {
-    return purpose
-      ? this.db
-          .all<ExperienceDatasetRow>(
-            "SELECT * FROM experience_datasets WHERE purpose = ? ORDER BY created_at DESC LIMIT ?",
-            purpose,
-            limit,
-          )
-          .map(mapExperienceDataset)
-      : this.db
-          .all<ExperienceDatasetRow>(
-            "SELECT * FROM experience_datasets ORDER BY created_at DESC LIMIT ?",
-            limit,
-          )
-          .map(mapExperienceDataset);
+    const conditions: string[] = [];
+    const params: SQLInputValue[] = [];
+    if (purpose) {
+      conditions.push("purpose = ?");
+      params.push(purpose);
+    }
+    if (organismId) {
+      conditions.push("organism_id = ?");
+      params.push(organismId);
+    }
+    return this.db
+      .all<ExperienceDatasetRow>(
+        `SELECT * FROM experience_datasets ${conditions.length ? "WHERE " + conditions.join(" AND ") : ""} ORDER BY created_at DESC LIMIT ?`,
+        ...params,
+        limit,
+      )
+      .map(mapExperienceDataset);
+  }
+
+  taskBelongsToOrganism(taskId: string, organismId: string): boolean {
+    return !!this.db.get(
+      "SELECT 1 FROM runs WHERE task_id = ? AND organism_id = ?",
+      taskId,
+      organismId,
+    );
   }
 
   listExperiences(
@@ -1130,6 +1255,111 @@ export class Storage implements KernelStore, RuntimeStore {
     this.db.run(`UPDATE validation_sets SET ${sets.join(", ")} WHERE id = ?`, ...params);
   }
 
+  insertPublication(p: PublicationRecord): void {
+    this.db.run(
+      "INSERT INTO publications VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+      p.id,
+      p.teamId,
+      p.scope,
+      p.bundleDigest,
+      p.bundleRef,
+      JSON.stringify(p.versionIds),
+      p.createdBy,
+      p.createdAt,
+    );
+  }
+
+  getPublication(id: string): PublicationRecord | undefined {
+    const r = this.db.get<{
+      id: string;
+      team_id: string;
+      scope: string;
+      bundle_digest: string;
+      bundle_ref: string;
+      version_ids: string;
+      created_by: string;
+      created_at: number;
+    }>("SELECT * FROM publications WHERE id = ?", id);
+    return r
+      ? {
+          id: r.id,
+          teamId: r.team_id,
+          scope: r.scope,
+          bundleDigest: r.bundle_digest,
+          bundleRef: r.bundle_ref,
+          versionIds: JSON.parse(r.version_ids),
+          createdBy: r.created_by,
+          createdAt: r.created_at,
+        }
+      : undefined;
+  }
+
+  insertSharedImport(r: ImportRecord): void {
+    this.db.run(
+      "INSERT INTO shared_imports VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      r.id,
+      r.organismId,
+      r.bundleDigest,
+      r.publicationId,
+      JSON.stringify(r.versions),
+      JSON.stringify(r.rootVersionIds),
+      r.state,
+      r.createdBy,
+      r.createdAt,
+      r.bundleRef,
+    );
+  }
+
+  getSharedImport(id: string): ImportRecord | undefined {
+    const r = this.db.get<{
+      id: string;
+      organism_id: string;
+      bundle_digest: string;
+      bundle_ref: string | null;
+      publication_id: string;
+      versions: string;
+      root_version_ids: string;
+      state: ImportRecord["state"];
+      created_by: string;
+      created_at: number;
+    }>("SELECT * FROM shared_imports WHERE id = ?", id);
+    return r
+      ? {
+          id: r.id,
+          organismId: r.organism_id,
+          bundleDigest: r.bundle_digest,
+          bundleRef: r.bundle_ref,
+          publicationId: r.publication_id,
+          versions: JSON.parse(r.versions),
+          rootVersionIds: JSON.parse(r.root_version_ids),
+          state: r.state,
+          createdBy: r.created_by,
+          createdAt: r.created_at,
+        }
+      : undefined;
+  }
+
+  findSharedImport(organismId: string, bundleDigest: string): ImportRecord | undefined {
+    const r = this.db.get<{ id: string }>(
+      "SELECT id FROM shared_imports WHERE organism_id = ? AND bundle_digest = ?",
+      organismId,
+      bundleDigest,
+    );
+    return r ? this.getSharedImport(r.id) : undefined;
+  }
+
+  rejectSharedImport(id: string): void {
+    this.db.run("UPDATE shared_imports SET state = 'rejected' WHERE id = ?", id);
+  }
+
+  hasAdoptedImport(importId: string, organismId: string): boolean {
+    return !!this.db.get(
+      "SELECT 1 FROM promotions p JOIN evaluations e ON e.id = p.evaluation_ref JOIN candidates c ON c.id = e.candidate_id WHERE p.organism_id = ? AND json_extract(c.source_refs, '$.importId') = ?",
+      organismId,
+      importId,
+    );
+  }
+
   insertPromotion(p: PromotionRecord): void {
     this.db.run(
       `INSERT INTO promotions (id, operation_id, kind, organism_id, from_snapshot_id, to_snapshot_id, expected_revision, result_revision, evaluation_ref, authorization_ref, actor, note, created_at)
@@ -1192,6 +1422,7 @@ export class Storage implements KernelStore, RuntimeStore {
 
 function mapVersion(row: VersionRow): ArtifactVersion {
   return {
+    scope: row.scope,
     id: row.id,
     artifactId: row.artifact_id,
     lineageId: row.lineage_id,
@@ -1320,7 +1551,9 @@ function mapDecisionCall(row: DecisionCallRow): DecisionCallRecord {
 }
 
 function decisionLimitScope(scope: { organismId: string; experimentId?: string | null }): string {
-  return scope.experimentId ? `experiment:${scope.experimentId}` : `organism:${scope.organismId}`;
+  return scope.experimentId
+    ? `experiment:${scope.organismId}:${scope.experimentId}`
+    : `organism:${scope.organismId}`;
 }
 
 function mapCandidate(row: CandidateRow): CandidateRecord {

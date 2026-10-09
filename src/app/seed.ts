@@ -97,6 +97,7 @@ export function installSeed(
   return deps.storage.tx(() => {
     const { kernel, storage, blobs, clock } = deps;
     const principal = kernel.createPrincipal(ownerId, "user");
+    kernel.createPrincipal(PRINCIPAL_ID, "user");
     const scope = `organism:${organismId}`;
     kernel.createLineage(LINEAGE_ID, principal.id, scope);
     const organism = kernel.createOrganism(organismId, principal.id, scope);
@@ -125,6 +126,7 @@ export function installSeed(
         parents: [],
         dependencies: [],
         createdBy: PRINCIPAL_ID,
+        scope: "public",
       });
       if (!versionExisted) {
         storage.appendEvent({
@@ -139,9 +141,12 @@ export function installSeed(
       versions.push({ artifactId: def.id, versionId: version.id, digest });
     }
 
-    const digest = snapshotDigest(resolved);
-    const snapshotExisted = Boolean(storage.findSnapshotByDigest(digest));
+    const computedDigest = snapshotDigest(resolved);
+    const snapshotExisted = Boolean(
+      storage.findSnapshotByBindings(bindings) ?? storage.findSnapshotByDigest(computedDigest),
+    );
     const snapshot = kernel.createSnapshot(bindings, PRINCIPAL_ID);
+    const digest = snapshot.digest;
     if (!snapshotExisted) {
       storage.appendEvent({
         streamId: "seed",

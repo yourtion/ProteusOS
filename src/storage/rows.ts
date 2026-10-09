@@ -31,6 +31,7 @@ export interface ArtifactRow {
 }
 
 export interface VersionRow {
+  scope: string;
   id: string;
   artifact_id: string;
   lineage_id: string;

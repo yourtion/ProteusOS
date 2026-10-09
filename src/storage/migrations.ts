@@ -402,4 +402,76 @@ CREATE INDEX idx_learning_calls_organism ON learning_calls(organism_id);
 CREATE TABLE learning_call_limits (organism_id TEXT PRIMARY KEY, max_calls INTEGER NOT NULL);
 `,
   },
+  {
+    version: 11,
+    name: "m4-version-scopes-and-selective-sharing",
+    sql: `
+ALTER TABLE artifact_versions RENAME TO artifact_versions_legacy;
+CREATE TABLE artifact_versions (
+  id TEXT PRIMARY KEY,
+  artifact_id TEXT NOT NULL,
+  lineage_id TEXT NOT NULL,
+  schema_version INTEGER NOT NULL,
+  content_digest TEXT NOT NULL,
+  content_ref TEXT NOT NULL,
+  parents TEXT NOT NULL,
+  dependencies TEXT NOT NULL,
+  created_by TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  scope TEXT NOT NULL,
+  UNIQUE(artifact_id, content_digest, scope)
+);
+INSERT INTO artifact_versions SELECT v.*, 'principal:' || COALESCE(a.owner_id, v.created_by)
+  FROM artifact_versions_legacy v LEFT JOIN artifacts a ON a.id = v.artifact_id;
+UPDATE artifact_versions SET scope = 'public' WHERE artifact_id IN ('stats-graph', 'stats-rule', 'stats-acceptance') AND parents = '[]';
+DROP TABLE artifact_versions_legacy;
+CREATE INDEX idx_versions_lineage ON artifact_versions(lineage_id);
+CREATE TABLE access_grants (
+  scope TEXT NOT NULL,
+  principal_id TEXT NOT NULL,
+  action TEXT NOT NULL,
+  granted_by TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  PRIMARY KEY(scope, principal_id, action)
+);
+CREATE TABLE external_version_refs (
+  id TEXT PRIMARY KEY,
+  content_digest TEXT NOT NULL,
+  lineage_id TEXT NOT NULL,
+  publication_digest TEXT NOT NULL
+);
+CREATE TABLE publications (
+  id TEXT PRIMARY KEY,
+  team_id TEXT NOT NULL,
+  scope TEXT NOT NULL,
+  bundle_digest TEXT NOT NULL UNIQUE,
+  bundle_ref TEXT NOT NULL,
+  version_ids TEXT NOT NULL,
+  created_by TEXT NOT NULL,
+  created_at INTEGER NOT NULL
+);
+CREATE TABLE shared_imports (
+  id TEXT PRIMARY KEY,
+  organism_id TEXT NOT NULL,
+  bundle_digest TEXT NOT NULL,
+  publication_id TEXT NOT NULL,
+  versions TEXT NOT NULL,
+  root_version_ids TEXT NOT NULL,
+  state TEXT NOT NULL,
+  created_by TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  UNIQUE(organism_id, bundle_digest)
+);
+`,
+  },
+  {
+    version: 12,
+    name: "m4-retain-imported-publication-claims",
+    sql: "ALTER TABLE shared_imports ADD COLUMN bundle_ref TEXT;",
+  },
+  {
+    version: 13,
+    name: "m4-organism-scoped-experiment-limits",
+    sql: "INSERT OR IGNORE INTO decision_call_limits SELECT 'experiment:organism-default:' || substr(scope, 12), max_calls, created_at FROM decision_call_limits WHERE scope LIKE 'experiment:%';",
+  },
 ];

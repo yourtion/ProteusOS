@@ -44,7 +44,7 @@ interface ManifestShape {
 }
 
 export class ReportError extends Error {
-  readonly code: "manifest_invalid" | "trials_invalid" | "digest_drift";
+  readonly code: "manifest_invalid" | "trials_invalid" | "digest_drift" | "scope_mismatch";
 
   constructor(code: ReportError["code"], message: string) {
     super(message);
@@ -57,6 +57,7 @@ export function generateReport(args: {
   storage: Storage;
   blobs?: BlobStore;
   datasetDir: string | null;
+  organismId?: string;
   writeMarkdown?: boolean;
 }): ReportOutcome {
   const { dir, storage } = args;
@@ -68,6 +69,8 @@ export function generateReport(args: {
     throw new ReportError("manifest_invalid", `缺少 manifest.json：${dir}`);
   const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as ManifestShape &
     Record<string, unknown>;
+  if ((manifest["organismId"] ?? "organism-default") !== (args.organismId ?? "organism-default"))
+    throw new ReportError("scope_mismatch", "实验报告属于其他个体");
   const { digest: claimedDigest, ...manifestBody } = manifest;
   const recomputedDigest = digestOf(canonicalJson(manifestBody));
   if (typeof claimedDigest !== "string" || claimedDigest !== recomputedDigest) {
@@ -102,6 +105,11 @@ export function generateReport(args: {
   }
   if (rows.length === 0) {
     problems.push("trials.jsonl 没有可解析的有效行（无法计算任何指标）");
+  }
+  for (const row of rows) {
+    const run = storage.getRun(row.runId);
+    if (run && run.organismId !== (args.organismId ?? "organism-default"))
+      throw new ReportError("scope_mismatch", "trial 关联了其他个体的私有运行");
   }
   const keys = new Map<string, TrialRow>();
   const duplicateKeys: string[] = [];

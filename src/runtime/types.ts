@@ -227,7 +227,7 @@ export interface RuntimeStore {
   insertRun(r: RunRecord): void;
   getRun(id: string): RunRecord | undefined;
   listRuns(limit: number): Array<RunRecord & { goal: string }>;
-  listRunsByStates(states: RunState[], limit: number): RunRecord[];
+  listRunsByStates(states: RunState[], limit: number, organismId?: string): RunRecord[];
   updateRunState(
     id: string,
     state: RunState,

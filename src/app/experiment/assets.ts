@@ -129,6 +129,7 @@ export function ensureExperimentGenomes(
         parents,
         dependencies: [],
         createdBy: opts.createdBy,
+        scope: `principal:${opts.createdBy}`,
       });
     };
 

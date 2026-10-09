@@ -1,5 +1,7 @@
 import { createHash } from "node:crypto";
 import type {
+  AccessAction,
+  ExternalVersionRef,
   Artifact,
   ArtifactVersion,
   GenomeSnapshot,
@@ -22,7 +24,23 @@ export interface KernelStore {
   getArtifact(id: string): Artifact | undefined;
   insertArtifactVersion(v: ArtifactVersion): "inserted" | "exists";
   getArtifactVersion(id: string): ArtifactVersion | undefined;
-  findArtifactVersionByDigest(artifactId: string, digest: string): ArtifactVersion | undefined;
+  findArtifactVersionByDigest(
+    artifactId: string,
+    digest: string,
+    scope?: string,
+  ): ArtifactVersion | undefined;
+  getLineage(id: string): Lineage | undefined;
+  getExternalVersionRef(id: string): ExternalVersionRef | undefined;
+  isImportedVersion(id: string): boolean;
+  hasAccessGrant(scope: string, principalId: string, action: AccessAction): boolean;
+  insertAccessGrant(
+    scope: string,
+    principalId: string,
+    action: AccessAction,
+    grantedBy: string,
+    createdAt: number,
+  ): void;
+  findSnapshotByBindings(bindings: Record<string, string>): GenomeSnapshot | undefined;
   insertSnapshot(s: GenomeSnapshot): "inserted" | "exists";
   findSnapshotByDigest(digest: string): GenomeSnapshot | undefined;
   getSnapshot(id: string): GenomeSnapshot | undefined;
@@ -52,6 +70,7 @@ export interface RegisterVersionInput {
   parents: string[];
   dependencies: string[];
   createdBy: string;
+  scope?: string;
 }
 
 export class KernelError extends Error {
@@ -128,11 +147,16 @@ export class Kernel {
     if (!artifact)
       throw new KernelError("unknown_artifact", `artifact ${input.artifact.id} 不存在`);
 
-    const existing = this.store.findArtifactVersionByDigest(artifact.id, input.contentDigest);
+    const scope = input.scope ?? `principal:${artifact.ownerId}`;
+    const existing = this.store.findArtifactVersionByDigest(
+      artifact.id,
+      input.contentDigest,
+      scope,
+    );
     if (existing) return existing;
 
     for (const parentId of input.parents) {
-      if (!this.store.getArtifactVersion(parentId)) {
+      if (!this.store.getArtifactVersion(parentId) && !this.store.getExternalVersionRef(parentId)) {
         throw new KernelError("unknown_parent", `parent ${parentId} 不存在`);
       }
     }
@@ -145,6 +169,7 @@ export class Kernel {
       schemaVersion: input.schemaVersion,
       contentDigest: input.contentDigest,
       contentRef: input.contentRef,
+      scope,
       parents: [...input.parents],
       dependencies: [...input.dependencies],
       createdBy: input.createdBy,
@@ -201,7 +226,14 @@ export class Kernel {
       resolved.push({ slot, version });
     }
 
-    const digest = snapshotDigest(resolved);
+    const closure = this.resolveVersionClosure(resolved.map((r) => r.version.id));
+    const sameBindings = this.store.findSnapshotByBindings(bindings);
+    if (sameBindings) return sameBindings;
+    const rootIds = new Set(resolved.map((r) => r.version.id));
+    const digest = snapshotDigest(
+      resolved,
+      [...closure.values()].filter((v) => !rootIds.has(v.id)),
+    );
     const existing = this.store.findSnapshotByDigest(digest);
     if (existing) return existing;
 
@@ -224,12 +256,96 @@ export class Kernel {
     return this.store.getPrincipal(id);
   }
 
-  assertOrganismAccess(organismId: string, actor: string): void {
+  assertOrganismAccess(organismId: string, actor: string, action: AccessAction = "operate"): void {
     const organism = this.store.getOrganism(organismId);
     if (!organism) throw new KernelError("unknown_organism", `organism ${organismId} 不存在`);
+    this.assertPrincipal(actor);
+    if (
+      organism.ownerId !== actor &&
+      !this.store.hasAccessGrant(`organism:${organismId}`, actor, action) &&
+      !this.store.hasAccessGrant(`organism:${organismId}`, actor, "manage")
+    )
+      throw new KernelError("forbidden", "当前主体无权操作该个体");
+  }
+
+  private assertPrincipal(actor: string): void {
     if (!this.store.getPrincipal(actor))
       throw new KernelError("unknown_principal", `principal ${actor} 不存在`);
-    if (organism.ownerId !== actor) throw new KernelError("forbidden", "当前主体无权操作该个体");
+  }
+
+  assertScopeAccess(scope: string, actor: string, action: AccessAction = "read"): void {
+    this.assertPrincipal(actor);
+    if (scope === "public" && action === "read") return;
+    if (scope === `principal:${actor}`) return;
+    if (scope.startsWith("organism:"))
+      return this.assertOrganismAccess(scope.slice(9), actor, action);
+    if (
+      scope.startsWith("team:") &&
+      this.store.getPrincipal(scope.slice(5))?.kind === "team" &&
+      (this.store.hasAccessGrant(scope, actor, action) ||
+        this.store.hasAccessGrant(scope, actor, "manage") ||
+        (action === "read" && this.store.hasAccessGrant(scope, actor, "publish")))
+    )
+      return;
+    throw new KernelError("forbidden", `当前主体无 ${scope} 的 ${action} 权限`);
+  }
+
+  grantAccess(
+    scope: string,
+    principalId: string,
+    action: AccessAction,
+    authorizedBy: string,
+  ): void {
+    this.assertScopeAccess(scope, authorizedBy, "manage");
+    this.assertPrincipal(principalId);
+    this.store.insertAccessGrant(scope, principalId, action, authorizedBy, this.clock.now());
+  }
+
+  resolveVersionClosure(versionIds: string[]): Map<string, ArtifactVersion> {
+    const versions = new Map<string, ArtifactVersion>();
+    const visiting = new Set<string>();
+    const completed = new Set<string>();
+    const stack = versionIds.map((id) => ({ id, exit: false }));
+    while (stack.length) {
+      const entry = stack.pop()!;
+      if (entry.exit) {
+        visiting.delete(entry.id);
+        completed.add(entry.id);
+        continue;
+      }
+      if (completed.has(entry.id)) continue;
+      if (visiting.has(entry.id)) throw new KernelError("cycle_detected", "版本依赖闭包形成环");
+      const version = this.store.getArtifactVersion(entry.id);
+      if (!version) throw new KernelError("unknown_version", "版本依赖闭包缺失");
+      versions.set(entry.id, version);
+      visiting.add(entry.id);
+      stack.push({ id: entry.id, exit: true });
+      for (const dependency of version.dependencies) stack.push({ id: dependency, exit: false });
+    }
+    return versions;
+  }
+
+  assertVersionAccess(versionId: string, actor: string): void {
+    for (const version of this.resolveVersionClosure([versionId]).values())
+      this.assertScopeAccess(
+        version.scope ?? `principal:${this.store.getArtifact(version.artifactId)?.ownerId}`,
+        actor,
+      );
+  }
+
+  hasExternalAncestry(versionId: string): boolean {
+    const seen = new Set<string>();
+    const pending = [versionId];
+    while (pending.length) {
+      const id = pending.pop()!;
+      if (seen.has(id)) continue;
+      seen.add(id);
+      if (this.store.isImportedVersion(id)) return true;
+      const version = this.store.getArtifactVersion(id);
+      if (!version && this.store.getExternalVersionRef(id)) return true;
+      if (version) pending.push(...version.parents);
+    }
+    return false;
   }
 
   getSnapshot(id: string): GenomeSnapshot | undefined {
@@ -254,6 +370,7 @@ export class Kernel {
       }
       versions.set(slot, version);
     }
+    this.resolveVersionClosure([...versions.values()].map((v) => v.id));
     return { snapshot, versions };
   }
 
@@ -288,7 +405,7 @@ export class Kernel {
     | { result: "promoted"; promotion: PromotionRecord }
     | { result: "already"; promotion: PromotionRecord }
     | { result: "stale"; currentRevision: number } {
-    this.assertOrganismAccess(input.organismId, input.authorizedBy);
+    this.assertOrganismAccess(input.organismId, input.authorizedBy, "promote");
     const existing = this.store.getPromotionByOperationId(input.operationId);
     if (existing) {
       if (
@@ -307,7 +424,9 @@ export class Kernel {
     }
     // 目标快照必须可解析完整依赖闭包（不能回滚/晋升到依赖缺失的组合）
     try {
-      this.resolveSnapshot(input.toSnapshotId);
+      const { versions } = this.resolveSnapshot(input.toSnapshotId);
+      for (const version of versions.values())
+        this.assertVersionAccess(version.id, input.authorizedBy);
     } catch (err) {
       throw new KernelError(
         "promotion_target_unresolvable",
@@ -348,25 +467,39 @@ export class Kernel {
 }
 
 /**
- * 快照摘要：对排序后的 slot -> contentDigest 闭包做 sha256。
- * 纯内容寻址、不含实例特定的 versionId——同一 seed 内容在任何实例
- * 产生同一摘要，这是"人工安装 seed 快照可重复"的实质保证。
+ * 快照摘要：排序后的 slot -> 内容摘要、scope、lineage 做 sha256。
+ * 不含实例特定的 versionId；固定 public seed 谱系在各实例产生同一摘要。
+ * 私有或 fork 版本保留自己的治理身份，不能仅凭相同内容合并授权对象。
  */
 export function snapshotDigest(
-  resolved: Array<{ slot: string; version: Pick<ArtifactVersion, "contentDigest"> }>,
+  resolved: Array<{
+    slot: string;
+    version: Pick<ArtifactVersion, "contentDigest"> &
+      Partial<Pick<ArtifactVersion, "scope" | "lineageId" | "artifactId">>;
+  }>,
+  dependencies: ArtifactVersion[] = [],
 ): string {
-  const canonical: Record<string, string> = {};
-  for (const { slot, version } of resolved) {
-    canonical[slot] = version.contentDigest;
-  }
-  const sorted = Object.keys(canonical)
-    .sort()
-    .map((slot) => `${slot}\n${canonical[slot]}`)
-    .join("\n---\n");
-  return createHash("sha256").update(sorted).digest("hex");
+  const identity = (
+    version: Pick<ArtifactVersion, "contentDigest"> &
+      Partial<Pick<ArtifactVersion, "scope" | "lineageId" | "artifactId">>,
+  ) => ({
+    contentDigest: version.contentDigest,
+    scope: version.scope ?? null,
+    lineageId: version.lineageId ?? null,
+    artifactId: version.artifactId ?? null,
+  });
+  const bindings = resolved
+    .map(({ slot, version }) => ({ slot, ...identity(version) }))
+    .sort((a, b) => (a.slot < b.slot ? -1 : a.slot > b.slot ? 1 : 0));
+  const closure = dependencies.map((v) => JSON.stringify(identity(v))).sort();
+  return createHash("sha256")
+    .update(JSON.stringify({ format: "genome-identity-v2", bindings, dependencies: closure }))
+    .digest("hex");
 }
 
 export type {
+  AccessAction,
+  ExternalVersionRef,
   Artifact,
   ArtifactVersion,
   GenomeSnapshot,

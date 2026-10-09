@@ -405,6 +405,7 @@ export function registerDerivedVersion(
     parents: opts.baseVersion ? [opts.baseVersion.id] : [],
     dependencies: [],
     createdBy: opts.createdBy,
+    scope: `principal:${opts.createdBy}`,
   });
 }
 

@@ -6,9 +6,9 @@ import { openInstance } from "../../src/app/instance.ts";
 import { MIGRATIONS } from "../../src/storage/migrations.ts";
 import { SqliteDb } from "../../src/storage/sqlite.ts";
 import { Storage } from "../../src/storage/store.ts";
-import { BlobStore } from "../../src/storage/blobs.ts";
+import { BlobStore, digestOf } from "../../src/storage/blobs.ts";
 import { Kernel } from "../../src/kernel/index.ts";
-import { installSeed } from "../../src/app/seed.ts";
+import { canonicalJson, installSeed, SEED_ARTIFACTS } from "../../src/app/seed.ts";
 import { runExperiment } from "../../src/app/experiment/runner.ts";
 import { generateReport, ReportError } from "../../src/app/experiment/reporter.ts";
 import { CAPABILITY_MODULE } from "../fixtures/decision/harness.ts";
@@ -214,7 +214,53 @@ describe("D15：旧实例迁移与历史 decision.recorded 恢复", () => {
     const kernel = new Kernel(storage, clock, {
       next: () => `legacy-${Math.random().toString(36).slice(2)}`,
     });
-    const seed = installSeed({ kernel, storage, blobs, clock });
+    // 手工写入 v4 seed：当前 installSeed/Storage 会查询和写 scope 列，旧 schema 不含该字段。
+    kernel.createPrincipal("principal-local", "user");
+    kernel.createLineage("lineage-seed", "principal-local", "organism:organism-default");
+    kernel.createOrganism("organism-default", "principal-local", "organism:organism-default");
+    const bindings: Record<string, string> = {};
+    for (const artifactDef of SEED_ARTIFACTS) {
+      storage.insertArtifact({
+        id: artifactDef.id,
+        kind: artifactDef.kind,
+        lineageId: "lineage-seed",
+        ownerId: "principal-local",
+        createdAt: clock.now(),
+      });
+      const { digest, ref } = blobs.write(canonicalJson(artifactDef.content));
+      const versionId = `legacy-seed-${artifactDef.id}`;
+      db.run(
+        `INSERT INTO artifact_versions (id, artifact_id, lineage_id, schema_version, content_digest, content_ref, parents, dependencies, created_by, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        versionId,
+        artifactDef.id,
+        "lineage-seed",
+        1,
+        digest,
+        ref,
+        JSON.stringify([]),
+        JSON.stringify([]),
+        "principal-local",
+        clock.now(),
+      );
+      bindings[artifactDef.kind] = versionId;
+    }
+    // 按旧算法固定历史摘要，迁移不能用当前算法重写历史身份。
+    const legacyDigest = digestOf(
+      [...SEED_ARTIFACTS]
+        .sort((a, b) => a.kind.localeCompare(b.kind))
+        .map((def) => `${def.kind}\n${digestOf(canonicalJson(def.content))}`)
+        .join("\n---\n"),
+    );
+    const seedSnapshot = {
+      id: "legacy-seed-snapshot",
+      digest: legacyDigest,
+      bindings,
+      createdBy: "principal-local",
+      createdAt: clock.now(),
+    };
+    storage.insertSnapshot(seedSnapshot);
+    expect(storage.setActiveGenome("organism-default", seedSnapshot.id, 0).ok).toBe(true);
     // 直接插入 v4 旧 schema 行：当前 Storage.insertTask 会写入 v5 family_id，
     // 不能用于构造尚未迁移的数据库。
     db.run(
@@ -237,7 +283,7 @@ describe("D15：旧实例迁移与历史 decision.recorded 恢复", () => {
     db.run(
       `INSERT INTO runs (id, task_id, task_revision, organism_id, purpose, snapshot_id, graph_digest, state, supersedes_run_id, budget, failure_reason, created_at, updated_at)
        VALUES ('run-legacy', 'task-legacy', 1, 'organism-default', 'normal', ?, 'legacy', 'running', NULL, ?, NULL, ?, ?)`,
-      seed.snapshotId,
+      seedSnapshot.id,
       JSON.stringify({ maxAttempts: 3, maxWallClockSeconds: 60 }),
       createdAt,
       createdAt,
@@ -271,6 +317,18 @@ describe("D15：旧实例迁移与历史 decision.recorded 恢复", () => {
     // 重开实例：v5 迁移 + deadline 回填 + 旧事件恢复执行
     const inst = openInstance(root);
     try {
+      const reinstalled = installSeed({
+        kernel: inst.kernel,
+        storage: inst.storage,
+        blobs: inst.blobs,
+        clock,
+      });
+      expect(reinstalled).toMatchObject({
+        snapshotId: seedSnapshot.id,
+        snapshotDigest: legacyDigest,
+        installed: false,
+        revision: 1,
+      });
       const run = inst.storage.getRun("run-legacy")!;
       expect(run.deadlineAt).toBe(createdAt + 60_000); // 截止点由持久化预算回填
       expect(run.experimentId).toBeNull();

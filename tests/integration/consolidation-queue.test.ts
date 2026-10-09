@@ -27,7 +27,6 @@ const CFS = fileURLToPath(new URL("../fixtures/changed-file-summary", import.met
 const PE = fileURLToPath(new URL("../fixtures/policy-evolution", import.meta.url));
 
 let inst: AppInstance | undefined;
-let proposer: FakeRouteProposer | undefined;
 
 afterAll(() => {
   inst?.close();

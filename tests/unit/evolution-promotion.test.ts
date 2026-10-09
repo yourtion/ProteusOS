@@ -39,6 +39,7 @@ describe("Evolution 晋升事务边界", () => {
     const promote = vi.fn();
     const storage = {
       getCandidate: () => candidate,
+      getPromotionByOperationId: () => undefined,
       listEvaluationsByCandidate: () => [latest],
       tx: <T>(fn: () => T): T => {
         latest = evaluation("rejected", 2);

@@ -1,6 +1,6 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
-import { openInstance, resolveInstanceRoot } from "./instance.ts";
+import { openInstance, resolveInstanceRoot, type AppInstance } from "./instance.ts";
 import { ORGANISM_ID, PRINCIPAL_ID, installSeed } from "./seed.ts";
 import type { PolicyEvaluationPlan } from "../evolution/index.ts";
 import { loadTaskFile, resolveFrom } from "./task-file.ts";
@@ -10,6 +10,179 @@ export interface CommonOpts {
   json?: boolean;
   organism?: string;
   actor?: string;
+}
+
+function federationFor(opts: CommonOpts) {
+  const instance = openInstance(resolveInstanceRoot(opts.home), {
+    organismId: opts.organism,
+    actorId: opts.actor,
+  });
+  return { instance, federation: instance.federation };
+}
+
+function printRecord(record: unknown, opts: CommonOpts): void {
+  if (opts.json) console.log(JSON.stringify(record, null, 2));
+  else console.log(JSON.stringify(record, null, 2));
+}
+
+function validateForkScope(scope: string, organismId: string): void {
+  if (scope !== "public" && !/^team:[^:]+$/.test(scope) && scope !== `organism:${organismId}`) {
+    throw new Error("scope 必须为 public、team:<id> 或当前 organism:<id>");
+  }
+}
+
+function validatePublicationScope(scope: string): void {
+  if (scope !== "public" && !/^team:[^:]+$/.test(scope)) {
+    throw new Error("发布 scope 必须为 public 或 team:<id>");
+  }
+}
+
+export async function teamCreateCommand(teamId: string, opts: CommonOpts): Promise<void> {
+  const { instance, federation } = federationFor(opts);
+  try {
+    printRecord(federation.createTeam(teamId, { createdBy: opts.actor ?? PRINCIPAL_ID }), opts);
+  } finally {
+    instance.close();
+  }
+}
+
+export async function teamGrantCommand(
+  teamId: string,
+  principalId: string,
+  opts: CommonOpts & { permission: string },
+): Promise<void> {
+  if (!["read", "publish", "manage"].includes(opts.permission)) {
+    throw new Error("permission 必须为 read、publish 或 manage");
+  }
+  const { instance, federation } = federationFor(opts);
+  try {
+    printRecord(
+      federation.grantTeam(teamId, principalId, opts.permission as "read" | "publish" | "manage", {
+        authorizedBy: opts.actor ?? PRINCIPAL_ID,
+      }),
+      opts,
+    );
+  } finally {
+    instance.close();
+  }
+}
+
+export async function shareForkCommand(
+  opts: CommonOpts & { versions: string[]; scope: string },
+): Promise<void> {
+  const organismId = opts.organism ?? ORGANISM_ID;
+  validateForkScope(opts.scope, organismId);
+  const { instance, federation } = federationFor(opts);
+  try {
+    printRecord(
+      federation.fork({
+        versionIds: opts.versions,
+        scope: opts.scope,
+        createdBy: opts.actor ?? PRINCIPAL_ID,
+      }),
+      opts,
+    );
+  } finally {
+    instance.close();
+  }
+}
+
+export async function publishCommand(
+  opts: CommonOpts & {
+    team: string;
+    versions: string[];
+    scope: string;
+    evidence?: string[];
+  },
+): Promise<void> {
+  validatePublicationScope(opts.scope);
+  const { instance, federation } = federationFor(opts);
+  try {
+    printRecord(
+      federation.publish({
+        teamId: opts.team,
+        versionIds: opts.versions,
+        scope: opts.scope,
+        evidenceRefs: opts.evidence ?? [],
+        createdBy: opts.actor ?? PRINCIPAL_ID,
+      }),
+      opts,
+    );
+  } finally {
+    instance.close();
+  }
+}
+
+export async function shareExportCommand(
+  publicationId: string,
+  opts: CommonOpts & { out: string },
+): Promise<void> {
+  const { instance, federation } = federationFor(opts);
+  try {
+    const envelope = federation.exportPublication(publicationId, opts.actor ?? PRINCIPAL_ID);
+    writeFileSync(resolve(opts.out), `${JSON.stringify(envelope, null, 2)}\n`, "utf8");
+    if (opts.json) printRecord(envelope, opts);
+    else console.log(`已导出 ${publicationId} → ${resolve(opts.out)}（${envelope.digest}）`);
+  } finally {
+    instance.close();
+  }
+}
+
+export async function shareImportCommand(file: string, opts: CommonOpts): Promise<void> {
+  const envelope = JSON.parse(readFileSync(resolve(file), "utf8"));
+  const { instance, federation } = federationFor(opts);
+  try {
+    printRecord(federation.importBundle(envelope, { createdBy: opts.actor ?? PRINCIPAL_ID }), opts);
+  } finally {
+    instance.close();
+  }
+}
+
+export async function inheritCommand(
+  importId: string,
+  opts: CommonOpts & { validationSet: string; versions?: string[]; hypothesis?: string },
+): Promise<void> {
+  const { instance, federation } = federationFor(opts);
+  try {
+    printRecord(
+      federation.inherit(importId, {
+        validationSetId: opts.validationSet,
+        versionIds: opts.versions,
+        createdBy: opts.actor ?? PRINCIPAL_ID,
+        hypothesis: opts.hypothesis,
+      }),
+      opts,
+    );
+  } finally {
+    instance.close();
+  }
+}
+
+export async function shareRejectCommand(
+  importId: string,
+  opts: CommonOpts & { note?: string },
+): Promise<void> {
+  const { instance, federation } = federationFor(opts);
+  try {
+    printRecord(
+      federation.rejectImport(importId, {
+        createdBy: opts.actor ?? PRINCIPAL_ID,
+        note: opts.note,
+      }),
+      opts,
+    );
+  } finally {
+    instance.close();
+  }
+}
+
+export async function organismsCommand(opts: CommonOpts): Promise<void> {
+  const { instance } = federationFor(opts);
+  try {
+    printRecord(instance.storage.listOrganisms(opts.actor ?? PRINCIPAL_ID), opts);
+  } finally {
+    instance.close();
+  }
 }
 
 export async function initCommand(opts: CommonOpts): Promise<void> {
@@ -129,7 +302,8 @@ export async function runsCommand(id: string | undefined, opts: CommonOpts): Pro
     }
 
     const run = inst.storage.getRun(id);
-    if (!run) throw new Error(`run ${id} 不存在`);
+    if (!run || run.organismId !== (opts.organism ?? ORGANISM_ID))
+      throw new Error(`run ${id} 不存在或属于其他个体`);
     const processes = inst.storage.listProcesses(run.id);
     const attempts = processes.flatMap((p) => inst.storage.listAttempts(p.id));
     const events = inst.storage.listEvents({ runId: run.id }, 100);
@@ -291,11 +465,11 @@ export async function judgeUpgradeCommand(opts: JudgeUpgradeOpts): Promise<void>
       evaluatorContent: HYBRID_EVALUATOR_CONTENT,
       hypothesis:
         "裁判升级为 hybrid-acceptance-v1（stats 形态判定与 v1 等价，新增混合输出 schema 校验）",
-      proposedBy: opts.as ?? PRINCIPAL_ID,
+      proposedBy: opts.as ?? opts.actor ?? PRINCIPAL_ID,
     });
     const { evaluation, status } = await inst.evolution.evaluateJudgeCandidate(candidate.id, {
       regression,
-      requestedBy: opts.as ?? PRINCIPAL_ID,
+      requestedBy: opts.as ?? opts.actor ?? PRINCIPAL_ID,
     });
     if (opts.json) {
       console.log(JSON.stringify({ candidate, evaluation, status, created }, null, 2));
@@ -311,7 +485,9 @@ export async function judgeUpgradeCommand(opts: JudgeUpgradeOpts): Promise<void>
       );
     }
     if (evaluation.verdict === "eligible") {
-      console.log(`  可晋升：proteus promote ${candidate.id} --as ${opts.as ?? PRINCIPAL_ID}`);
+      console.log(
+        `  可晋升：proteus promote ${candidate.id} --as ${opts.as ?? opts.actor ?? PRINCIPAL_ID}`,
+      );
     } else if (evaluation.verdict === "rejected") {
       console.log("  ✗ 新裁判破坏既有判定：禁止晋升，旧默认行为继续有效");
       process.exitCode = 1;
@@ -366,7 +542,7 @@ export async function datasetListCommand(opts: CommonOpts): Promise<void> {
   });
   try {
     const datasets = inst.storage
-      .listExperienceDatasets(undefined, 20)
+      .listExperienceDatasets(undefined, 20, opts.organism ?? ORGANISM_ID)
       .filter((dataset) => dataset.organismId === (opts.organism ?? ORGANISM_ID));
     if (opts.json) {
       console.log(JSON.stringify(datasets, null, 2));
@@ -642,13 +818,23 @@ export async function consolidateSubmitCommand(
 }
 
 /** 驱动队列：queued → running → completed/failed（串行，operator 显式） */
-export async function consolidateRunCommand(opts: CommonOpts & { limit?: string }): Promise<void> {
+export async function consolidateRunCommand(
+  opts: CommonOpts & { limit?: string; learningCalls?: string },
+): Promise<void> {
   const limit = opts.limit ? Number.parseInt(opts.limit, 10) : 1;
   const inst = openInstance(resolveInstanceRoot(opts.home), {
     organismId: opts.organism,
     actorId: opts.actor,
   });
   try {
+    if (opts.learningCalls !== undefined) {
+      const maxCalls = Number(opts.learningCalls);
+      if (!Number.isSafeInteger(maxCalls) || maxCalls < 0)
+        throw new Error("学习调用额度必须是非负整数");
+      inst.storage.tx(() =>
+        inst.storage.setLearningCallLimit(opts.organism ?? ORGANISM_ID, maxCalls),
+      );
+    }
     const results = await inst.evolution.runPendingConsolidationJobs(
       Number.isNaN(limit) ? 1 : limit,
     );
@@ -663,6 +849,22 @@ export async function consolidateRunCommand(opts: CommonOpts & { limit?: string 
     for (const r of results) {
       console.log(`job ${r.jobId} → ${r.outcome}：${r.detail}`);
     }
+  } finally {
+    inst.close();
+  }
+}
+
+export async function consolidateRecoverCommand(opts: CommonOpts): Promise<void> {
+  const inst = openInstance(resolveInstanceRoot(opts.home), {
+    organismId: opts.organism,
+    actorId: opts.actor,
+  });
+  try {
+    const actions = inst.evolution.recoverConsolidationJobs();
+    if (opts.json) console.log(JSON.stringify({ actions }, null, 2));
+    else
+      for (const action of actions)
+        console.log(`job ${action.jobId} → ${action.state}（未知调用未重发）`);
   } finally {
     inst.close();
   }
@@ -761,7 +963,7 @@ export async function candidatesCommand(id: string | undefined, opts: CommonOpts
       }
       return;
     }
-    const candidates = inst.storage.listCandidates("organism-default", 20);
+    const candidates = inst.storage.listCandidates(opts.organism ?? ORGANISM_ID, 20);
     if (opts.json) {
       console.log(
         JSON.stringify(
@@ -802,14 +1004,31 @@ export async function inspectCommand(id: string, opts: CommonOpts): Promise<void
       withKind("snapshot", inst.kernel.getSnapshot(id)) ??
       withKind("snapshot", inst.storage.findSnapshotByDigest(id)) ??
       withKind("artifact-version", inst.storage.getArtifactVersion(id)) ??
-      withKind("experience", inst.storage.getExperienceByRun(id));
+      withKind("experience", inst.storage.getExperienceByRun(id)) ??
+      withKind("dataset", inst.storage.getExperienceDataset(id)) ??
+      withKind("validation-set", inst.storage.getValidationSet(id)) ??
+      withKind("import", inst.storage.getSharedImport(id));
 
     if (found) {
+      assertObjectVisible(
+        inst,
+        found.kind,
+        found.value as unknown as Record<string, unknown>,
+        opts,
+      );
       console.log(JSON.stringify({ kind: found.kind, id, value: found.value }, null, 2));
       return;
     }
     const events = inst.storage.listEvents({ streamId: id }, 100);
     if (events.length > 0) {
+      if (
+        events.some(
+          (e) =>
+            e.organismId !== (opts.organism ?? ORGANISM_ID) &&
+            !(e.streamId === "seed" && e.organismId === null),
+        )
+      )
+        throw new Error("事件流属于其他个体");
       console.log(JSON.stringify({ kind: "events", streamId: id, events }, null, 2));
       return;
     }
@@ -872,6 +1091,33 @@ export async function reconcileCommand(id: string, opts: CommonOpts): Promise<vo
     }
   } finally {
     inst.close();
+  }
+}
+
+function assertObjectVisible(
+  inst: AppInstance,
+  kind: string,
+  value: Record<string, unknown>,
+  opts: CommonOpts,
+): void {
+  const organismId = opts.organism ?? ORGANISM_ID;
+  const actor = opts.actor ?? PRINCIPAL_ID;
+  if (["run", "candidate", "promotion", "dataset", "validation-set", "import"].includes(kind)) {
+    if (value["organismId"] !== organismId) throw new Error("对象属于其他个体");
+  } else if (kind === "task") {
+    if (!inst.storage.taskBelongsToOrganism(String(value["id"]), organismId))
+      throw new Error("任务属于其他个体");
+  } else if (kind === "evaluation") {
+    if (inst.storage.getCandidate(String(value["candidateId"]))?.organismId !== organismId)
+      throw new Error("评估属于其他个体");
+  } else if (kind === "experience") {
+    if (inst.storage.getRun(String(value["runId"]))?.organismId !== organismId)
+      throw new Error("经验属于其他个体");
+  } else if (kind === "artifact-version") {
+    inst.kernel.assertVersionAccess(String(value["id"]), actor);
+  } else if (kind === "snapshot") {
+    for (const v of inst.kernel.resolveSnapshot(String(value["id"])).versions.values())
+      inst.kernel.assertVersionAccess(v.id, actor);
   }
 }
 
@@ -1070,6 +1316,8 @@ export async function experimentRunCommand(opts: ExperimentRunOpts): Promise<voi
   const { v7: uuidv7 } = await import("uuid");
   const result = await runExperiment({
     home: resolveInstanceRoot(opts.home),
+    organismId: opts.organism,
+    actorId: opts.actor,
     datasetDir: resolve(opts.dataset),
     outDir: resolve(opts.out),
     llm: opts.llm,
@@ -1110,6 +1358,7 @@ export async function experimentReportCommand(
   try {
     const outcome = generateReport({
       dir: resolve(dir),
+      organismId: opts.organism ?? ORGANISM_ID,
       storage: inst.storage,
       blobs: inst.blobs,
       datasetDir: opts.dataset ? resolve(opts.dataset) : null,

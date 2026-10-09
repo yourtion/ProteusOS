@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it } from "vitest";
 import type { AppInstance } from "../../src/app/instance.ts";
 import { ensureCapabilityGenome } from "../../src/evolution/assets.ts";
 import type { CapabilityGenome } from "../../src/evolution/assets.ts";

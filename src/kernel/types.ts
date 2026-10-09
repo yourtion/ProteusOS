@@ -46,10 +46,21 @@ export interface ArtifactVersion {
   schemaVersion: number;
   contentDigest: string;
   contentRef: string;
+  /** Visibility belongs to the immutable version, not its content or active pointer. */
+  scope?: string;
   parents: string[];
   dependencies: string[];
   createdBy: string;
   createdAt: number;
+}
+
+export type AccessAction = "read" | "operate" | "promote" | "publish" | "manage";
+
+export interface ExternalVersionRef {
+  id: string;
+  contentDigest: string;
+  lineageId: string;
+  publicationDigest: string;
 }
 
 /** slot -> ArtifactVersion id 的不可变映射 */
