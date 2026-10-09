@@ -12,14 +12,14 @@ import type { CapabilityModule } from "../../src/runtime/capability.ts";
 import { bootSeededInstance, fixturePath } from "../helpers.ts";
 
 /**
- * M3 切片②：裁判拆分独立晋升（evolution.md §6 的正式兑现）。
+ * 裁判拆分独立晋升（evolution.md §6 的正式兑现）。
  * - 组合能力候选不再升级裁判：基准裁判非 hybrid 时明确拒绝（先走裁判候选）
  * - 裁判候选：构造 → 判定等价评估（候选臂钉新裁判 + 基线臂基准裁判）→
  *   eligible → operator promote；晋升后能力候选基于它组合
  * - 裁判候选被基准变更顶掉 → promote stale（CAS 语义通用）
  */
 
-const M2 = fileURLToPath(new URL("../fixtures/m2", import.meta.url));
+const CFS = fileURLToPath(new URL("../fixtures/changed-file-summary", import.meta.url));
 
 let inst: AppInstance | undefined;
 afterAll(() => {
@@ -41,7 +41,7 @@ const REGRESSION_TASK = {
   },
 };
 
-describe("M3：裁判拆分", () => {
+describe("裁判拆分", () => {
   it("基准裁判非 hybrid 时组合能力候选被明确拒绝（不得同处一个候选）", () => {
     const app = instance();
     const base = app.kernel.getOrganism("organism-default")!.activeGenomeId!; // G0（stats v1）
@@ -52,7 +52,7 @@ describe("M3：裁判拆分", () => {
       files: [
         {
           path: "index.mjs",
-          content: readFileSync(join(M2, "capability", "changed-file-summary.mjs"), "utf8"),
+          content: readFileSync(join(CFS, "implementation.mjs"), "utf8"),
         },
       ],
     };
@@ -140,7 +140,7 @@ describe("M3：裁判拆分", () => {
       files: [
         {
           path: "index.mjs",
-          content: readFileSync(join(M2, "capability", "changed-file-summary.mjs"), "utf8"),
+          content: readFileSync(join(CFS, "implementation.mjs"), "utf8"),
         },
       ],
     };

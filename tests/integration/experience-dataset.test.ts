@@ -3,7 +3,7 @@ import type { AppInstance } from "../../src/app/instance.ts";
 import { bootSeededInstance, fixturePath } from "../helpers.ts";
 
 /**
- * M3 切片③：冻结经验集（ExperienceDataset）。
+ * 冻结经验集（ExperienceDataset）。
  * - 显式成员清单（cutoff 或 runIds）+ 内容摘要；固定成员而非查询语句
  * - 不可变、digest 幂等；后续新经验不进入既有冻结（窗口固定）
  * - 学习投影：experience × run/task × decision_calls（选择值/弃权）× 预算
@@ -31,7 +31,7 @@ const BASE = {
   },
 };
 
-describe("M3：冻结经验集", () => {
+describe("冻结经验集", () => {
   it("cutoff 冻结：显式成员 + 摘要；新经验不进入既有窗口（幂等）", async () => {
     const app = instance();
     const first = await app.runtime.submitTask(BASE);

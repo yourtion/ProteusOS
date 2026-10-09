@@ -10,7 +10,7 @@ import { canonicalJson } from "../../src/storage/blobs.ts";
 import { bootSeededInstance, upgradeJudgeToActive, fixturePath } from "../helpers.ts";
 
 /**
- * M2 切片②：评估 Run 入口与能力执行。
+ * 评估 Run 入口与能力执行。
  * - submitTask options：purpose=evaluation 显式绑定快照，不改变 activeGenome
  * - capability/<name> 执行器：快照槽位产物经独立子进程加载执行
  * - 回归语义：G1 下 stats 任务仍路由 local-process
@@ -27,7 +27,7 @@ function instance(): AppInstance {
   return inst;
 }
 
-const M2 = fileURLToPath(new URL("../fixtures/m2", import.meta.url));
+const CFS = fileURLToPath(new URL("../fixtures/changed-file-summary", import.meta.url));
 
 const CAPABILITY_MODULE: CapabilityModule = {
   kind: "capability-module-v1",
@@ -36,7 +36,7 @@ const CAPABILITY_MODULE: CapabilityModule = {
   files: [
     {
       path: "index.mjs",
-      content: readFileSync(join(M2, "capability", "changed-file-summary.mjs"), "utf8"),
+      content: readFileSync(join(CFS, "implementation.mjs"), "utf8"),
     },
   ],
 };
@@ -61,11 +61,11 @@ function candidateGenome(): CapabilityGenome {
 const SUMMARY_TASK = {
   requestedBy: "principal-local",
   goal: "对变更清单生成可验证的文件分类摘要",
-  inputs: [join(M2, "inputs", "changed-files.json")],
+  inputs: [join(CFS, "inputs", "changed-files.json")],
   budget: { maxAttempts: 3, maxWallClockSeconds: 60 },
   requires: ["changed-file-summary"],
   acceptance: {
-    outputSchema: join(M2, "schemas", "changed-file-summary.schema.json"),
+    outputSchema: join(CFS, "schema.json"),
     verifier: "stats-acceptance",
   },
 };
@@ -81,7 +81,7 @@ const STATS_TASK = {
   },
 };
 
-describe("M2 切片②：评估 Run 入口与能力执行", () => {
+describe("评估 Run 入口与能力执行", () => {
   it("评估 Run 绑定候选快照执行新能力，不改变 activeGenome", async () => {
     const app = instance();
     const genome = candidateGenome();
@@ -218,7 +218,7 @@ describe("M2 切片②：评估 Run 入口与能力执行", () => {
       {
         ...SUMMARY_TASK,
         requires: ["broken-capability"],
-        inputs: [join(M2, "inputs", "changed-files.json")],
+        inputs: [join(CFS, "inputs", "changed-files.json")],
       },
       { purpose: "evaluation", snapshotId: bad.snapshot.id },
     );

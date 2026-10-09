@@ -14,13 +14,13 @@ import type { SandboxBackend, SandboxExecution, SandboxResult } from "../../src/
 import { bootSeededInstance, upgradeJudgeToActive } from "../helpers.ts";
 
 /**
- * M3 切片①：能力执行经 SandboxBackend 的集成行为。
+ * 能力执行经 SandboxBackend 的集成行为。
  * - 注入沙箱替身（宿主执行但走完整 port 路径）：能力 Run 成功、产物经工作区回收
  * - 沙箱后端不可用：capability 执行明确拒绝，不静默降级
  * - 缺省（无沙箱）：进程级行为保持（M2 回归）
  */
 
-const M2 = fileURLToPath(new URL("../fixtures/m2", import.meta.url));
+const CFS = fileURLToPath(new URL("../fixtures/changed-file-summary", import.meta.url));
 
 /** 沙箱替身：记录调用并宿主执行（验证 port 链路与文件回收，不验证隔离本身） */
 function recordingSandbox(override?: Partial<SandboxBackend>): SandboxBackend & {
@@ -65,11 +65,11 @@ function instance(): AppInstance {
 const SUMMARY_TASK = {
   requestedBy: "principal-local",
   goal: "对变更清单生成可验证的文件分类摘要",
-  inputs: [join(M2, "inputs", "changed-files.json")],
+  inputs: [join(CFS, "inputs", "changed-files.json")],
   budget: { maxAttempts: 3, maxWallClockSeconds: 60 },
   requires: ["changed-file-summary"],
   acceptance: {
-    outputSchema: join(M2, "schemas", "changed-file-summary.schema.json"),
+    outputSchema: join(CFS, "schema.json"),
     verifier: "stats-acceptance",
   },
 };
@@ -82,7 +82,7 @@ function moduleContent(): CapabilityModule {
     files: [
       {
         path: "index.mjs",
-        content: readFileSync(join(M2, "capability", "changed-file-summary.mjs"), "utf8"),
+        content: readFileSync(join(CFS, "implementation.mjs"), "utf8"),
       },
     ],
   };
@@ -128,7 +128,7 @@ const DEFAULT_BUDGET = {
   },
 };
 
-describe("M3 切片①：能力执行的沙箱链路", () => {
+describe("能力执行的沙箱链路", () => {
   it("沙箱替身：capability Run 经 port 执行成功，产物与调用记录可审计", async () => {
     const sandbox = recordingSandbox();
     const summary = await runCapabilityWith(sandbox);

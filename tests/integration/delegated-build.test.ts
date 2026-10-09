@@ -14,7 +14,7 @@ import { bootSeededInstance, fixturePath, installCustomGenome } from "../helpers
 const FAKE_AGENT = fileURLToPath(new URL("../fixtures/acp/fake-agent.mjs", import.meta.url));
 
 /**
- * M1 验收故事（CI 版，agent 侧为 fake；E2E 版见 tests/e2e/）：
+ * 外部委托构建的验收故事（CI 版，agent 侧为 fake；E2E 版见 tests/e2e/）：
  * 委托实现固定测试功能 → agent 在工作区写代码 → 独立 test-runner 裁判验收。
  * 测试失败不能标为任务成功（roadmap M1 完成判据）。
  */
@@ -29,7 +29,7 @@ function instance(): AppInstance {
   return inst;
 }
 
-const M1_GRAPH = {
+const BUILD_GRAPH = {
   schemaVersion: 2,
   kind: "dag-v1",
   nodes: [
@@ -47,7 +47,7 @@ const M1_GRAPH = {
 const TEST_RUNNER = {
   schemaVersion: 1,
   kind: "test-runner-v1",
-  command: ["node", "--test", "inputs/wordcount-tests/wordcount.test.mjs"],
+  command: ["node", "--test", "inputs/tests/wordcount.test.mjs"],
 };
 
 function runtimeWithExecutors(executors: Array<[string, ExecutorProvider]>): Runtime {
@@ -70,15 +70,15 @@ function fakeAcpExecutor(): ExecutorProvider {
   return new AcpExecutor({ name: "fake-acp", agentEntry: FAKE_AGENT });
 }
 
-describe("M1：外部委托闭环（fake agent 版）", () => {
+describe("外部委托闭环（fake agent 版）", () => {
   it("委托 → 产出可定位代码与 trace → 独立测试验收通过", async () => {
-    installCustomGenome(instance(), { graph: M1_GRAPH, evaluator: TEST_RUNNER });
+    installCustomGenome(instance(), { graph: BUILD_GRAPH, evaluator: TEST_RUNNER });
     const runtime = runtimeWithExecutors([["fake-acp", fakeAcpExecutor()]]);
 
     const summary = await runtime.submitTask({
       requestedBy: "principal-local",
       goal: "在工作区实现 src/wordcount.mjs：导出 countWords(text)，按空白切分返回词数（空串为 0）。",
-      inputs: [fixturePath("..", "m1", "wordcount-tests")],
+      inputs: [fixturePath("..", "wordcount", "tests")],
       budget: { maxAttempts: 2, maxWallClockSeconds: 60 },
       acceptance: {
         outputSchema: fixturePath("schemas", "stats-summary.schema.json"),
@@ -113,7 +113,7 @@ describe("M1：外部委托闭环（fake agent 版）", () => {
     const summary = await runtime.submitTask({
       requestedBy: "principal-local",
       goal: "BUGGY 变体：实现一个恒返回 0 的 countWords。",
-      inputs: [fixturePath("..", "m1", "wordcount-tests")],
+      inputs: [fixturePath("..", "wordcount", "tests")],
       budget: { maxAttempts: 1, maxWallClockSeconds: 60 },
       acceptance: {
         outputSchema: fixturePath("schemas", "stats-summary.schema.json"),
@@ -135,7 +135,7 @@ describe("M1：外部委托闭环（fake agent 版）", () => {
   it("执行器注册表：图中引用未装配执行器得到明确错误", async () => {
     installCustomGenome(instance(), {
       graph: {
-        ...M1_GRAPH,
+        ...BUILD_GRAPH,
         nodes: [{ id: "dev", type: "execute", executor: "claude-code-acp", dependsOn: [] }],
       },
     });
@@ -144,7 +144,7 @@ describe("M1：外部委托闭环（fake agent 版）", () => {
     const summary = await runtime.submitTask({
       requestedBy: "principal-local",
       goal: "引用未装配执行器",
-      inputs: [fixturePath("..", "m1", "wordcount-tests")],
+      inputs: [fixturePath("..", "wordcount", "tests")],
       budget: { maxAttempts: 1, maxWallClockSeconds: 30 },
       acceptance: {
         outputSchema: fixturePath("schemas", "stats-summary.schema.json"),
@@ -158,12 +158,12 @@ describe("M1：外部委托闭环（fake agent 版）", () => {
 
   it("agent 执行中取消：attempt 结果如实记录，Run 取消", async () => {
     // 上一用例把激活图换掉了，装回 fake-acp 图
-    installCustomGenome(instance(), { graph: M1_GRAPH, evaluator: TEST_RUNNER });
+    installCustomGenome(instance(), { graph: BUILD_GRAPH, evaluator: TEST_RUNNER });
     const runtime = runtimeWithExecutors([["fake-acp", fakeAcpExecutor()]]);
     const submitted = runtime.submitTask({
       requestedBy: "principal-local",
       goal: "SLOW-MODE 长任务（会被取消）",
-      inputs: [fixturePath("..", "m1", "wordcount-tests")],
+      inputs: [fixturePath("..", "wordcount", "tests")],
       budget: { maxAttempts: 1, maxWallClockSeconds: 60 },
       acceptance: {
         outputSchema: fixturePath("schemas", "stats-summary.schema.json"),

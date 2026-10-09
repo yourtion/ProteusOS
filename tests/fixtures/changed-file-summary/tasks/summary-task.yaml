@@ -8,6 +8,6 @@ constraints:
   missingCapabilityWaitSeconds: 1
 requires: ["changed-file-summary"]
 acceptance:
-  outputSchema: ../schemas/changed-file-summary.schema.json
-  expectedOutput: ../evals/summary-output.json
+  outputSchema: ../schema.json
+  expectedOutput: ../expected/summary-output.json
   verifier: stats-acceptance

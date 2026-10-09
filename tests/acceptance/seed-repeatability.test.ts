@@ -5,11 +5,11 @@ import { openInstance, type AppInstance } from "../../src/app/instance.ts";
 import { installCustomGenome, fixturePath, REPO_ROOT, tempInstanceRoot } from "../helpers.ts";
 
 /**
- * M0 验收固化（roadmap M0 完成判据）：
+ * 验收固化（roadmap M0 完成判据）：
  * 1. 不调用模型完成固定任务          —— 本文件 + 全部套件无任何模型调用
- * 2. 两个并发 Run 可追溯            —— 切片③ 验收（tests/acceptance/slice1.test.ts）
- * 3. 重启恢复                        —— 切片④（tests/integration/recovery.test.ts）
- * 4. 未知副作用不重复派发            —— 切片④（unknown → 对账，同上）
+ * 2. 两个并发 Run 可追溯            —— tests/acceptance/cli-basic-loop.test.ts
+ * 3. 重启恢复                        —— tests/integration/recovery.test.ts
+ * 4. 未知副作用不重复派发            —— unknown → 对账（同上）
  * 5. 人工安装 seed 快照可重复        —— 本文件
  * 另含 Snapshot 固定：默认指针变化不改变既有 Run 的绑定。
  */
@@ -44,7 +44,7 @@ afterAll(() => {
   // 临时实例由系统清理
 });
 
-describe("M0-5：人工安装 seed 快照可重复", () => {
+describe("人工安装 seed 快照可重复", () => {
   it("重复 init：同实例幂等复用同一快照", () => {
     const first = proteusJson<{
       snapshotId: string;
@@ -99,7 +99,7 @@ describe("M0-5：人工安装 seed 快照可重复", () => {
   });
 });
 
-describe("M0 附加：Snapshot 固定不变量", () => {
+describe("Snapshot 固定不变量", () => {
   it("默认指针切换后，既有 Run 保持原快照，新 Run 使用新快照", async () => {
     const home = tempInstanceRoot();
     const inst: AppInstance = openInstance(home);
@@ -155,7 +155,7 @@ describe("M0 附加：Snapshot 固定不变量", () => {
   });
 });
 
-describe("M0-1：不调用模型完成固定任务（事件完整性）", () => {
+describe("不调用模型完成固定任务（事件完整性）", () => {
   it("全过程仅本地进程与规则决策，事件流每流 seq 严格递增", () => {
     const home = tempInstanceRoot();
     proteusJson(home, ["init", "--json"]);

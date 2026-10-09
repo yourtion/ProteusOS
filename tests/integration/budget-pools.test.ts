@@ -9,7 +9,7 @@ import type { ExecutorProvider } from "../../src/runtime/types.ts";
 import { bootSeededInstance, fixturePath } from "../helpers.ts";
 
 /**
- * M3 切片②：评估独立预算池（ADR 0006 挂账兑现）。
+ * 评估独立预算池（ADR 0006 挂账兑现）。
  * 评估 Run 与普通 Run 各自计并发/Attempt/墙钟额度，互不挤占；
  * 池内超限仍按用途明确拒绝。
  */
@@ -73,7 +73,7 @@ function runtimeWithPools(budget: {
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-describe("M3：评估独立预算池", () => {
+describe("评估独立预算池", () => {
   it("评估池占满不拒绝普通提交；普通池占满不拒绝评估提交", async () => {
     const runtime = runtimeWithPools({
       normal: { maxConcurrentRuns: 1, maxInFlightAttempts: 8, maxInFlightWallClockSeconds: 86_400 },

@@ -9,24 +9,24 @@ import type { ExecutorProvider } from "../../src/runtime/types.ts";
 import { bootSeededInstance, upgradeJudgeToActive, fixturePath } from "../helpers.ts";
 
 /**
- * M2 切片③：委托构建与候选构造（自举故事步骤 2-3）。
+ * 委托构建与候选构造（自举故事步骤 2-3）。
  * 委托 fake builder（真实 ACP 协议）实现能力 → test-runner 独立验收 →
  * 采集工作区产出注册为不可变 ArtifactVersion → 组合候选快照 → Candidate 记录。
  * 测试未通过的产出不能构造候选。
  */
 
 const FAKE_AGENT = fileURLToPath(new URL("../fixtures/acp/fake-agent.mjs", import.meta.url));
-const M2 = fileURLToPath(new URL("../fixtures/m2", import.meta.url));
-const SPEC = readFileSync(join(M2, "specs", "changed-file-summary-spec.md"), "utf8");
+const CFS = fileURLToPath(new URL("../fixtures/changed-file-summary", import.meta.url));
+const SPEC = readFileSync(join(CFS, "spec", "changed-file-summary-spec.md"), "utf8");
 const EVAL_PLAN = {
   newCapability: {
     goal: "对变更清单生成可验证的文件分类摘要",
-    inputs: [join(M2, "inputs", "changed-files.json")],
+    inputs: [join(CFS, "inputs", "changed-files.json")],
     budget: { maxAttempts: 3, maxWallClockSeconds: 60 },
     requires: ["changed-file-summary"],
     acceptance: {
-      outputSchema: join(M2, "schemas", "changed-file-summary.schema.json"),
-      expectedOutput: join(M2, "evals", "summary-output.json"),
+      outputSchema: join(CFS, "schema.json"),
+      expectedOutput: join(CFS, "expected", "summary-output.json"),
       verifier: "stats-acceptance",
     },
   },
@@ -47,7 +47,7 @@ afterAll(() => {
   inst?.close();
 });
 
-// M3 裁判拆分前置：组合能力候选前 active 裁判须为 hybrid（测试捷径）
+// 裁判拆分前置：组合能力候选前 active 裁判须为 hybrid（测试捷径）
 beforeAll(() => {
   upgradeJudgeToActive(instance());
 });
@@ -66,16 +66,16 @@ function build(goal: string) {
   return instance().evolution.build({
     capability: "changed-file-summary",
     goal,
-    inputs: [join(M2, "capability-tests")],
+    inputs: [join(CFS, "tests")],
     executorName: "fake-acp",
-    testCommand: ["node", "--test", "inputs/capability-tests/changed-file-summary.test.mjs"],
+    testCommand: ["node", "--test", "inputs/tests/changed-file-summary.test.mjs"],
     budget: { maxAttempts: 2, maxWallClockSeconds: 60 },
     outputSchema: fixturePath("schemas", "stats-summary.schema.json"),
     requestedBy: "principal-local",
   });
 }
 
-describe("M2 切片③：委托构建与候选构造", () => {
+describe("委托构建与候选构造", () => {
   it("委托构建 → 独立测试验收 → 采集构造候选（proposed）", async () => {
     const app = instance();
     const summary = await build(SPEC);
@@ -177,7 +177,7 @@ describe("M2 切片③：委托构建与候选构造", () => {
     const summary = await app.evolution.build({
       capability: "changed-file-summary",
       goal: "实现 src/wordcount.mjs：导出 countWords(text)，按空白切分返回词数。",
-      inputs: [join(M2, "capability-tests")],
+      inputs: [join(CFS, "tests")],
       executorName: "fake-acp",
       testCommand: ["node", "-e", "process.exit(0)"],
       budget: { maxAttempts: 2, maxWallClockSeconds: 60 },
@@ -265,9 +265,9 @@ describe("M2 切片③：委托构建与候选构造", () => {
       const builder = await app.evolution.build({
         capability: "changed-file-summary",
         goal: SPEC,
-        inputs: [join(M2, "capability-tests")],
+        inputs: [join(CFS, "tests")],
         executorName: "fake-acp",
-        testCommand: ["node", "--test", "inputs/capability-tests/changed-file-summary.test.mjs"],
+        testCommand: ["node", "--test", "inputs/tests/changed-file-summary.test.mjs"],
         budget: { maxAttempts: 2, maxWallClockSeconds: 60 },
         outputSchema: fixturePath("schemas", "stats-summary.schema.json"),
         requestedBy: "principal-local",

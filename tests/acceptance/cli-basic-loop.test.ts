@@ -29,10 +29,10 @@ afterAll(() => {
 });
 
 /**
- * M0 切片① 验收：init → submit → runs/inspect 的完整闭环，
+ * init → submit → runs/inspect 的完整闭环，
  * 每次 CLI 调用都是独立进程，同时验证持久化与“重启后可读”。
  */
-describe("切片① 验收：CLI 闭环", () => {
+describe("CLI 闭环", () => {
   it("init：创建身份并安装 G0", () => {
     const result = proteusJson<{
       snapshotId: string;
@@ -79,7 +79,7 @@ describe("切片① 验收：CLI 闭环", () => {
     expect(detail.run.state).toBe("succeeded");
     expect(detail.attempts[0]!.state).toBe("succeeded");
     expect(detail.events.map((e) => e.type)).toContain("experience.recorded");
-    // 切片②：DAG 的决策与节点完成事件进入账本
+    // DAG 的决策与节点完成事件进入账本
     expect(detail.events.map((e) => e.type)).toContain("decision.recorded");
     expect(detail.events.filter((e) => e.type === "node.completed")).toHaveLength(3);
     expect(detail.experience!.outcome.result).toBe("succeeded");
@@ -136,7 +136,7 @@ describe("切片① 验收：CLI 闭环", () => {
   });
 });
 
-describe("切片③ 验收：跨进程并发提交", () => {
+describe("跨进程并发提交", () => {
   it("两个 CLI 进程同时提交，各自执行成功且可追溯", async () => {
     const { execFile } = await import("node:child_process");
     const { promisify } = await import("node:util");

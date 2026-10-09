@@ -6,7 +6,7 @@ import { afterAll, describe, expect, it } from "vitest";
 import { REPO_ROOT, tempInstanceRoot } from "../helpers.ts";
 
 /**
- * M2 自举故事全链路（CLI 驱动、fake builder；M3 裁判拆分后为两阶段晋升）。
+ * 自举故事全链路（CLI 驱动、fake builder；裁判拆分后为两阶段晋升）。
  * ① init G0；提交 Task T → R1 发现能力缺口，带截止点等待
  * ② 裁判拆分（M3 前置）：judge-upgrade 构造只升裁判的候选 → 等价评估
  *    eligible → operator promote → active=G_eval（裁判与能力变化不同快照）
@@ -20,7 +20,8 @@ import { REPO_ROOT, tempInstanceRoot } from "../helpers.ts";
 
 const cliPath = fileURLToPath(new URL("../../src/app/cli.ts", import.meta.url));
 const FAKE_AGENT = fileURLToPath(new URL("../fixtures/acp/fake-agent.mjs", import.meta.url));
-const M2 = fileURLToPath(new URL("../fixtures/m2", import.meta.url));
+const CFS = fileURLToPath(new URL("../fixtures/changed-file-summary", import.meta.url));
+const STATS = fileURLToPath(new URL("../fixtures/stats", import.meta.url));
 
 const home = tempInstanceRoot();
 
@@ -47,7 +48,7 @@ afterAll(() => {
   // 临时实例由系统清理
 });
 
-describe("M2：第一个自举故事（两阶段晋升，端到端）", () => {
+describe("第一个自举故事（两阶段晋升，端到端）", () => {
   let g0 = "";
   let gEval = "";
   let r1 = "";
@@ -61,7 +62,7 @@ describe("M2：第一个自举故事（两阶段晋升，端到端）", () => {
 
     const summary = proteusJson<{ runId: string; state: string; snapshotId: string }>([
       "submit",
-      join(M2, "tasks", "summary-task.yaml"),
+      join(CFS, "tasks", "summary-task.yaml"),
       "--json",
     ]);
     expect(summary.state).toBe("waiting");
@@ -74,12 +75,7 @@ describe("M2：第一个自举故事（两阶段晋升，端到端）", () => {
       candidate: { id: string; baseSnapshotId: string; proposedSnapshotId: string };
       evaluation: { verdict: string; runs: Array<{ role: string; state: string }> };
       status: string;
-    }>([
-      "judge-upgrade",
-      "--regression-task",
-      join(M2, "tasks", "stats-regression.yaml"),
-      "--json",
-    ]);
+    }>(["judge-upgrade", "--regression-task", join(STATS, "tasks", "regression.yaml"), "--json"]);
     expect(upgrade.evaluation.verdict).toBe("eligible");
     // 候选臂（新裁判）与基线臂（基准裁判）在既有任务上判定一致
     expect(upgrade.evaluation.runs.every((r) => r.state === "succeeded")).toBe(true);
@@ -122,15 +118,15 @@ describe("M2：第一个自举故事（两阶段晋升，端到端）", () => {
       "--capability",
       "changed-file-summary",
       "--spec",
-      join(M2, "specs", "changed-file-summary-spec.md"),
+      join(CFS, "spec", "changed-file-summary-spec.md"),
       "--tests",
-      join(M2, "capability-tests"),
+      join(CFS, "tests"),
       "--executor",
       "fake-acp",
       "--new-capability-task",
-      join(M2, "tasks", "summary-task.yaml"),
+      join(CFS, "tasks", "summary-task.yaml"),
       "--regression-task",
-      join(M2, "tasks", "stats-regression.yaml"),
+      join(STATS, "tasks", "regression.yaml"),
       "--json",
     ]);
     expect(build.created).toBe(true);
@@ -145,9 +141,9 @@ describe("M2：第一个自举故事（两阶段晋升，端到端）", () => {
       "evaluate",
       candidateId,
       "--new-capability-task",
-      join(M2, "tasks", "summary-task.yaml"),
+      join(CFS, "tasks", "summary-task.yaml"),
       "--regression-task",
-      join(M2, "tasks", "stats-regression.yaml"),
+      join(STATS, "tasks", "regression.yaml"),
       "--json",
     ]);
     expect(evaluation.evaluation.verdict).toBe("eligible");
@@ -200,7 +196,7 @@ describe("M2：第一个自举故事（两阶段晋升，端到端）", () => {
       readFileSync(join(home, "workspaces", result.successor.runId, "work", "output.json"), "utf8"),
     ) as { summary: { files: Array<{ path: string; category: string }> } };
     const expected = JSON.parse(
-      readFileSync(join(M2, "evals", "summary-expected.json"), "utf8"),
+      readFileSync(join(CFS, "expected", "summary-expected.json"), "utf8"),
     ) as Record<string, string>;
     expect(Object.fromEntries(output.summary.files.map((f) => [f.path, f.category]))).toEqual(
       expected,
@@ -219,7 +215,7 @@ describe("M2：第一个自举故事（两阶段晋升，端到端）", () => {
 
     const r3 = proteusJson<{ runId: string; state: string; snapshotId: string }>([
       "submit",
-      join(M2, "tasks", "summary-task.yaml"),
+      join(CFS, "tasks", "summary-task.yaml"),
       "--json",
     ]);
     expect(r3.state).toBe("waiting");

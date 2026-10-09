@@ -107,9 +107,8 @@ const app = agent({ name: "fake-acp-agent" })
           fileURLToPath(import.meta.url),
           "..",
           "..",
-          "m2",
-          "capability",
-          "changed-file-summary.mjs",
+          "changed-file-summary",
+          "implementation.mjs",
         ),
         "utf8",
       );

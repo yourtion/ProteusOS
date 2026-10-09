@@ -12,10 +12,8 @@ import { evaluateHybridOutput, evaluateStatsOutput } from "../../src/runtime/acc
  * 避免事后移动标准）。
  */
 
-const M2 = fileURLToPath(new URL("../fixtures/m2", import.meta.url));
-const SUMMARY_SCHEMA = JSON.parse(
-  readFileSync(join(M2, "schemas", "changed-file-summary.schema.json"), "utf8"),
-) as unknown;
+const CFS = fileURLToPath(new URL("../fixtures/changed-file-summary", import.meta.url));
+const SUMMARY_SCHEMA = JSON.parse(readFileSync(join(CFS, "schema.json"), "utf8")) as unknown;
 const STATS_SCHEMA = {
   type: "object",
   required: ["files", "totals"],

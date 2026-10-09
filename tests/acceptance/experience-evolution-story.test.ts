@@ -6,7 +6,7 @@ import { afterAll, describe, expect, it } from "vitest";
 import { REPO_ROOT, tempInstanceRoot } from "../helpers.ts";
 
 /**
- * M3 验收固化：经验驱动演化全链路（roadmap M3 完成判据：
+ * 验收固化：经验驱动演化全链路（roadmap M3 完成判据：
  * 从历史失败提出改进，在独立任务上比较基线，保留可复验结果，
  * 证据不足可以不晋升）。
  * ①② 两阶段装配（judge-upgrade → promote；build → promote）——G_cap 就绪
@@ -21,8 +21,9 @@ import { REPO_ROOT, tempInstanceRoot } from "../helpers.ts";
 
 const cliPath = fileURLToPath(new URL("../../src/app/cli.ts", import.meta.url));
 const FAKE_AGENT = fileURLToPath(new URL("../fixtures/acp/fake-agent.mjs", import.meta.url));
-const M2 = fileURLToPath(new URL("../fixtures/m2", import.meta.url));
-const M3 = fileURLToPath(new URL("../fixtures/m3", import.meta.url));
+const CFS = fileURLToPath(new URL("../fixtures/changed-file-summary", import.meta.url));
+const STATS = fileURLToPath(new URL("../fixtures/stats", import.meta.url));
+const PE = fileURLToPath(new URL("../fixtures/policy-evolution", import.meta.url));
 
 const home = tempInstanceRoot();
 
@@ -50,9 +51,9 @@ afterAll(() => {
   // 临时实例由系统清理
 });
 
-const FAILING_TASK = join(M3, "tasks", "unlabeled-summary.yaml");
+const FAILING_TASK = join(PE, "tasks", "unlabeled-summary.yaml");
 
-describe("M3：经验驱动演化（端到端）", () => {
+describe("经验驱动演化（端到端）", () => {
   let policyCandidateId = "";
 
   it("①② 两阶段装配：judge-upgrade → promote；build → promote", () => {
@@ -61,7 +62,7 @@ describe("M3：经验驱动演化（端到端）", () => {
     const judge = proteusJson<{ candidate: { id: string } }>([
       "judge-upgrade",
       "--regression-task",
-      join(M2, "tasks", "stats-regression.yaml"),
+      join(STATS, "tasks", "regression.yaml"),
       "--json",
     ]);
     const judgePromo = proteusJson<{ result: string }>([
@@ -78,15 +79,15 @@ describe("M3：经验驱动演化（端到端）", () => {
       "--capability",
       "changed-file-summary",
       "--spec",
-      join(M2, "specs", "changed-file-summary-spec.md"),
+      join(CFS, "spec", "changed-file-summary-spec.md"),
       "--tests",
-      join(M2, "capability-tests"),
+      join(CFS, "tests"),
       "--executor",
       "fake-acp",
       "--new-capability-task",
-      join(M2, "tasks", "summary-task.yaml"),
+      join(CFS, "tasks", "summary-task.yaml"),
       "--regression-task",
-      join(M2, "tasks", "stats-regression.yaml"),
+      join(STATS, "tasks", "regression.yaml"),
       "--json",
     ]);
     // 能力候选同样须独立评估（新能力验收 + 回归 + 基线对照）后晋升
@@ -94,9 +95,9 @@ describe("M3：经验驱动演化（端到端）", () => {
       "evaluate",
       build.candidate.id,
       "--new-capability-task",
-      join(M2, "tasks", "summary-task.yaml"),
+      join(CFS, "tasks", "summary-task.yaml"),
       "--regression-task",
-      join(M2, "tasks", "stats-regression.yaml"),
+      join(STATS, "tasks", "regression.yaml"),
       "--json",
     ]);
     expect(capEval.evaluation.verdict).toBe("eligible");
@@ -121,13 +122,12 @@ describe("M3：经验驱动演化（端到端）", () => {
 
     // 第二次失败：goal 追加后缀（与 gold.json 第二项一致，供归纳 join）；
     // 写入 home 的临时 task 一律改绝对路径（home 的相对基准不指向仓库 fixture）
-    const STATS = fileURLToPath(new URL("../fixtures/stats", import.meta.url));
     const secondTask = join(home, "second-failing.yaml");
     writeFileSync(
       secondTask,
       readFileSync(FAILING_TASK, "utf8")
         .replace(/^goal: .+$/m, "goal: 请把这次改动的文件按类别整理成清单（第二次）")
-        .replaceAll("../../m2/", `${M2}/`)
+        .replaceAll("../../changed-file-summary/", `${CFS}/`)
         .replaceAll("../../stats/", `${STATS}/`),
       "utf8",
     );
@@ -137,7 +137,7 @@ describe("M3：经验驱动演化（端到端）", () => {
     // 对照成功经验：stats 任务正常
     const ok = proteusJson<{ state: string }>([
       "submit",
-      join(M2, "tasks", "stats-regression.yaml"),
+      join(STATS, "tasks", "regression.yaml"),
       "--json",
     ]);
     expect(ok.state).toBe("succeeded");
@@ -157,7 +157,7 @@ describe("M3：经验驱动演化（端到端）", () => {
       consolidation: {
         proposals: Array<{ feature: string; choose: string; byOrigin: { gold: number } }>;
       };
-    }>(["consolidate", frozen.dataset.id, "--gold", join(M3, "gold.json"), "--json"]);
+    }>(["consolidate", frozen.dataset.id, "--gold", join(PE, "gold.json"), "--json"]);
     expect(proposed.candidate).not.toBeNull();
     policyCandidateId = proposed.candidate!.id;
     // gold join 后必含目标规则（未声明能力的失败 → 特征路由修复）
@@ -183,7 +183,7 @@ describe("M3：经验驱动演化（端到端）", () => {
       "evaluate-policy",
       policyCandidateId,
       "--cases",
-      join(M3, "validation-cases.json"),
+      join(PE, "validation-cases.json"),
       "--repeats",
       "1",
       "--json",

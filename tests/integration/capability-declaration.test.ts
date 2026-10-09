@@ -4,7 +4,7 @@ import { parseCapabilityModule } from "../../src/runtime/capability.ts";
 import { bootSeededInstance, fixturePath, installCustomGenome } from "../helpers.ts";
 
 /**
- * M2 切片①：能力声明与缺口等待（自举故事步骤 1 与 7 的 R3 路径）。
+ * 能力声明与缺口等待（自举故事步骤 1 与 7 的 R3 路径）。
  * Task.requires 声明的能力在快照中无 capability/<name> 槽位时，
  * Run 以 waiting 创建并携带截止点；到期 advance 结案 failed/missing_capability。
  */
@@ -42,7 +42,7 @@ function submitRequires(
   });
 }
 
-describe("M2 切片①：能力声明与缺口等待", () => {
+describe("能力声明与缺口等待", () => {
   it("能力模块名称拒绝路径分隔符与上级目录逃逸", () => {
     for (const name of ["../../escaped", "nested/capability", "nested\\capability", ".", ".."]) {
       expect(

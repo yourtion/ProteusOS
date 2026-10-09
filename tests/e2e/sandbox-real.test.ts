@@ -18,7 +18,7 @@ import { tempInstanceRoot, upgradeJudgeToActive } from "../helpers.ts";
 
 const MODE = process.env.PROTEUS_SANDBOX ?? "";
 
-const M2 = fileURLToPath(new URL("../fixtures/m2", import.meta.url));
+const CFS = fileURLToPath(new URL("../fixtures/changed-file-summary", import.meta.url));
 
 describe("真实 microsandbox 沙箱（PROTEUS_SANDBOX 显式启用）", () => {
   const inst = openInstance(tempInstanceRoot(), {
@@ -50,10 +50,7 @@ describe("真实 microsandbox 沙箱（PROTEUS_SANDBOX 显式启用）", () => {
                 files: [
                   {
                     path: "index.mjs",
-                    content: readFileSync(
-                      join(M2, "capability", "changed-file-summary.mjs"),
-                      "utf8",
-                    ),
+                    content: readFileSync(join(CFS, "implementation.mjs"), "utf8"),
                   },
                 ],
               },
@@ -67,11 +64,11 @@ describe("真实 microsandbox 沙箱（PROTEUS_SANDBOX 显式启用）", () => {
         {
           requestedBy: "principal-local",
           goal: "对变更清单生成可验证的文件分类摘要（真实沙箱）",
-          inputs: [join(M2, "inputs", "changed-files.json")],
+          inputs: [join(CFS, "inputs", "changed-files.json")],
           budget: { maxAttempts: 3, maxWallClockSeconds: 180 },
           requires: ["changed-file-summary"],
           acceptance: {
-            outputSchema: join(M2, "schemas", "changed-file-summary.schema.json"),
+            outputSchema: join(CFS, "schema.json"),
             verifier: "stats-acceptance",
           },
         },

@@ -18,7 +18,7 @@ import {
 } from "../helpers.ts";
 
 /**
- * M2 切片④：独立评估 → operator 晋升 → 接替（自举故事步骤 4-6）。
+ * 独立评估 → operator 晋升 → 接替（自举故事步骤 4-6）。
  * 失败场景（roadmap §4）：
  * - 候选评估失败禁止晋升，旧默认行为继续有效
  * - 候选更换 evaluator 降低门槛 → 评估计划钉住的裁判阻止自我放行
@@ -27,15 +27,15 @@ import {
  */
 
 const FAKE_AGENT = fileURLToPath(new URL("../fixtures/acp/fake-agent.mjs", import.meta.url));
-const M2 = fileURLToPath(new URL("../fixtures/m2", import.meta.url));
-const SPEC = readFileSync(join(M2, "specs", "changed-file-summary-spec.md"), "utf8");
+const CFS = fileURLToPath(new URL("../fixtures/changed-file-summary", import.meta.url));
+const SPEC = readFileSync(join(CFS, "spec", "changed-file-summary-spec.md"), "utf8");
 
 let inst: AppInstance | undefined;
 afterAll(() => {
   inst?.close();
 });
 
-// M3 裁判拆分前置：组合能力候选前 active 裁判须为 hybrid（测试捷径）
+// 裁判拆分前置：组合能力候选前 active 裁判须为 hybrid（测试捷径）
 beforeAll(() => {
   upgradeJudgeToActive(instance());
 });
@@ -62,12 +62,12 @@ function instance(): AppInstance {
 const SUMMARY_TASK = {
   requestedBy: "principal-local",
   goal: "对变更清单生成可验证的文件分类摘要",
-  inputs: [join(M2, "inputs", "changed-files.json")],
+  inputs: [join(CFS, "inputs", "changed-files.json")],
   budget: { maxAttempts: 3, maxWallClockSeconds: 60 },
   requires: ["changed-file-summary"],
   acceptance: {
-    outputSchema: join(M2, "schemas", "changed-file-summary.schema.json"),
-    expectedOutput: join(M2, "evals", "summary-output.json"),
+    outputSchema: join(CFS, "schema.json"),
+    expectedOutput: join(CFS, "expected", "summary-output.json"),
     verifier: "stats-acceptance",
   },
 };
@@ -93,9 +93,9 @@ async function buildCandidate(hypothesis: string) {
   const builder = await app.evolution.build({
     capability: "changed-file-summary",
     goal: SPEC,
-    inputs: [join(M2, "capability-tests")],
+    inputs: [join(CFS, "tests")],
     executorName: "fake-acp",
-    testCommand: ["node", "--test", "inputs/capability-tests/changed-file-summary.test.mjs"],
+    testCommand: ["node", "--test", "inputs/tests/changed-file-summary.test.mjs"],
     budget: { maxAttempts: 2, maxWallClockSeconds: 60 },
     outputSchema: fixturePath("schemas", "stats-summary.schema.json"),
     requestedBy: "principal-local",
@@ -188,13 +188,13 @@ function goodModuleVariant(tag: string): CapabilityModule {
     files: [
       {
         path: "index.mjs",
-        content: `${readFileSync(join(M2, "capability", "changed-file-summary.mjs"), "utf8")}\n// variant ${tag}\n`,
+        content: `${readFileSync(join(CFS, "implementation.mjs"), "utf8")}\n// variant ${tag}\n`,
       },
     ],
   };
 }
 
-describe("M2 切片④：独立评估与晋升", () => {
+describe("独立评估与晋升", () => {
   it("评估 eligible → operator 晋升 → active 切换、revision 前进、候选 adopted", async () => {
     const app = instance();
     const candidate = await buildCandidate("标准候选 A");
@@ -421,7 +421,7 @@ describe("M2 切片④：独立评估与晋升", () => {
       files: [
         {
           path: "index.mjs",
-          content: readFileSync(join(M2, "capability", "changed-file-summary.mjs"), "utf8"),
+          content: readFileSync(join(CFS, "implementation.mjs"), "utf8"),
         },
       ],
     };

@@ -192,7 +192,7 @@ M2 落地本文 §5–§8 的最小版本，对应实现与让步：
 - **§8 回滚**：`kind=rollback` 的 Promotion，revision 只增不减；目标快照必须可解析完整闭包，并已出现在该 Organism 的历史 Promotion 路径中（依赖缺失、未评估或从未采用的候选不能回滚激活）。
 - **晋升授权**：proposed 首版默认——评估自动执行，晋升由 operator 显式批准（`proteus promote --as`）；评估完成不等于授权（最新评估必须 eligible 才放行）。
 - **让步（ADR 0006）**：hybrid 裁判与能力变化同处候选快照，以"固定裁判一方 + tests/evals 等价性证明"折衷，M3 拆分；评估预算与普通 Run 共享 organism 池；成本指标显式 null。
-- **§11 MVP 五条验收**全部落地：并发同快照（M0 既有 + 评估三 Run 并行）、人工候选 + 固定基线评估、operator 批准可审计 Promotion、stale 重构重评、回滚后再跑（tests/acceptance/m2.test.ts 七步故事固化；真实 builder 版 `PROTEUS_E2E=bootstrap`）。
+- **§11 MVP 五条验收**全部落地：并发同快照（M0 既有 + 评估三 Run 并行）、人工候选 + 固定基线评估、operator 批准可审计 Promotion、stale 重构重评、回滚后再跑（tests/acceptance/bootstrap-story.test.ts 七步故事固化；真实 builder 版 `PROTEUS_E2E=bootstrap`）。
 
 ## 13. 实现注记（M3 经验驱动演化）
 

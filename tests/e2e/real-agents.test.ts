@@ -26,7 +26,7 @@ function enabled(target: string): boolean {
 }
 
 const GOAL =
-  "在工作区实现 src/wordcount.mjs：导出 countWords(text)，按空白切分返回词数（空串为 0）。只创建 src/ 目录下的文件，不要修改 inputs/。完成后自检：node --test inputs/wordcount-tests/wordcount.test.mjs";
+  "在工作区实现 src/wordcount.mjs：导出 countWords(text)，按空白切分返回词数（空串为 0）。只创建 src/ 目录下的文件，不要修改 inputs/。完成后自检：node --test inputs/tests/wordcount.test.mjs";
 
 const GRAPH = (executor: string) => ({
   schemaVersion: 2,
@@ -46,7 +46,7 @@ const GRAPH = (executor: string) => ({
 const TEST_RUNNER = {
   schemaVersion: 1,
   kind: "test-runner-v1",
-  command: ["node", "--test", "inputs/wordcount-tests/wordcount.test.mjs"],
+  command: ["node", "--test", "inputs/tests/wordcount.test.mjs"],
 };
 
 const E2E_TIMEOUT = 600_000;
@@ -75,7 +75,7 @@ async function runDelegatedTask(executorName: string, inst: AppInstance): Promis
   const summary = await runtime.submitTask({
     requestedBy: "principal-local",
     goal: GOAL,
-    inputs: [fixturePath("..", "m1", "wordcount-tests")],
+    inputs: [fixturePath("..", "wordcount", "tests")],
     budget: { maxAttempts: 1, maxWallClockSeconds: 480 },
     acceptance: {
       outputSchema: fixturePath("schemas", "stats-summary.schema.json"),
@@ -122,7 +122,7 @@ describe("M1 E2E：真实 agent（PROTEUS_E2E 显式启用）", () => {
   it.runIf(enabled("bootstrap"))(
     "M2 自举故事（真实 Claude Code 作为 builder）：缺口等待 → 委托构建 → 评估 → 晋升 → 接替 Run 完成",
     async () => {
-      const M2 = fileURLToPath(new URL("../fixtures/m2", import.meta.url));
+      const CFS = fileURLToPath(new URL("../fixtures/changed-file-summary", import.meta.url));
       const runtime = new Runtime({
         storage: inst.storage,
         kernel: inst.kernel,
@@ -179,12 +179,12 @@ describe("M1 E2E：真实 agent（PROTEUS_E2E 显式启用）", () => {
       const r1 = await runtime.submitTask({
         requestedBy: "principal-local",
         goal: "对变更清单生成可验证的文件分类摘要",
-        inputs: [join(M2, "inputs", "changed-files.json")],
+        inputs: [join(CFS, "inputs", "changed-files.json")],
         budget: { maxAttempts: 3, maxWallClockSeconds: 120 },
         requires: ["changed-file-summary"],
         acceptance: {
-          outputSchema: join(M2, "schemas", "changed-file-summary.schema.json"),
-          expectedOutput: join(M2, "evals", "summary-output.json"),
+          outputSchema: join(CFS, "schema.json"),
+          expectedOutput: join(CFS, "expected", "summary-output.json"),
           verifier: "stats-acceptance",
         },
       });
@@ -193,10 +193,10 @@ describe("M1 E2E：真实 agent（PROTEUS_E2E 显式启用）", () => {
       // ②③ 真实 Claude Code 构建 → 独立测试验收 → 候选
       const builder = await evo.build({
         capability: "changed-file-summary",
-        goal: readFileSync(join(M2, "specs", "changed-file-summary-spec.md"), "utf8"),
-        inputs: [join(M2, "capability-tests")],
+        goal: readFileSync(join(CFS, "spec", "changed-file-summary-spec.md"), "utf8"),
+        inputs: [join(CFS, "tests")],
         executorName: "claude-code-acp",
-        testCommand: ["node", "--test", "inputs/capability-tests/changed-file-summary.test.mjs"],
+        testCommand: ["node", "--test", "inputs/tests/changed-file-summary.test.mjs"],
         budget: { maxAttempts: 2, maxWallClockSeconds: 480 },
         outputSchema: fixturePath("schemas", "stats-summary.schema.json"),
         requestedBy: "principal-local",
@@ -205,12 +205,12 @@ describe("M1 E2E：真实 agent（PROTEUS_E2E 显式启用）", () => {
       const evaluationPlan = {
         newCapability: {
           goal: "对变更清单生成可验证的文件分类摘要",
-          inputs: [join(M2, "inputs", "changed-files.json")],
+          inputs: [join(CFS, "inputs", "changed-files.json")],
           budget: { maxAttempts: 3, maxWallClockSeconds: 120 },
           requires: ["changed-file-summary"],
           acceptance: {
-            outputSchema: join(M2, "schemas", "changed-file-summary.schema.json"),
-            expectedOutput: join(M2, "evals", "summary-output.json"),
+            outputSchema: join(CFS, "schema.json"),
+            expectedOutput: join(CFS, "expected", "summary-output.json"),
             verifier: "stats-acceptance",
           },
         },
@@ -247,7 +247,7 @@ describe("M1 E2E：真实 agent（PROTEUS_E2E 显式启用）", () => {
         readFileSync(join(inst.root, "workspaces", successor.runId, "work", "output.json"), "utf8"),
       ) as { summary: { files: Array<{ path: string; category: string }> } };
       const expected = JSON.parse(
-        readFileSync(join(M2, "evals", "summary-expected.json"), "utf8"),
+        readFileSync(join(CFS, "expected", "summary-expected.json"), "utf8"),
       ) as Record<string, string>;
       expect(Object.fromEntries(output.summary.files.map((f) => [f.path, f.category]))).toEqual(
         expected,
