@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, realpathSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import type { ExecutionResult } from "./types.ts";
+import type { SandboxBackend } from "./sandbox.ts";
 
 /**
  * 能力模块（M2）：快照 capability/<name> 槽位产物的内容合同与独立进程执行。
@@ -91,11 +92,13 @@ export function capabilityModuleDir(workspace: string, name: string): string {
   return moduleRoot;
 }
 
-/** 独立进程执行能力模块：产物落盘 → node 子进程（cwd=工作区）→ 读 output.json */
+/** 独立进程执行能力模块：产物落盘 → 子进程执行（cwd=工作区）→ 读 output.json。
+ * 提供 sandbox 时经真隔离后端执行（不可用即拒绝，不静默降级）；否则为进程级。 */
 export function runCapabilityModule(
   module: CapabilityModule,
   workspace: string,
   timeoutMs: number,
+  sandbox?: SandboxBackend,
 ): ExecutionResult {
   const moduleRoot = capabilityModuleDir(workspace, module.name);
   for (const f of module.files) {
@@ -114,6 +117,35 @@ export function runCapabilityModule(
     writeFileSync(target, f.content, "utf8");
   }
 
+  const outputRef = join(workspace, "output.json");
+  if (sandbox) {
+    const availability = sandbox.available();
+    if (!availability.ok) {
+      return {
+        ok: false,
+        exitCode: null,
+        stdout: "",
+        stderr: `沙箱后端 ${sandbox.name} 不可用：${availability.reason ?? "未知原因"}；拒绝执行（不静默降级到进程级）`,
+        durationMs: 0,
+        outputRef: null,
+      };
+    }
+    // 沙箱内以镜像自带 node 执行，路径相对挂载点（后端负责 cd 与挂载）
+    const result = sandbox.run({
+      command: ["node", join("capability", module.name, module.entry)],
+      hostWorkspace: workspace,
+      profile: { network: "none", memoryMb: 512, cpus: 1, timeoutMs },
+    });
+    return {
+      ok: result.exitCode === 0,
+      exitCode: result.exitCode,
+      stdout: result.stdout,
+      stderr: result.stderr,
+      durationMs: result.durationMs,
+      outputRef: result.exitCode === 0 ? outputRef : null,
+    };
+  }
+
   const startedAt = Date.now();
   // 入口先 realpath 再作为 argv[1] 传入：Node ESM 的 import.meta.url 总是真实路径，
   // 若经符号链接传参（如 /tmp → /private/tmp），被测代码的主模块判断会失配——
@@ -124,7 +156,6 @@ export function runCapabilityModule(
     timeout: timeoutMs,
   });
   const durationMs = Date.now() - startedAt;
-  const outputRef = join(workspace, "output.json");
   return {
     ok: result.status === 0,
     exitCode: result.status,

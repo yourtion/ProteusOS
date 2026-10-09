@@ -13,6 +13,7 @@ import { Kernel } from "../kernel/index.ts";
 import { Runtime } from "../runtime/index.ts";
 import type { ExecutorProvider } from "../runtime/types.ts";
 import { DEFAULT_ORGANISM_BUDGET, type OrganismBudget } from "../runtime/types.ts";
+import { MicrosandboxBackend, type SandboxBackend } from "../runtime/sandbox.ts";
 import { BlobStore } from "../storage/blobs.ts";
 import { MIGRATIONS } from "../storage/migrations.ts";
 import { SqliteDb } from "../storage/sqlite.ts";
@@ -118,6 +119,8 @@ export function openInstance(
     decisions?: ReadonlyMap<string, DecisionProvider>;
     /** 单次决策调用超时上限（默认 15s，实验协议 §4.2） */
     decisionCallTimeoutMs?: number;
+    /** 能力执行沙箱后端；缺省按 PROTEUS_SANDBOX（microsandbox→真隔离；未设→进程级） */
+    capabilitySandbox?: SandboxBackend;
   } = {},
 ): AppInstance {
   for (const dir of [root, join(root, "blobs"), join(root, "workspaces"), join(root, "tmp")]) {
@@ -131,6 +134,9 @@ export function openInstance(
   const clock = { now: () => Date.now() };
   const ids = { next: () => uuidv7() };
   const kernel = new Kernel(storage, clock, ids);
+  const capabilitySandbox =
+    options.capabilitySandbox ??
+    (process.env.PROTEUS_SANDBOX === "microsandbox" ? new MicrosandboxBackend() : undefined);
   const runtime = new Runtime({
     storage,
     kernel,
@@ -143,6 +149,7 @@ export function openInstance(
     ids,
     organismBudget: options.organismBudget ?? DEFAULT_ORGANISM_BUDGET,
     decisionCallTimeoutMs: options.decisionCallTimeoutMs,
+    capabilitySandbox,
   });
   const evolution = new Evolution({
     kernel,

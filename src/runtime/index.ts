@@ -48,6 +48,7 @@ import type {
   TaskRecord,
 } from "./types.ts";
 import { isCapabilityName, parseCapabilityModule, runCapabilityModule } from "./capability.ts";
+import type { SandboxBackend } from "./sandbox.ts";
 
 export interface TaskSubmission {
   requestedBy: string;
@@ -133,6 +134,11 @@ export interface RuntimeDeps {
   organismBudget: OrganismBudget;
   /** 单次决策调用超时上限（默认 15s）；实际超时取此值与 Run 剩余时间的较小值 */
   decisionCallTimeoutMs?: number;
+  /**
+   * 能力执行沙箱后端（M3 真隔离）：提供即沙箱模式（不可用明确拒绝，
+   * 不静默降级）；缺省为进程级（M2 行为，非真隔离）
+   */
+  capabilitySandbox?: SandboxBackend;
 }
 
 /** 实验协议 organism-decision-v1 的单次模型调用超时默认值（§4.2） */
@@ -2075,7 +2081,12 @@ export class Runtime {
             outputRef: null,
           };
         }
-        return runCapabilityModule(parsed.module, req.workspaceDir, req.timeoutMs);
+        return runCapabilityModule(
+          parsed.module,
+          req.workspaceDir,
+          req.timeoutMs,
+          this.deps.capabilitySandbox,
+        );
       },
     };
   }

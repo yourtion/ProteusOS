@@ -21,3 +21,13 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm check
+      # M3：macos lane 启用真实 microsandbox 沙箱用例（Apple Silicon 虚拟化可用；
+      # ubuntu runner 无 KVM，沙箱用例由合同测试覆盖，docker 后端接入后再开启）
+      - name: Install microsandbox (macOS)
+        if: matrix.os == 'macos-latest'
+        run: brew install superradcompany/tap/microsandbox && msb doctor
+      - name: Check with real sandbox (macOS)
+        if: matrix.os == 'macos-latest'
+        env:
+          PROTEUS_SANDBOX: microsandbox
+        run: ./node_modules/.bin/vitest run tests/e2e/sandbox-real.test.ts
