@@ -7,7 +7,7 @@ import type { AppInstance } from "../../src/app/instance.ts";
 import { openInstance } from "../../src/app/instance.ts";
 import { installSeed } from "../../src/app/seed.ts";
 import { Runtime } from "../../src/runtime/index.ts";
-import type { ExecutorProvider, OrganismBudget } from "../../src/runtime/types.ts";
+import type { BudgetPool, ExecutorProvider } from "../../src/runtime/types.ts";
 import { DEFAULT_ORGANISM_BUDGET } from "../../src/runtime/types.ts";
 import {
   bootSeededInstance,
@@ -62,7 +62,7 @@ function slowExecutor(ms: number): ExecutorProvider {
   };
 }
 
-function runtimeWith(budget: Partial<OrganismBudget>, executorMs = 250): Runtime {
+function runtimeWith(budget: Partial<BudgetPool>, executorMs = 250): Runtime {
   const app = instance();
   return new Runtime({
     storage: app.storage,
@@ -74,7 +74,10 @@ function runtimeWith(budget: Partial<OrganismBudget>, executorMs = 250): Runtime
     instanceRoot: app.root,
     clock: { now: Date.now },
     ids: { next: uuidv7 },
-    organismBudget: { ...DEFAULT_ORGANISM_BUDGET, ...budget },
+    organismBudget: {
+      normal: { ...DEFAULT_ORGANISM_BUDGET.normal, ...budget },
+      evaluation: DEFAULT_ORGANISM_BUDGET.evaluation,
+    },
   });
 }
 

@@ -9,6 +9,7 @@ import {
   experimentRunCommand,
   initCommand,
   inspectCommand,
+  judgeUpgradeCommand,
   promoteCommand,
   recoverCommand,
   reconcileCommand,
@@ -88,6 +89,16 @@ withCommon(
     .argument("[id]", "Candidate ID"),
 ).action(async (id: string | undefined, opts) => {
   await candidatesCommand(id, opts);
+});
+
+withCommon(
+  program
+    .command("judge-upgrade")
+    .description("构造裁判升级候选（hybrid）并做判定等价评估；晋升仍由 operator promote")
+    .requiredOption("--regression-task <file>", "能力不变的回归任务 task.yaml（判定等价对照）")
+    .option("--as <principal>", "提议者 Principal ID（默认 principal-local）"),
+).action(async (opts) => {
+  await judgeUpgradeCommand(opts);
 });
 
 withCommon(

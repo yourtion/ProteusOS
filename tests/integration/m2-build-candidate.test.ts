@@ -1,12 +1,12 @@
 import { appendFileSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { AcpExecutor } from "../../src/adapters/executor-acp/index.ts";
 import type { AppInstance } from "../../src/app/instance.ts";
 import { ensureCapabilityGenome } from "../../src/evolution/assets.ts";
 import type { ExecutorProvider } from "../../src/runtime/types.ts";
-import { bootSeededInstance, fixturePath } from "../helpers.ts";
+import { bootSeededInstance, upgradeJudgeToActive, fixturePath } from "../helpers.ts";
 
 /**
  * M2 切片③：委托构建与候选构造（自举故事步骤 2-3）。
@@ -45,6 +45,11 @@ const EVAL_PLAN = {
 let inst: AppInstance | undefined;
 afterAll(() => {
   inst?.close();
+});
+
+// M3 裁判拆分前置：组合能力候选前 active 裁判须为 hybrid（测试捷径）
+beforeAll(() => {
+  upgradeJudgeToActive(instance());
 });
 
 function instance(): AppInstance {
@@ -234,6 +239,7 @@ describe("M2 切片③：委托构建与候选构造", () => {
       ]),
     );
     try {
+      upgradeJudgeToActive(app);
       const organism = app.kernel.getOrganism("organism-default")!;
       const existing = ensureCapabilityGenome(
         { kernel: app.kernel, storage: app.storage, blobs: app.blobs, clock: { now: Date.now } },

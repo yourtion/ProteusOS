@@ -12,6 +12,7 @@ import {
   ensureBuilderGenome,
   ensureCapabilityGenome,
   ensureHybridEvaluatorVersion,
+  ensureJudgeGenome,
   evaluationProtocolDigest,
 } from "./assets.ts";
 import type {
@@ -185,6 +186,7 @@ export class Evolution {
         hypothesis: opts.hypothesis,
         proposedBy: opts.proposedBy,
         sourceRefs: {
+          candidateType: "capability",
           builderRunId,
           capability: opts.capability,
           builderGoalDigest: digestOf(runGoal(this.deps.storage, builderRunId)),
@@ -243,6 +245,219 @@ export class Evolution {
       }
     }
     return { status, detail };
+  }
+
+  /**
+   * 提议裁判候选（M3 裁判拆分）：基于当前 active 构造只升 acceptance-evaluator
+   * 的候选快照与记录。评估依据 = 能力不变的回归集上新旧判定等价
+   * （evaluateJudgeCandidate）；晋升走同一 operator 通道。按 proposedSnapshot 去重。
+   */
+  proposeJudgeCandidate(opts: {
+    evaluatorContent: object;
+    hypothesis: string;
+    proposedBy: string;
+  }): { candidate: CandidateRecord; created: boolean } {
+    const organism = this.deps.kernel.getOrganism(this.deps.organismId);
+    const baseSnapshotId = organism?.activeGenomeId ?? null;
+    if (!organism || !baseSnapshotId) {
+      throw new EvolutionError("no_active_genome", "默认快照未安装，无基准可组合候选");
+    }
+    const genome = ensureJudgeGenome(
+      {
+        kernel: this.deps.kernel,
+        storage: this.deps.storage,
+        blobs: this.deps.blobs,
+        clock: this.deps.clock,
+      },
+      {
+        baseSnapshotId,
+        evaluatorContent: opts.evaluatorContent,
+        createdBy: opts.proposedBy,
+      },
+    );
+    return this.deps.storage.tx(() => {
+      const existing = this.deps.storage.findCandidateByProposedSnapshot(
+        this.deps.organismId,
+        genome.snapshot.id,
+      );
+      if (existing) return { candidate: existing, created: false };
+      const now = this.deps.clock.now();
+      const candidate: CandidateRecord = {
+        id: this.deps.ids.next(),
+        organismId: this.deps.organismId,
+        baseSnapshotId,
+        baseRevision: organism.revision,
+        proposedSnapshotId: genome.snapshot.id,
+        hypothesis: opts.hypothesis,
+        proposedBy: opts.proposedBy,
+        sourceRefs: {
+          candidateType: "judge",
+          evaluatorDigest: digestOf(canonicalJson(opts.evaluatorContent)),
+        },
+        datasetRef: null,
+        createdAt: now,
+      };
+      this.deps.storage.insertCandidate(candidate);
+      this.deps.storage.appendEvent({
+        streamId: `candidate-${candidate.id}`,
+        type: "candidate.proposed",
+        payload: {
+          candidateId: candidate.id,
+          candidateType: "judge",
+          proposedSnapshotId: candidate.proposedSnapshotId,
+          proposedSnapshotDigest: genome.snapshot.digest,
+          baseSnapshotId,
+          baseRevision: candidate.baseRevision,
+          hypothesis: opts.hypothesis,
+        },
+        organismId: this.deps.organismId,
+        occurredAt: now,
+      });
+      return { candidate, created: true };
+    });
+  }
+
+  /**
+   * 评估裁判候选（裁判拆分的独立评估）：候选快照×回归集（钉住候选的新裁判，
+   * 验证新裁判不破坏既有任务判定）+ 基准快照×回归集（基准裁判，环境健康对照）。
+   * 全过 → eligible；候选臂失败 → rejected；基线臂失败 → inconclusive（可重评）。
+   */
+  async evaluateJudgeCandidate(
+    candidateId: string,
+    plan: { regression: TaskSubmissionLike | TaskSubmissionLike[]; requestedBy: string },
+  ): Promise<{ evaluation: EvaluationRecord; status: CandidateStatus }> {
+    const candidate = this.mustGetCandidate(candidateId);
+    if (candidate.sourceRefs["candidateType"] !== "judge") {
+      throw new EvolutionError(
+        "not_a_judge_candidate",
+        `候选 ${candidateId} 不是裁判候选（sourceRefs.candidateType != judge）`,
+      );
+    }
+    const regressions = normalizeRegressions(plan.regression);
+    if (regressions.length === 0) {
+      throw new EvolutionError(
+        "evaluation_plan_missing_regression",
+        "评估计划至少需要一个回归任务",
+      );
+    }
+    // 候选快照的裁判槽位即被评估的新裁判；评估 Run 显式钉住它
+    const proposedEvaluator = this.deps.kernel
+      .resolveSnapshot(candidate.proposedSnapshotId)
+      .versions.get("acceptance-evaluator");
+    if (!proposedEvaluator) {
+      throw new EvolutionError("missing_binding", "候选快照缺少 acceptance-evaluator 槽位");
+    }
+
+    this.deps.storage.tx(() => {
+      this.deps.storage.appendEvent({
+        streamId: `candidate-${candidateId}`,
+        type: "candidate.evaluating",
+        payload: {
+          protocol: "m3-judge-eval-v1",
+          evaluatorVersionId: proposedEvaluator.id,
+        },
+        organismId: this.deps.organismId,
+        occurredAt: this.deps.clock.now(),
+      });
+    });
+
+    const runOutcome = (
+      role: EvaluationRunOutcome["role"],
+      purpose: string,
+      submission: TaskSubmissionLike,
+      snapshotId: string,
+      evaluatorVersionId: string | null,
+    ): Promise<EvaluationRunOutcome> =>
+      this.deps.runtime
+        .submitTask(
+          { ...submission, requestedBy: plan.requestedBy },
+          {
+            purpose: "evaluation",
+            snapshotId,
+            evaluatorVersionId: evaluatorVersionId ?? undefined,
+          },
+        )
+        .then((summary) => ({
+          role,
+          purpose,
+          runId: summary.runId,
+          snapshotId,
+          state: summary.state,
+          failureReason: summary.failureReason,
+          durationMs: this.deps.storage.getExperienceByRun(summary.runId)?.outcome.durationMs ?? 0,
+        }));
+
+    // 候选臂（新裁判）与基线臂（基准快照+其槽位裁判）交错并行
+    const outcomes = await Promise.all([
+      ...regressions.map((regression, i) =>
+        runOutcome(
+          "regression",
+          `新裁判回归 ${i + 1}`,
+          regression,
+          candidate.proposedSnapshotId,
+          proposedEvaluator.id,
+        ),
+      ),
+      ...regressions.map((regression, i) =>
+        runOutcome(
+          `baseline` as const,
+          `基线健康对照 ${i + 1}`,
+          regression,
+          candidate.baseSnapshotId,
+          null,
+        ),
+      ),
+    ]);
+    const candidateOutcomes = outcomes.filter((o) => o.role === "regression");
+    const baselineOutcomes = outcomes.filter((o) => o.role === "baseline");
+    const passed = (o: EvaluationRunOutcome) => o.state === "succeeded";
+
+    let verdict: EvaluationRecord["verdict"];
+    let note: string;
+    if (!baselineOutcomes.every(passed)) {
+      verdict = "inconclusive";
+      note = "基线对照失败：评估环境不可信，不判 rejected，可修复后重评";
+    } else if (!candidateOutcomes.every(passed)) {
+      verdict = "rejected";
+      note = `新裁判在既有任务上判定失败（${candidateOutcomes.find((o) => !passed(o))?.failureReason}）：判定等价性不成立`;
+    } else {
+      verdict = "eligible";
+      note = "新裁判在既有任务上与基准判定一致（运行时对照 + tests/evals 等价性用例）";
+    }
+
+    const evaluation: EvaluationRecord = {
+      id: this.deps.ids.next(),
+      candidateId,
+      protocolDigest: digestOf("m3-judge-eval-v1"),
+      baselineSnapshotId: candidate.baseSnapshotId,
+      runs: outcomes,
+      verdict,
+      metrics: {
+        // 裁判候选无新能力臂；切片⑤协议泛化时重构 metrics 分列
+        newCapability: { passed: verdict === "eligible", durationMs: 0 },
+        regression: {
+          passed: candidateOutcomes.every(passed),
+          durationMs: candidateOutcomes.reduce((acc, o) => acc + o.durationMs, 0),
+        },
+        baseline: {
+          passed: baselineOutcomes.every(passed),
+          durationMs: baselineOutcomes.reduce((acc, o) => acc + o.durationMs, 0),
+        },
+        cost: null,
+      },
+      createdAt: this.deps.clock.now(),
+    };
+    this.deps.storage.tx(() => {
+      this.deps.storage.insertEvaluation(evaluation);
+      this.deps.storage.appendEvent({
+        streamId: `candidate-${candidateId}`,
+        type: "candidate.evaluated",
+        payload: { evaluationId: evaluation.id, verdict, note, runs: evaluation.runs },
+        organismId: this.deps.organismId,
+        occurredAt: this.deps.clock.now(),
+      });
+    });
+    return { evaluation, status: this.candidateStatus(candidateId).status };
   }
 
   /**

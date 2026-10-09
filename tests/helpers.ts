@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { openInstance, type AppInstance } from "../src/app/instance.ts";
+import { ensureJudgeGenome, HYBRID_EVALUATOR_CONTENT } from "../src/evolution/assets.ts";
 import type { ExecutorProvider } from "../src/runtime/types.ts";
 import { installSeed, canonicalJson } from "../src/app/seed.ts";
 
@@ -30,6 +31,33 @@ export function bootSeededInstance(
     clock: { now: Date.now },
   });
   return inst;
+}
+
+/**
+ * 裁判升级快捷装配（M3 裁判拆分后 M2 场景的前置）：把 active 的裁判
+ * 经 ensureJudgeGenome 升级为 hybrid 并 CAS 安装（测试捷径；正式流程走
+ * judge-upgrade → evaluate → operator promote）。
+ */
+export function upgradeJudgeToActive(inst: AppInstance): string {
+  const base = inst.kernel.getOrganism("organism-default")!.activeGenomeId!;
+  const genome = ensureJudgeGenome(
+    { kernel: inst.kernel, storage: inst.storage, blobs: inst.blobs, clock: { now: Date.now } },
+    {
+      baseSnapshotId: base,
+      evaluatorContent: HYBRID_EVALUATOR_CONTENT,
+      createdBy: "principal-local",
+    },
+  );
+  inst.storage.tx(() => {
+    const fresh = inst.kernel.getOrganism("organism-default")!;
+    const result = inst.kernel.installAsActive(
+      "organism-default",
+      genome.snapshot.id,
+      fresh.revision,
+    );
+    if (!result.ok) throw new Error("测试装配：裁判升级 CAS 冲突");
+  });
+  return genome.snapshot.id;
 }
 
 /** 以当前快照为基准注册新版本并 CAS 安装为默认（测试用自定义图/策略/验收器） */

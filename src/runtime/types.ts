@@ -191,19 +191,31 @@ export interface RunSummary {
 export type BudgetEntryKind = "reserve" | "settle";
 
 /**
- * Organism 级预算（Q5 决策：Attempt 数 + 墙钟秒数，Run 与 Organism 两级）。
+ * Organism 级预算池（Q5 决策：Attempt 数 + 墙钟秒数，Run 与 Organism 两级）。
  * 在途额度 = 活跃 Run 的 reserve 记录之和；准入时原子检查，结算后释放。
+ * M3 起按用途分池（ADR 0006 挂账兑现）：评估 Run 独立于普通 Run 的
+ * 并发/Attempt/墙钟额度，学习与评估不挤占在线任务预算（principles.md）。
  */
-export interface OrganismBudget {
+export interface BudgetPool {
   maxConcurrentRuns: number;
   maxInFlightAttempts: number;
   maxInFlightWallClockSeconds: number;
 }
 
-export const DEFAULT_ORGANISM_BUDGET: OrganismBudget = {
+export interface OrganismBudget {
+  normal: BudgetPool;
+  evaluation: BudgetPool;
+}
+
+const DEFAULT_POOL: BudgetPool = {
   maxConcurrentRuns: 4,
   maxInFlightAttempts: 16,
   maxInFlightWallClockSeconds: 86_400,
+};
+
+export const DEFAULT_ORGANISM_BUDGET: OrganismBudget = {
+  normal: DEFAULT_POOL,
+  evaluation: DEFAULT_POOL,
 };
 
 /** Runtime 持久化 port；由 storage 实现。 */
@@ -245,10 +257,10 @@ export interface RuntimeStore {
     seconds: number,
     at: number,
   ): void;
-  /** organism 当前活跃（pending/running/waiting）Run 的数量 */
-  countActiveRuns(organismId: string): number;
+  /** organism 当前活跃（pending/running/waiting）Run 的数量；scope 缺省为全用途 */
+  countActiveRuns(organismId: string, scope?: RunPurpose): number;
   /** organism 在途预算：活跃 Run 的 reserve 之和（settle 后的 Run 不再计入） */
-  inFlightBudget(organismId: string): { attempts: number; seconds: number };
+  inFlightBudget(organismId: string, scope?: RunPurpose): { attempts: number; seconds: number };
 
   appendEvent(e: EventAppend): { eventId: string; seq: number };
   listEvents(filter: { runId?: string; streamId?: string }, limit: number): EventRecord[];

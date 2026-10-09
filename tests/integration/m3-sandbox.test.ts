@@ -11,7 +11,7 @@ import type { CapabilityGenome } from "../../src/evolution/assets.ts";
 import { Runtime } from "../../src/runtime/index.ts";
 import type { CapabilityModule } from "../../src/runtime/capability.ts";
 import type { SandboxBackend, SandboxExecution, SandboxResult } from "../../src/runtime/sandbox.ts";
-import { bootSeededInstance } from "../helpers.ts";
+import { bootSeededInstance, upgradeJudgeToActive } from "../helpers.ts";
 
 /**
  * M3 切片①：能力执行经 SandboxBackend 的集成行为。
@@ -52,6 +52,7 @@ function recordingSandbox(override?: Partial<SandboxBackend>): SandboxBackend & 
 }
 
 let inst: AppInstance | undefined;
+let judgeSnapshot: string | undefined;
 afterAll(() => {
   inst?.close();
 });
@@ -90,6 +91,7 @@ function moduleContent(): CapabilityModule {
 /** 直接构造含能力的 Runtime（绕开 instance 缓存，注入沙箱） */
 async function runCapabilityWith(sandbox: SandboxBackend | undefined) {
   const app = instance();
+  judgeSnapshot ??= upgradeJudgeToActive(app);
   const genome: CapabilityGenome = ensureCapabilityGenome(
     { kernel: app.kernel, storage: app.storage, blobs: app.blobs, clock: { now: Date.now } },
     {
@@ -118,9 +120,12 @@ async function runCapabilityWith(sandbox: SandboxBackend | undefined) {
 }
 
 const DEFAULT_BUDGET = {
-  maxConcurrentRuns: 8,
-  maxInFlightAttempts: 32,
-  maxInFlightWallClockSeconds: 86_400,
+  normal: { maxConcurrentRuns: 8, maxInFlightAttempts: 32, maxInFlightWallClockSeconds: 86_400 },
+  evaluation: {
+    maxConcurrentRuns: 8,
+    maxInFlightAttempts: 32,
+    maxInFlightWallClockSeconds: 86_400,
+  },
 };
 
 describe("M3 切片①：能力执行的沙箱链路", () => {

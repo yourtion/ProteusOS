@@ -218,13 +218,53 @@ export interface CapabilityAsset {
 export interface CapabilityGenome {
   snapshot: GenomeSnapshot;
   versions: Map<string, ArtifactVersion>;
-  /** 评估计划钉住的裁判版本（= 快照 acceptance-evaluator 槽位） */
+  /** 评估计划钉住的裁判版本（继承自基准的 acceptance-evaluator 槽位） */
   evaluatorVersion: ArtifactVersion;
 }
 
 /**
+ * 裁判候选快照（M3 裁判拆分，evolution.md §6"裁判与被评估行为同时变化时，
+ * 拆分为不同候选"的正式兑现）：只升级 acceptance-evaluator，其余槽位继承基准。
+ * 其评估 = 能力不变的回归集上新旧判定等价（tests/evals 固定用例 +
+ * 运行时对照）；晋升后能力候选基于它组合，两者不再同处一个快照。
+ * 幂等：同基准同内容产生同快照。
+ */
+export function ensureJudgeGenome(
+  deps: EvolutionDeps,
+  opts: { baseSnapshotId: string; evaluatorContent: object; createdBy: string },
+): CapabilityGenome {
+  return deps.storage.tx(() => {
+    const { snapshot: base, versions: baseVersions } = deps.kernel.resolveSnapshot(
+      opts.baseSnapshotId,
+    );
+    const baseEvaluator = baseVersions.get("acceptance-evaluator");
+    if (!baseEvaluator) {
+      throw new Error(`基准快照 ${opts.baseSnapshotId} 缺少 acceptance-evaluator 槽位`);
+    }
+    deps.kernel.createLineage(EVOLUTION_LINEAGE_ID, opts.createdBy, "scope:evolution");
+    deps.blobs.write(canonicalJson(EVALUATION_PROTOCOL_CONTENT));
+    const evaluatorVersion = registerDerivedVersion(deps, {
+      slot: "acceptance-evaluator",
+      baseVersion: baseEvaluator,
+      content: opts.evaluatorContent,
+      createdBy: opts.createdBy,
+    });
+    const bindings = { ...base.bindings, "acceptance-evaluator": evaluatorVersion.id };
+    const snapshot = deps.kernel.createSnapshot(bindings, opts.createdBy);
+    return {
+      snapshot,
+      versions: deps.kernel.resolveSnapshot(snapshot.id).versions,
+      evaluatorVersion,
+    };
+  });
+}
+
+/**
  * 组合能力候选快照：基准快照 + capability/<name> 槽位 + 预注册的
- * 图/策略/裁判新版本（parents 指向基准版本，血缘可追溯）。
+ * 图/策略新版本（parents 指向基准版本，血缘可追溯）。
+ * 裁判与能力变化已拆分（M3）：本函数不再升级 acceptance-evaluator，
+ * 直接继承基准槽位；基准裁判必须已能验收新能力任务的输出形态
+ * （hybrid-acceptance-v1），否则要求先走裁判候选（ensureJudgeGenome）。
  * 幂等：同基准同内容产生同快照（digest 内容寻址）。
  */
 export function ensureCapabilityGenome(
@@ -248,6 +288,15 @@ export function ensureCapabilityGenome(
       if (!baseVersions.has(slot)) {
         throw new Error(`基准快照 ${opts.baseSnapshotId} 缺少槽位 ${slot}，无法组合能力候选`);
       }
+    }
+    // 裁判拆分校验：能力候选继承基准裁判；基准裁判必须适用混合输出形态
+    const baseEvaluator = baseVersions.get("acceptance-evaluator")!;
+    const evaluatorContent = parseEvaluatorKind(deps.blobs.read(baseEvaluator.contentRef));
+    if (evaluatorContent !== "hybrid-acceptance-v1") {
+      throw new Error(
+        `基准裁判为 ${evaluatorContent}，不能验收新能力任务的输出形态；` +
+          `请先经 ensureJudgeGenome + 评估 + 晋升升级裁判（裁判与能力变化不得同处一个候选）`,
+      );
     }
     deps.kernel.createLineage(EVOLUTION_LINEAGE_ID, opts.createdBy, "scope:evolution");
 
@@ -273,13 +322,7 @@ export function ensureCapabilityGenome(
       content: makeCapabilityPolicyContent(names),
       createdBy: opts.createdBy,
     }).id;
-    const evaluatorVersion = registerDerivedVersion(deps, {
-      slot: "acceptance-evaluator",
-      baseVersion: baseVersions.get("acceptance-evaluator")!,
-      content: HYBRID_EVALUATOR_CONTENT,
-      createdBy: opts.createdBy,
-    });
-    bindings["acceptance-evaluator"] = evaluatorVersion.id;
+    // acceptance-evaluator 继承基准槽位（裁判拆分）
 
     for (const asset of opts.capabilities) {
       const artifactId = `capability/${asset.name}`;
@@ -306,9 +349,19 @@ export function ensureCapabilityGenome(
     return {
       snapshot,
       versions: deps.kernel.resolveSnapshot(snapshot.id).versions,
-      evaluatorVersion,
+      evaluatorVersion: baseEvaluator,
     };
   });
+}
+
+/** 读裁判产物内容的 kind 字段（不合法内容如实返回原文标记） */
+function parseEvaluatorKind(content: string): string {
+  try {
+    const parsed = JSON.parse(content) as { kind?: unknown };
+    return typeof parsed.kind === "string" ? parsed.kind : "(无 kind)";
+  } catch {
+    return "(不可解析)";
+  }
 }
 
 /** 注册派生版本：内容写入 blob，parents 指向基准版本；digest 幂等 */

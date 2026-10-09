@@ -286,7 +286,7 @@ export class Runtime {
       }
       // Organism 级预算在准入事务内原子检查：单 writer + BEGIN IMMEDIATE
       // 保证并发（含跨进程）提交不会各自读取同一余额后重复花费
-      this.assertOrganismBudget(input.budget);
+      this.assertOrganismBudget(input.budget, purpose);
       // 原子固定快照：评估 Run 可显式绑定候选/基线快照，不读也不改 activeGenome
       const boundSnapshotId = options.snapshotId ?? organism.activeGenomeId;
       const { snapshot, versions } = this.deps.kernel.resolveSnapshot(boundSnapshotId);
@@ -2121,27 +2121,28 @@ export class Runtime {
   /**
    * Organism 级预算准入检查（必须在准入事务内调用）。
    * 无法施加约束时拒绝准入，而不是放行后超支（docs/runtime.md §2）。
+   * M3 起按用途分池：评估 Run 与普通 Run 各自计额度，互不挤占。
    */
-  private assertOrganismBudget(budget: TaskBudget): void {
-    const cap = this.deps.organismBudget;
-    const activeRuns = this.deps.storage.countActiveRuns(this.deps.organismId);
+  private assertOrganismBudget(budget: TaskBudget, purpose: RunPurpose): void {
+    const cap = this.deps.organismBudget[purpose];
+    const activeRuns = this.deps.storage.countActiveRuns(this.deps.organismId, purpose);
     if (activeRuns >= cap.maxConcurrentRuns) {
       throw new RuntimeError(
         "organism_budget_exceeded",
-        `并发 Run 数已达上限 ${cap.maxConcurrentRuns}（当前活跃 ${activeRuns}），拒绝准入`,
+        `${purpose} 用途并发 Run 数已达上限 ${cap.maxConcurrentRuns}（当前活跃 ${activeRuns}），拒绝准入`,
       );
     }
-    const inFlight = this.deps.storage.inFlightBudget(this.deps.organismId);
+    const inFlight = this.deps.storage.inFlightBudget(this.deps.organismId, purpose);
     if (inFlight.attempts + budget.maxAttempts > cap.maxInFlightAttempts) {
       throw new RuntimeError(
         "organism_budget_exceeded",
-        `在途 Attempt 预留 ${inFlight.attempts} + 本次 ${budget.maxAttempts} 超过上限 ${cap.maxInFlightAttempts}`,
+        `${purpose} 用途在途 Attempt 预留 ${inFlight.attempts} + 本次 ${budget.maxAttempts} 超过上限 ${cap.maxInFlightAttempts}`,
       );
     }
     if (inFlight.seconds + budget.maxWallClockSeconds > cap.maxInFlightWallClockSeconds) {
       throw new RuntimeError(
         "organism_budget_exceeded",
-        `在途墙钟预留 ${inFlight.seconds}s + 本次 ${budget.maxWallClockSeconds}s 超过上限 ${cap.maxInFlightWallClockSeconds}s`,
+        `${purpose} 用途在途墙钟预留 ${inFlight.seconds}s + 本次 ${budget.maxWallClockSeconds}s 超过上限 ${cap.maxInFlightWallClockSeconds}s`,
       );
     }
   }

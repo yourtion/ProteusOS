@@ -1,13 +1,13 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { AppInstance } from "../../src/app/instance.ts";
 import { ensureCapabilityGenome } from "../../src/evolution/assets.ts";
 import type { CapabilityGenome } from "../../src/evolution/assets.ts";
 import type { CapabilityModule } from "../../src/runtime/capability.ts";
 import { canonicalJson } from "../../src/storage/blobs.ts";
-import { bootSeededInstance, fixturePath } from "../helpers.ts";
+import { bootSeededInstance, upgradeJudgeToActive, fixturePath } from "../helpers.ts";
 
 /**
  * M2 切片②：评估 Run 入口与能力执行。
@@ -42,9 +42,11 @@ const CAPABILITY_MODULE: CapabilityModule = {
 };
 
 let g1: CapabilityGenome | undefined;
+let judgeSnapshot: string | undefined;
 
 function candidateGenome(): CapabilityGenome {
   const app = instance();
+  judgeSnapshot ??= upgradeJudgeToActive(app);
   g1 ??= ensureCapabilityGenome(
     { kernel: app.kernel, storage: app.storage, blobs: app.blobs, clock: { now: Date.now } },
     {

@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { AcpExecutor } from "../../src/adapters/executor-acp/index.ts";
 import { LocalProcessExecutor } from "../../src/adapters/executor-process/index.ts";
 import type { AppInstance } from "../../src/app/instance.ts";
@@ -10,7 +10,12 @@ import { ensureCapabilityGenome, makeCapabilityPolicyContent } from "../../src/e
 import type { CapabilityModule } from "../../src/runtime/capability.ts";
 import type { ExecutorProvider } from "../../src/runtime/types.ts";
 import { canonicalJson } from "../../src/storage/blobs.ts";
-import { bootSeededInstance, fixturePath, installCustomGenome } from "../helpers.ts";
+import {
+  bootSeededInstance,
+  upgradeJudgeToActive,
+  fixturePath,
+  installCustomGenome,
+} from "../helpers.ts";
 
 /**
  * M2 切片④：独立评估 → operator 晋升 → 接替（自举故事步骤 4-6）。
@@ -28,6 +33,11 @@ const SPEC = readFileSync(join(M2, "specs", "changed-file-summary-spec.md"), "ut
 let inst: AppInstance | undefined;
 afterAll(() => {
   inst?.close();
+});
+
+// M3 裁判拆分前置：组合能力候选前 active 裁判须为 hybrid（测试捷径）
+beforeAll(() => {
+  upgradeJudgeToActive(instance());
 });
 
 function instance(): AppInstance {
@@ -215,10 +225,10 @@ describe("M2 切片④：独立评估与晋升", () => {
     if (outcome.result !== "promoted") return;
     const organism = app.kernel.getOrganism("organism-default")!;
     expect(organism.activeGenomeId).toBe(candidate.proposedSnapshotId);
-    // seed 安装是 revision 1，晋升前进到 2；CAS 以候选基准 revision 为条件
-    expect(organism.revision).toBe(2);
+    // 晋升 = 基准 revision + 1（基准含 beforeAll 的裁判升级步）；CAS 以候选基准为条件
+    expect(organism.revision).toBe(candidate.baseRevision + 1);
     expect(outcome.promotion.expectedRevision).toBe(candidate.baseRevision);
-    expect(outcome.promotion.resultRevision).toBe(2);
+    expect(outcome.promotion.resultRevision).toBe(candidate.baseRevision + 1);
     expect(outcome.promotion.evaluationRef).toBe(evaluation.id);
     expect(app.evolution.candidateStatus(candidate.id).status).toBe("adopted");
   });
@@ -330,6 +340,7 @@ describe("M2 切片④：独立评估与晋升", () => {
   it("候选能力组合保留基准快照中的既有能力路由", () => {
     const app = bootSeededInstance();
     try {
+      upgradeJudgeToActive(app);
       const base = app.kernel.getOrganism("organism-default")!.activeGenomeId!;
       const first = ensureCapabilityGenome(
         { kernel: app.kernel, storage: app.storage, blobs: app.blobs, clock: { now: Date.now } },

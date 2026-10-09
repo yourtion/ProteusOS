@@ -11,6 +11,7 @@ import type {
   EventRecord,
   ExperienceRecord,
   ProcessRecord,
+  RunPurpose,
   RunRecord,
   RunState,
   RuntimeStore,
@@ -455,23 +456,25 @@ export class Storage implements KernelStore, RuntimeStore {
     );
   }
 
-  countActiveRuns(organismId: string): number {
+  countActiveRuns(organismId: string, scope?: RunPurpose): number {
+    const purposeFilter = scope ? " AND purpose = ?" : "";
     const row = this.db.get<{ n: number }>(
-      "SELECT COUNT(*) AS n FROM runs WHERE organism_id = ? AND state IN ('pending', 'running', 'waiting')",
-      organismId,
+      `SELECT COUNT(*) AS n FROM runs WHERE organism_id = ? AND state IN ('pending', 'running', 'waiting')${purposeFilter}`,
+      ...(scope ? [organismId, scope] : [organismId]),
     )!;
     return row.n;
   }
 
-  inFlightBudget(organismId: string): { attempts: number; seconds: number } {
+  inFlightBudget(organismId: string, scope?: RunPurpose): { attempts: number; seconds: number } {
+    const purposeFilter = scope ? " AND purpose = ?" : "";
     const row = this.db.get<{ attempts: number; seconds: number }>(
       `SELECT COALESCE(SUM(attempts), 0) AS attempts, COALESCE(SUM(seconds), 0) AS seconds
        FROM budget_ledger
        WHERE kind = 'reserve'
          AND run_id IN (
-           SELECT id FROM runs WHERE organism_id = ? AND state IN ('pending', 'running', 'waiting')
+           SELECT id FROM runs WHERE organism_id = ? AND state IN ('pending', 'running', 'waiting')${purposeFilter}
          )`,
-      organismId,
+      ...(scope ? [organismId, scope] : [organismId]),
     )!;
     return { attempts: row.attempts, seconds: row.seconds };
   }

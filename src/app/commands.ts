@@ -248,6 +248,58 @@ export async function buildCommand(opts: BuildOpts): Promise<void> {
   }
 }
 
+export interface JudgeUpgradeOpts extends CommonOpts {
+  regressionTask: string;
+  as?: string;
+}
+
+/**
+ * 裁判候选升级（M3 裁判拆分）：构造只升 acceptance-evaluator 的候选并
+ * 做判定等价评估（能力不变回归集 + 基线对照）；晋升仍由 operator 显式
+ * `proteus promote`。能力候选自此基于升级后的基准组合。
+ */
+export async function judgeUpgradeCommand(opts: JudgeUpgradeOpts): Promise<void> {
+  const regression = taskSubmissionFrom(opts.regressionTask, process.cwd());
+  const inst = openInstance(resolveInstanceRoot(opts.home));
+  try {
+    const { HYBRID_EVALUATOR_CONTENT } = await import("../evolution/assets.ts");
+    const { candidate, created } = inst.evolution.proposeJudgeCandidate({
+      evaluatorContent: HYBRID_EVALUATOR_CONTENT,
+      hypothesis:
+        "裁判升级为 hybrid-acceptance-v1（stats 形态判定与 v1 等价，新增混合输出 schema 校验）",
+      proposedBy: opts.as ?? PRINCIPAL_ID,
+    });
+    const { evaluation, status } = await inst.evolution.evaluateJudgeCandidate(candidate.id, {
+      regression,
+      requestedBy: opts.as ?? PRINCIPAL_ID,
+    });
+    if (opts.json) {
+      console.log(JSON.stringify({ candidate, evaluation, status, created }, null, 2));
+      return;
+    }
+    console.log(
+      `${created ? "✓" : "·"} judge candidate ${candidate.id}${created ? "" : "（快照去重，复用既有候选）"}`,
+    );
+    console.log(`evaluation ${evaluation.id} → ${evaluation.verdict}（${status}）`);
+    for (const run of evaluation.runs) {
+      console.log(
+        `  ${run.role.padEnd(10)} run ${run.runId} → ${run.state}${run.failureReason ? ` (${run.failureReason})` : ""}`,
+      );
+    }
+    if (evaluation.verdict === "eligible") {
+      console.log(`  可晋升：proteus promote ${candidate.id} --as ${opts.as ?? PRINCIPAL_ID}`);
+    } else if (evaluation.verdict === "rejected") {
+      console.log("  ✗ 新裁判破坏既有判定：禁止晋升，旧默认行为继续有效");
+      process.exitCode = 1;
+    } else {
+      console.log("  ? 基线对照失败（inconclusive）：评估环境不可信，可修复后重评");
+      process.exitCode = 1;
+    }
+  } finally {
+    inst.close();
+  }
+}
+
 export async function candidatesCommand(id: string | undefined, opts: CommonOpts): Promise<void> {
   const inst = openInstance(resolveInstanceRoot(opts.home));
   try {

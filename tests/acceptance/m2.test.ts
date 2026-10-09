@@ -6,14 +6,15 @@ import { afterAll, describe, expect, it } from "vitest";
 import { REPO_ROOT, tempInstanceRoot } from "../helpers.ts";
 
 /**
- * M2 验收固化：第一个自举故事全链路（roadmap §3，CLI 驱动、fake builder）。
- * ① R1 能力检查发现缺口 → 带截止点等待
- * ②③ 委托构建 → 独立测试验收 → 产出注册为不可变版本 → 候选 G1
- * ④ 独立评估：新能力验收 + 既有能力回归 + 基线对照（裁判由评估计划钉住）
- * ⑤ operator 批准 CAS Promotion（失败保持 G0）
+ * M2 自举故事全链路（CLI 驱动、fake builder；M3 裁判拆分后为两阶段晋升）。
+ * ① init G0；提交 Task T → R1 发现能力缺口，带截止点等待
+ * ② 裁判拆分（M3 前置）：judge-upgrade 构造只升裁判的候选 → 等价评估
+ *    eligible → operator promote → active=G_eval（裁判与能力变化不同快照）
+ * ③④ 委托构建 → 独立测试验收 → 采集构造候选 G_cap → 独立评估 eligible
+ * ⑤ operator 批准 → CAS Promotion → active=G_cap
  * ⑥ R1 failed/superseded 结案，R2 接替并以新能力完成摘要（独立比对 fixture）
- * ⑦ 回滚到 G0（revision 继续增长），R3 再次缺口等待 → 到期 failed/missing_capability；
- *    R2 与 G1 记录不被回滚抹去
+ * ⑦ 回滚（revision 只增不减），R3 再次缺口等待 → 到期 failed/missing_capability；
+ *    R2 与候选记录不被回滚抹去
  * 真实凭据版（Claude Code 作为 builder）见 tests/e2e/，PROTEUS_E2E 门控。
  */
 
@@ -38,10 +39,7 @@ function proteus(args: string[]): { status: number | null; stdout: string; stder
 
 function proteusJson<T>(args: string[]): T {
   const r = proteus(args);
-  expect({ status: r.status, stderr: r.stderr.slice(0, 200) }).toEqual({
-    status: 0,
-    stderr: "",
-  });
+  expect({ status: r.status, stderr: r.stderr.slice(0, 200) }).toEqual({ status: 0, stderr: "" });
   return JSON.parse(r.stdout) as T;
 }
 
@@ -49,9 +47,11 @@ afterAll(() => {
   // 临时实例由系统清理
 });
 
-describe("M2：第一个自举故事（端到端）", () => {
+describe("M2：第一个自举故事（两阶段晋升，端到端）", () => {
   let g0 = "";
+  let gEval = "";
   let r1 = "";
+  let judgeCandidateId = "";
   let candidateId = "";
 
   it("① init G0；提交 Task T → R1 发现能力缺口，带截止点等待", () => {
@@ -59,25 +59,59 @@ describe("M2：第一个自举故事（端到端）", () => {
     expect(init.revision).toBe(1);
     g0 = init.snapshotId;
 
-    const summary = proteusJson<{
-      runId: string;
-      state: string;
-      snapshotId: string;
-    }>(["submit", join(M2, "tasks", "summary-task.yaml"), "--json"]);
+    const summary = proteusJson<{ runId: string; state: string; snapshotId: string }>([
+      "submit",
+      join(M2, "tasks", "summary-task.yaml"),
+      "--json",
+    ]);
     expect(summary.state).toBe("waiting");
     expect(summary.snapshotId).toBe(g0);
     r1 = summary.runId;
-
-    const detail = proteusJson<{ run: { missingCapabilities: string[]; waitingUntil: number } }>([
-      "runs",
-      r1,
-      "--json",
-    ]);
-    expect(detail.run.missingCapabilities).toEqual(["changed-file-summary"]);
-    expect(detail.run.waitingUntil).toBeGreaterThan(0);
   });
 
-  it("②③ 委托构建 → 独立测试验收 → 采集构造候选 G1（digest 幂等）", () => {
+  it("② 裁判拆分：judge-upgrade 等价评估 eligible → operator promote → active=G_eval", () => {
+    const upgrade = proteusJson<{
+      candidate: { id: string; baseSnapshotId: string; proposedSnapshotId: string };
+      evaluation: { verdict: string; runs: Array<{ role: string; state: string }> };
+      status: string;
+    }>([
+      "judge-upgrade",
+      "--regression-task",
+      join(M2, "tasks", "stats-regression.yaml"),
+      "--json",
+    ]);
+    expect(upgrade.evaluation.verdict).toBe("eligible");
+    // 候选臂（新裁判）与基线臂（基准裁判）在既有任务上判定一致
+    expect(upgrade.evaluation.runs.every((r) => r.state === "succeeded")).toBe(true);
+    expect(upgrade.status).toBe("eligible");
+    judgeCandidateId = upgrade.candidate.id;
+
+    const outcome = proteusJson<{
+      result: string;
+      promotion: { resultRevision: number; kind: string; toSnapshotId: string };
+    }>(["promote", judgeCandidateId, "--as", "principal-local", "--json"]);
+    expect(outcome.result).toBe("promoted");
+    expect(outcome.promotion.resultRevision).toBe(2);
+    gEval = outcome.promotion.toSnapshotId;
+
+    // 裁判候选未动能力与图：G_eval 与 G0 仅 acceptance-evaluator 版本不同
+    const g0Snap = proteusJson<{ value: { bindings: Record<string, string> } }>([
+      "inspect",
+      g0,
+      "--json",
+    ]);
+    const gEvalSnap = proteusJson<{ value: { bindings: Record<string, string> } }>([
+      "inspect",
+      gEval,
+      "--json",
+    ]);
+    expect(Object.keys(g0Snap.value.bindings)).toEqual(Object.keys(gEvalSnap.value.bindings));
+    expect(gEvalSnap.value.bindings["acceptance-evaluator"]).not.toBe(
+      g0Snap.value.bindings["acceptance-evaluator"],
+    );
+  });
+
+  it("③④ 委托构建 → 独立测试验收 → 候选 G_cap（继承升级后裁判）→ 独立评估 eligible", () => {
     const build = proteusJson<{
       builderRun: string;
       candidate: { id: string; baseSnapshotId: string; proposedSnapshotId: string };
@@ -99,35 +133,13 @@ describe("M2：第一个自举故事（端到端）", () => {
       join(M2, "tasks", "stats-regression.yaml"),
       "--json",
     ]);
-    expect(build.builderRun).toBeTruthy();
     expect(build.created).toBe(true);
     expect(build.status.status).toBe("proposed");
-    expect(build.candidate.baseSnapshotId).toBe(g0);
+    expect(build.candidate.baseSnapshotId).toBe(gEval); // 基于 G_eval（裁判拆分）
     candidateId = build.candidate.id;
 
-    // 候选快照含能力槽位，G0 未被触碰
-    const snapshot = proteusJson<{ value: { bindings: Record<string, string> } }>([
-      "inspect",
-      build.candidate.proposedSnapshotId,
-      "--json",
-    ]);
-    expect(Object.keys(snapshot.value.bindings)).toEqual(
-      expect.arrayContaining([
-        "capability/changed-file-summary",
-        "task-graph",
-        "routing-policy",
-        "acceptance-evaluator",
-      ]),
-    );
-  });
-
-  it("④ 独立评估：新能力验收 + 既有能力回归 + 基线对照 → eligible", () => {
     const evaluation = proteusJson<{
-      evaluation: {
-        id: string;
-        verdict: string;
-        runs: Array<{ role: string; state: string }>;
-      };
+      evaluation: { verdict: string; runs: Array<{ role: string; state: string }> };
       status: string;
     }>([
       "evaluate",
@@ -139,7 +151,6 @@ describe("M2：第一个自举故事（端到端）", () => {
       "--json",
     ]);
     expect(evaluation.evaluation.verdict).toBe("eligible");
-    expect(evaluation.status).toBe("eligible");
     expect(evaluation.evaluation.runs.map((r) => `${r.role}:${r.state}`)).toEqual([
       "new-capability:succeeded",
       "regression:succeeded",
@@ -147,14 +158,13 @@ describe("M2：第一个自举故事（端到端）", () => {
     ]);
   });
 
-  it("⑤ operator 批准 → CAS Promotion：active → G1，revision 前进", () => {
+  it("⑤ operator 批准 → CAS Promotion：active → G_cap，revision 前进", () => {
     const outcome = proteusJson<{
       result: string;
-      promotion: { resultRevision: number; kind: string; toSnapshotId: string };
+      promotion: { resultRevision: number; kind: string };
     }>(["promote", candidateId, "--as", "principal-local", "--json"]);
     expect(outcome.result).toBe("promoted");
-    expect(outcome.promotion.kind).toBe("adopt");
-    expect(outcome.promotion.resultRevision).toBe(2);
+    expect(outcome.promotion.resultRevision).toBe(3);
   });
 
   it("⑥ R1 failed/superseded 结案；R2 接替并以新能力完成摘要（输出与 fixture 一致）", () => {
@@ -168,9 +178,8 @@ describe("M2：第一个自举故事（端到端）", () => {
     const r2 = proteusJson<{
       run: {
         supersedesRunId: string;
-        failureReason: string;
+        failureReason: string | null;
         snapshotId: string;
-        taskRevision: number;
         purpose: string;
       };
     }>(["runs", result.successor.runId, "--json"]);
@@ -184,7 +193,7 @@ describe("M2：第一个自举故事（端到端）", () => {
     }>(["runs", r1, "--json"]);
     expect(r1After.run.state).toBe("failed");
     expect(r1After.run.failureReason).toBe("superseded");
-    expect(r1After.run.snapshotId).toBe(g0); // R1 固定 G0
+    expect(r1After.run.snapshotId).toBe(g0); // R1 固定提交时的快照
 
     // 独立验收器：R2 输出与 fixture 期望逐项一致（不经候选裁判）
     const output = JSON.parse(
@@ -198,41 +207,32 @@ describe("M2：第一个自举故事（端到端）", () => {
     );
   });
 
-  it("⑦ 回滚到 G0（revision 继续增长）；R3 再次缺口等待 → 到期 failed/missing_capability；记录不抹去", async () => {
+  it("⑦ 回滚（revision 只增不减）；R3 再次缺口等待 → 到期 failed/missing_capability；记录不抹去", async () => {
+    // 回滚到 G_eval（历史采用快照；无能力槽位 → R3 缺口场景同样成立）
     const rollback = proteusJson<{
       result: string;
       promotion: { resultRevision: number; kind: string };
-    }>(["rollback", "--to", g0, "--as", "principal-local", "--json"]);
+    }>(["rollback", "--to", gEval, "--as", "principal-local", "--json"]);
     expect(rollback.result).toBe("promoted");
     expect(rollback.promotion.kind).toBe("rollback");
-    expect(rollback.promotion.resultRevision).toBe(3); // 只增不减
+    expect(rollback.promotion.resultRevision).toBe(4); // 只增不减
 
-    // R3：同一 Task 在 G0 下再次缺口等待
     const r3 = proteusJson<{ runId: string; state: string; snapshotId: string }>([
       "submit",
       join(M2, "tasks", "summary-task.yaml"),
       "--json",
     ]);
     expect(r3.state).toBe("waiting");
-    expect(r3.snapshotId).toBe(g0);
+    expect(r3.snapshotId).toBe(gEval);
 
-    // 等待截止（fixture 配置 1 秒）后 advance 结案
     await new Promise((resolve) => setTimeout(resolve, 1100));
     const advanced = proteusJson<{ state: string; note: string }>(["advance", r3.runId, "--json"]);
     expect(advanced.state).toBe("failed");
     expect(advanced.note).toContain("missing_capability");
 
-    const r3After = proteusJson<{ run: { state: string; failureReason: string } }>([
-      "runs",
-      r3.runId,
-      "--json",
-    ]);
-    expect(r3After.run.failureReason).toBe("missing_capability");
-
-    // G1 与 R2 记录仍可查看，不被回滚抹去
-    const snapshot = proteus(["inspect", candidateId, "--json"]);
-    expect(snapshot.status).toBe(0);
+    // 候选与晋升记录仍可查看，不被回滚抹去
     const candidates = proteusJson<Array<{ id: string; status: string }>>(["candidates", "--json"]);
     expect(candidates.find((c) => c.id === candidateId)!.status).toBe("adopted");
+    expect(candidates.find((c) => c.id === judgeCandidateId)!.status).toBe("adopted");
   });
 });

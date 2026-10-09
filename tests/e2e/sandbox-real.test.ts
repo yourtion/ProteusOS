@@ -6,7 +6,7 @@ import { ensureCapabilityGenome } from "../../src/evolution/assets.ts";
 import { MicrosandboxBackend } from "../../src/runtime/sandbox.ts";
 import { openInstance } from "../../src/app/instance.ts";
 import { installSeed } from "../../src/app/seed.ts";
-import { tempInstanceRoot } from "../helpers.ts";
+import { tempInstanceRoot, upgradeJudgeToActive } from "../helpers.ts";
 
 /**
  * 真实 microsandbox 沙箱 E2E（M3 切片①）：默认跳过。
@@ -35,6 +35,7 @@ describe("真实 microsandbox 沙箱（PROTEUS_SANDBOX 显式启用）", () => {
         blobs: inst.blobs,
         clock: { now: Date.now },
       });
+      upgradeJudgeToActive(inst);
       const genome = ensureCapabilityGenome(
         { kernel: inst.kernel, storage: inst.storage, blobs: inst.blobs, clock: { now: Date.now } },
         {

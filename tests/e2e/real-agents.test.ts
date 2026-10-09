@@ -11,6 +11,7 @@ import { RuleDecisionProvider } from "../../src/adapters/decision-rule/index.ts"
 import { Evolution } from "../../src/evolution/index.ts";
 import { v7 as uuidv7 } from "uuid";
 import { bootSeededInstance, fixturePath, installCustomGenome } from "../helpers.ts";
+import { HYBRID_EVALUATOR_CONTENT } from "../../src/evolution/assets.ts";
 
 /**
  * 真实 agent E2E（M1/M2）：消耗真实凭据与费用，默认跳过。
@@ -63,9 +64,12 @@ async function runDelegatedTask(executorName: string, inst: AppInstance): Promis
     clock: { now: Date.now },
     ids: { next: uuidv7 },
     organismBudget: {
-      ...DEFAULT_ORGANISM_BUDGET,
-      maxConcurrentRuns: 1,
-      maxInFlightWallClockSeconds: 1200,
+      normal: {
+        ...DEFAULT_ORGANISM_BUDGET.normal,
+        maxConcurrentRuns: 1,
+        maxInFlightWallClockSeconds: 1200,
+      },
+      evaluation: DEFAULT_ORGANISM_BUDGET.evaluation,
     },
   });
   const summary = await runtime.submitTask({
@@ -130,9 +134,12 @@ describe("M1 E2E：真实 agent（PROTEUS_E2E 显式启用）", () => {
         clock: { now: Date.now },
         ids: { next: uuidv7 },
         organismBudget: {
-          ...DEFAULT_ORGANISM_BUDGET,
-          maxConcurrentRuns: 4,
-          maxInFlightWallClockSeconds: 3600,
+          normal: {
+            ...DEFAULT_ORGANISM_BUDGET.normal,
+            maxConcurrentRuns: 4,
+            maxInFlightWallClockSeconds: 3600,
+          },
+          evaluation: DEFAULT_ORGANISM_BUDGET.evaluation,
         },
       });
       const evo = new Evolution({
@@ -145,6 +152,28 @@ describe("M1 E2E：真实 agent（PROTEUS_E2E 显式启用）", () => {
         clock: { now: Date.now },
         ids: { next: uuidv7 },
       });
+
+      // ⓪ 裁判拆分（M3）：先升级裁判为 hybrid（独立候选 + 等价评估 + operator 晋升）
+      const { candidate: judgeCandidate } = evo.proposeJudgeCandidate({
+        evaluatorContent: HYBRID_EVALUATOR_CONTENT,
+        hypothesis: "裁判升级为 hybrid（E2E 两阶段自举）",
+        proposedBy: "principal-local",
+      });
+      const judgeEval = await evo.evaluateJudgeCandidate(judgeCandidate.id, {
+        regression: {
+          goal: "统计摘要（裁判等价回归）",
+          inputs: [fixturePath("input-a")],
+          budget: { maxAttempts: 3, maxWallClockSeconds: 120 },
+          acceptance: {
+            outputSchema: fixturePath("schemas", "stats-summary.schema.json"),
+            verifier: "stats-acceptance",
+          },
+        },
+        requestedBy: "principal-local",
+      });
+      expect(judgeEval.evaluation.verdict).toBe("eligible");
+      const judgePromoted = evo.promote(judgeCandidate.id, { authorizedBy: "principal-local" });
+      expect(judgePromoted.result).toBe("promoted");
 
       // ① R1 缺口等待
       const r1 = await runtime.submitTask({
