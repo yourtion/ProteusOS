@@ -313,4 +313,10 @@ CREATE TABLE experience_datasets (
 CREATE INDEX idx_experience_datasets_purpose ON experience_datasets(purpose);
 `,
   },
+  {
+    // M3 策略评估：held-out 数据集引用列（使用计数与复用审计经此查询）
+    version: 7,
+    name: "m3-evaluation-dataset-ref",
+    sql: "ALTER TABLE evaluations ADD COLUMN dataset_ref TEXT;",
+  },
 ];

@@ -193,3 +193,13 @@ M2 落地本文 §5–§8 的最小版本，对应实现与让步：
 - **晋升授权**：proposed 首版默认——评估自动执行，晋升由 operator 显式批准（`proteus promote --as`）；评估完成不等于授权（最新评估必须 eligible 才放行）。
 - **让步（ADR 0006）**：hybrid 裁判与能力变化同处候选快照，以"固定裁判一方 + tests/evals 等价性证明"折衷，M3 拆分；评估预算与普通 Run 共享 organism 池；成本指标显式 null。
 - **§11 MVP 五条验收**全部落地：并发同快照（M0 既有 + 评估三 Run 并行）、人工候选 + 固定基线评估、operator 批准可审计 Promotion、stale 重构重评、回滚后再跑（tests/acceptance/m2.test.ts 七步故事固化；真实 builder 版 `PROTEUS_E2E=bootstrap`）。
+
+## 13. 实现注记（M3 经验驱动演化）
+
+M3 落地本文 §3/§6 的离线闭环，决策与让步全文见 [ADR 0008](./adr/0008-m3-experience-driven-evolution.md)：
+
+- **冻结经验集**（§3"只读取一个已确定的经验窗口"）：`experience_datasets` 固定成员清单+内容摘要+截止点+过滤规则版本+用途许可；学习投影（experience × run/task × decision_calls × 预算）是 Consolidation 唯一输入，不可回放如实标注。
+- **Consolidation**（§3 离线路径）：首版纯规则确定性归纳（不调 LLM）；正例两类——成功 Run 的实际选择（expectedOutput 验收即正确性）与失败/弃权成员经开发集 gold join；门槛/候选数/扫描预算显式预限制；零提议正常。独立队列/取消策略挂账（现为同步函数+预算参数）。
+- **策略候选**（实验文档 §11"只改路由 Policy"）：只换 routing-policy 槽位（图/能力/裁判/视图固定）；rule-hybrid-v1 特征路由优先 + 基准兜底继承（无特征任务行为不变的回归约束）。
+- **多目标比较**（§6 五条最低证据要求）：m3-policy-eval-v1 双臂×cases×repeats 固定顺序；成功率/路由准确率/弃权率/时延 p50·p95/跨重复方差分列记录（uncertainty），不合成总分；样本不足 inconclusive 不判通过；held-out 使用计数经 evaluations.datasetRef 审计（多次查看同一 held-out 集的跟踪要求落地）。
+- **三项前置兑现**：SandboxBackend 真隔离（microsandbox 后端；不可用拒绝执行不降级；docker 后端预留）、评估独立预算池（purpose 双池）、裁判拆分两阶段晋升（§6"拆分为不同候选"正式兑现，自举链 G0→G_eval→G_cap）。

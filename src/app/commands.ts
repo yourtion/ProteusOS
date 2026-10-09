@@ -427,6 +427,72 @@ export async function consolidateCommand(datasetId: string, opts: ConsolidateOpt
   }
 }
 
+export interface EvaluatePolicyOpts extends CommonOpts {
+  cases: string;
+  repeats: string;
+}
+
+/** 策略候选评估（m3-policy-eval-v1）：双臂 × 验证集 × 重复，指标分列 */
+export async function evaluatePolicyCommand(
+  candidateId: string,
+  opts: EvaluatePolicyOpts,
+): Promise<void> {
+  const cases = JSON.parse(readFileSync(resolve(opts.cases), "utf8")) as Array<{
+    task: {
+      goal: string;
+      inputs: string[];
+      budget: { maxAttempts: number; maxWallClockSeconds: number };
+      requires?: string[];
+      acceptance: { outputSchema: string; verifier: string };
+    };
+    expectedChoice: string | null;
+  }>;
+  const repeats = Number.parseInt(opts.repeats, 10);
+  const plan = {
+    cases,
+    repeats: Number.isNaN(repeats) ? 1 : Math.max(1, repeats),
+    thresholds: { minSuccessRate: 0.75, minImprovement: 0.25, minSamples: 4 },
+    requestedBy: PRINCIPAL_ID,
+  };
+  const inst = openInstance(resolveInstanceRoot(opts.home));
+  try {
+    const { evaluation, status } = await inst.evolution.evaluatePolicyCandidate(candidateId, plan);
+    if (opts.json) {
+      console.log(JSON.stringify({ evaluation, status }, null, 2));
+      return;
+    }
+    console.log(
+      `evaluation ${evaluation.id} → ${evaluation.verdict}（candidate ${candidateId} → ${status}）`,
+    );
+    if (evaluation.policy) {
+      const fmt = (m: {
+        runs: number;
+        successRate: number;
+        routeAccuracy: number | null;
+        abstainRate: number;
+        latencyP50Ms: number;
+        latencyP95Ms: number;
+        successRateVariance: number;
+      }) =>
+        `成功率 ${(m.successRate * 100).toFixed(0)}%、路由准确 ${m.routeAccuracy === null ? "n/a" : `${(m.routeAccuracy * 100).toFixed(0)}%`}、弃权 ${(m.abstainRate * 100).toFixed(0)}%、p50/p95 ${m.latencyP50Ms}/${m.latencyP95Ms}ms、方差 ${m.successRateVariance.toFixed(3)}`;
+      console.log(`  基线臂   ${fmt(evaluation.policy.base)}`);
+      console.log(`  候选臂   ${fmt(evaluation.policy.candidate)}`);
+      console.log(
+        `  门槛     成功率 ≥ ${(evaluation.policy.thresholds.minSuccessRate * 100).toFixed(0)}%、改善 ≥ ${(evaluation.policy.thresholds.minImprovement * 100).toFixed(0)}pp、样本 ≥ ${evaluation.policy.thresholds.minSamples}`,
+      );
+    }
+    console.log(
+      evaluation.verdict === "eligible"
+        ? "  ✓ 达标：可 proteus promote"
+        : evaluation.verdict === "rejected"
+          ? "  ✗ 未达标：禁止晋升，旧默认行为继续有效"
+          : "  ? 证据不足（inconclusive）：不判通过，可补充验证后重评",
+    );
+  } finally {
+    inst.close();
+  }
+}
+
 export async function candidatesCommand(id: string | undefined, opts: CommonOpts): Promise<void> {
   const inst = openInstance(resolveInstanceRoot(opts.home));
   try {

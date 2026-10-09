@@ -164,6 +164,7 @@ export interface EvaluationRow {
   runs: string;
   verdict: string;
   metrics: string;
+  dataset_ref: string | null;
   created_at: number;
 }
 

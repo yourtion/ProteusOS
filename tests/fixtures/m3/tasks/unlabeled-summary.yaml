@@ -1,0 +1,9 @@
+goal: 请把这次改动的文件按类别整理成清单
+inputs: ["../../m2/inputs/changed-files.json"]
+constraints:
+  budget:
+    maxAttempts: 1
+    maxWallClockSeconds: 60
+acceptance:
+  outputSchema: ../../m2/schemas/changed-file-summary.schema.json
+  verifier: stats-acceptance

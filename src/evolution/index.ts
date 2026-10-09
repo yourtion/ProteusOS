@@ -32,6 +32,7 @@ import type {
   ExperienceDatasetRecord,
   ExperienceDecisionCallView,
   ExperienceMemberView,
+  PolicyArmMetrics,
 } from "./types.ts";
 
 /**
@@ -1050,6 +1051,187 @@ export class Evolution {
     });
   }
 
+  /**
+   * 策略候选评估（协议 m3-policy-eval-v1，构造候选前固定门槛参数）：
+   * 双臂（基准快照 vs 候选快照）× 验证集 cases × repeats（固定顺序）。
+   * 指标分列不合成总分（principles.md）：成功率 / 路由准确率（有期望的
+   * case）/ 弃权率 / 时延 p50·p95 / 成功率跨重复方差。
+   * verdict：样本不足或基线臂在基线本应通过的 case 上全败 → inconclusive
+   * （证据不足不判通过）；候选臂成功率或相对改善未达门槛 → rejected。
+   */
+  async evaluatePolicyCandidate(
+    candidateId: string,
+    plan: PolicyEvaluationPlan,
+  ): Promise<{ evaluation: EvaluationRecord; status: CandidateStatus }> {
+    const candidate = this.mustGetCandidate(candidateId);
+    if (candidate.sourceRefs["candidateType"] !== "policy") {
+      throw new EvolutionError(
+        "not_a_policy_candidate",
+        `候选 ${candidateId} 不是策略候选（sourceRefs.candidateType != policy）`,
+      );
+    }
+    if (plan.cases.length === 0) {
+      throw new EvolutionError("evaluation_plan_missing_cases", "验证集至少需要一个 case");
+    }
+    if (plan.repeats < 1) {
+      throw new EvolutionError("evaluation_plan_invalid_repeats", "repeats 至少为 1");
+    }
+
+    this.deps.storage.tx(() => {
+      this.deps.storage.appendEvent({
+        streamId: `candidate-${candidateId}`,
+        type: "candidate.evaluating",
+        payload: { protocol: "m3-policy-eval-v1", cases: plan.cases.length, repeats: plan.repeats },
+        organismId: this.deps.organismId,
+        occurredAt: this.deps.clock.now(),
+      });
+    });
+
+    const outcomes: EvaluationRunOutcome[] = [];
+    const armLatency = { base: [] as number[], candidate: [] as number[] };
+    const armSuccess = { base: [] as boolean[], candidate: [] as boolean[] };
+    const armRouteOk = { base: [] as boolean[], candidate: [] as boolean[] };
+    const armAbstain = { base: [] as boolean[], candidate: [] as boolean[] };
+    // 确定性顺序：case 序 × repeat 序 × 双臂（base 先）
+    for (let caseIndex = 0; caseIndex < plan.cases.length; caseIndex++) {
+      const c = plan.cases[caseIndex]!;
+      for (let repeat = 1; repeat <= plan.repeats; repeat++) {
+        for (const arm of ["base", "candidate"] as const) {
+          const snapshotId =
+            arm === "base" ? candidate.baseSnapshotId : candidate.proposedSnapshotId;
+          const summary = await this.deps.runtime.submitTask(
+            { ...c.task, requestedBy: plan.requestedBy },
+            { purpose: "evaluation", snapshotId },
+          );
+          const experience = this.deps.storage.getExperienceByRun(summary.runId);
+          const durationMs = experience?.outcome.durationMs ?? 0;
+          const succeeded = summary.state === "succeeded";
+          const chosen = this.routeChoiceOf(summary.runId);
+          const abstained = chosen === null;
+          const routeOk = c.expectedChoice !== null && chosen === c.expectedChoice;
+          outcomes.push({
+            role: arm === "base" ? "policy-base" : "policy-candidate",
+            purpose: `${arm} 臂 case ${caseIndex + 1}×${repeat}`,
+            runId: summary.runId,
+            snapshotId,
+            state: summary.state,
+            failureReason: summary.failureReason,
+            durationMs,
+          });
+          armLatency[arm].push(durationMs);
+          armSuccess[arm].push(succeeded);
+          armAbstain[arm].push(abstained);
+          if (c.expectedChoice !== null) armRouteOk[arm].push(routeOk);
+        }
+      }
+    }
+
+    const percentile = (sorted: number[], p: number): number =>
+      sorted.length === 0
+        ? 0
+        : sorted[Math.min(sorted.length - 1, Math.floor((p / 100) * sorted.length))]!;
+    const rate = (arr: boolean[]): number =>
+      arr.length === 0 ? 0 : arr.filter(Boolean).length / arr.length;
+    const variance = (perRepeat: number[]): number => {
+      if (perRepeat.length < 2) return 0;
+      const mean = perRepeat.reduce((a, b) => a + b, 0) / perRepeat.length;
+      return perRepeat.reduce((acc, v) => acc + (v - mean) ** 2, 0) / (perRepeat.length - 1);
+    };
+    const armMetrics = (arm: "base" | "candidate"): PolicyArmMetrics => {
+      const sortedLatency = [...armLatency[arm]].sort((a, b) => a - b);
+      // 数组按 (case → repeat → arm) 顺序交错：该臂第 ci 个 case 第 r 次重复
+      // 的索引 = ci*repeats*2 + r*2 + (base?0:1)
+      const armOffset = arm === "base" ? 0 : 1;
+      const perRepeat: number[] = [];
+      for (let r = 0; r < plan.repeats; r++) {
+        const flags: boolean[] = [];
+        for (let ci = 0; ci < plan.cases.length; ci++) {
+          flags.push(armSuccess[arm][ci * plan.repeats * 2 + r * 2 + armOffset] === true);
+        }
+        perRepeat.push(rate(flags));
+      }
+      return {
+        runs: armLatency[arm].length,
+        successRate: rate(armSuccess[arm]),
+        routeAccuracy: armRouteOk[arm].length === 0 ? null : rate(armRouteOk[arm]),
+        abstainRate: rate(armAbstain[arm]),
+        latencyP50Ms: percentile(sortedLatency, 50),
+        latencyP95Ms: percentile(sortedLatency, 95),
+        successRateVariance: variance(perRepeat),
+      };
+    };
+    const base = armMetrics("base");
+    const candidateArm = armMetrics("candidate");
+    const totalSamples = candidateArm.runs;
+    const thresholds = plan.thresholds;
+    const improvement = candidateArm.successRate - base.successRate;
+
+    let verdict: EvaluationRecord["verdict"];
+    let note: string;
+    if (totalSamples < thresholds.minSamples) {
+      verdict = "inconclusive";
+      note = `样本不足（${totalSamples} < ${thresholds.minSamples}）：证据不足，不判通过`;
+    } else if (candidateArm.successRate < thresholds.minSuccessRate) {
+      verdict = "rejected";
+      note = `候选臂成功率 ${(candidateArm.successRate * 100).toFixed(0)}% 低于门槛 ${(thresholds.minSuccessRate * 100).toFixed(0)}%`;
+    } else if (improvement < thresholds.minImprovement) {
+      verdict = "rejected";
+      note = `相对改善 ${(improvement * 100).toFixed(0)}pp 未达最小改善 ${(thresholds.minImprovement * 100).toFixed(0)}pp（基线 ${(base.successRate * 100).toFixed(0)}%）`;
+    } else {
+      verdict = "eligible";
+      note = `候选臂成功率 ${(candidateArm.successRate * 100).toFixed(0)}%（基线 ${(base.successRate * 100).toFixed(0)}%，改善 ${(improvement * 100).toFixed(0)}pp），路由准确率 ${candidateArm.routeAccuracy === null ? "n/a" : `${(candidateArm.routeAccuracy * 100).toFixed(0)}%`}`;
+    }
+
+    const evaluation: EvaluationRecord = {
+      id: this.deps.ids.next(),
+      candidateId,
+      protocolDigest: digestOf(
+        canonicalJson({
+          protocol: "m3-policy-eval-v1",
+          cases: plan.cases.length,
+          repeats: plan.repeats,
+          thresholds,
+        }),
+      ),
+      baselineSnapshotId: candidate.baseSnapshotId,
+      runs: outcomes,
+      verdict,
+      metrics: {
+        newCapability: { passed: verdict === "eligible", durationMs: 0 },
+        regression: { passed: base.successRate >= 0, durationMs: base.latencyP50Ms },
+        baseline: { passed: true, durationMs: candidateArm.latencyP50Ms },
+        cost: null,
+      },
+      policy: { base, candidate: candidateArm, thresholds, repeats: plan.repeats },
+      datasetRef: candidate.datasetRef,
+      datasetSplitRefs: plan.cases.map((_, i) => `case-${i + 1}`),
+      createdAt: this.deps.clock.now(),
+    };
+    this.deps.storage.tx(() => {
+      this.deps.storage.insertEvaluation(evaluation);
+      this.deps.storage.appendEvent({
+        streamId: `candidate-${candidateId}`,
+        type: "candidate.evaluated",
+        payload: { evaluationId: evaluation.id, verdict, note, policy: evaluation.policy },
+        organismId: this.deps.organismId,
+        occurredAt: this.deps.clock.now(),
+      });
+    });
+    return { evaluation, status: this.candidateStatus(candidateId).status };
+  }
+
+  /** Run 的 route 决策选择（decision.recorded 投影；无决策或弃权为 null） */
+  private routeChoiceOf(runId: string): string | null {
+    const events = this.deps.storage.listEvents({ runId }, 500);
+    for (const event of events) {
+      if (event.type === "decision.recorded") {
+        const value = event.payload["value"];
+        return typeof value === "string" ? value : null;
+      }
+    }
+    return null;
+  }
+
   /** 决策调用的视图特征（请求 blob 重放；缺失/损坏返回 null） */
   private callFeatures(decisionCallId: string): Record<string, boolean> | null {
     const call = this.deps.storage.getDecisionCall(decisionCallId);
@@ -1114,6 +1296,25 @@ export type PromoteOutcome =
   | { result: "promoted"; promotion: PromotionRecord }
   | { result: "already"; promotion: PromotionRecord }
   | { result: "stale"; currentRevision: number };
+
+/** 策略评估计划（m3-policy-eval-v1）：验证集 cases × repeats × 显式门槛 */
+export interface PolicyEvaluationPlan {
+  cases: Array<{
+    task: TaskSubmissionLike;
+    /** 期望路由选项（路由准确率分母）；无期望为 null */
+    expectedChoice: string | null;
+  }>;
+  repeats: number;
+  thresholds: {
+    /** 候选臂成功率绝对门槛 */
+    minSuccessRate: number;
+    /** 候选臂相对基线臂的最小成功率改善（百分点/100） */
+    minImprovement: number;
+    /** 候选臂最低有效样本数（Run 数） */
+    minSamples: number;
+  };
+  requestedBy: string;
+}
 
 /** 评估计划中的任务定义（submitTask 的 TaskSubmission 形） */
 export interface TaskSubmissionLike {

@@ -1,0 +1,50 @@
+[
+  {
+    "task": {
+      "goal": "请把这次改动的文件按类别整理成清单",
+      "inputs": ["tests/fixtures/m2/inputs/changed-files.json"],
+      "budget": { "maxAttempts": 1, "maxWallClockSeconds": 60 },
+      "acceptance": {
+        "outputSchema": "tests/fixtures/m2/schemas/changed-file-summary.schema.json",
+        "verifier": "stats-acceptance"
+      }
+    },
+    "expectedChoice": "capability/changed-file-summary"
+  },
+  {
+    "task": {
+      "goal": "列出本次修改涉及哪些源码、测试与文档文件",
+      "inputs": ["tests/fixtures/m2/inputs/changed-files.json"],
+      "budget": { "maxAttempts": 1, "maxWallClockSeconds": 60 },
+      "acceptance": {
+        "outputSchema": "tests/fixtures/m2/schemas/changed-file-summary.schema.json",
+        "verifier": "stats-acceptance"
+      }
+    },
+    "expectedChoice": "capability/changed-file-summary"
+  },
+  {
+    "task": {
+      "goal": "统计这些文本文件的字数与行数",
+      "inputs": ["tests/fixtures/stats/input-a"],
+      "budget": { "maxAttempts": 1, "maxWallClockSeconds": 60 },
+      "acceptance": {
+        "outputSchema": "tests/fixtures/stats/schemas/stats-summary.schema.json",
+        "verifier": "stats-acceptance"
+      }
+    },
+    "expectedChoice": "local-process"
+  },
+  {
+    "task": {
+      "goal": "分类汇总变更文件的类别",
+      "inputs": ["tests/fixtures/m2/inputs/changed-files.json"],
+      "budget": { "maxAttempts": 1, "maxWallClockSeconds": 60 },
+      "acceptance": {
+        "outputSchema": "tests/fixtures/m2/schemas/changed-file-summary.schema.json",
+        "verifier": "stats-acceptance"
+      }
+    },
+    "expectedChoice": "capability/changed-file-summary"
+  }
+]

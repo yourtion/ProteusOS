@@ -1,0 +1,7 @@
+[
+  { "goal": "请把这次改动的文件按类别整理成清单", "choice": "capability/changed-file-summary" },
+  {
+    "goal": "请把这次改动的文件按类别整理成清单（第二次）",
+    "choice": "capability/changed-file-summary"
+  }
+]

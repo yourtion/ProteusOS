@@ -10,6 +10,7 @@ import {
   initCommand,
   inspectCommand,
   consolidateCommand,
+  evaluatePolicyCommand,
   datasetFreezeCommand,
   datasetInspectCommand,
   datasetListCommand,
@@ -97,6 +98,17 @@ withCommon(
 
 withCommon(
   program
+    .command("evaluate-policy")
+    .description("策略候选评估：双臂 × 验证集 × 重复（m3-policy-eval-v1，指标分列）")
+    .argument("<id>", "Candidate ID")
+    .requiredOption("--cases <file>", "验证集 JSON（[{task, expectedChoice}]，新 family）")
+    .option("--repeats <n>", "每 case 重复次数（默认 1）", "1"),
+).action(async (id: string, opts) => {
+  await evaluatePolicyCommand(id, opts);
+});
+
+withCommon(
+  program
     .command("consolidate")
     .description("从冻结经验集归纳策略候选（确定性规则归纳，只改 routing-policy）")
     .argument("<datasetId>", "development 用途的经验集 ID")
@@ -107,31 +119,26 @@ withCommon(
 
 withCommon(
   program
-    .command("dataset")
-    .description("冻结经验集：显式成员 + 内容摘要 + 截止点 + 用途许可（不可变）")
-    .addCommand(
-      withCommon(
-        new Command("freeze")
-          .description("冻结当前经验窗口为数据集")
-          .option("--purpose <purpose>", "development | validation | regression", "development")
-          .option("--cutoff <iso>", "截止时刻（默认现在）"),
-      ).action(async (opts) => {
-        await datasetFreezeCommand(opts);
-      }),
-    )
-    .addCommand(
-      withCommon(new Command("list").description("列出冻结数据集")).action(async (opts) => {
-        await datasetListCommand(opts);
-      }),
-    )
-    .addCommand(
-      withCommon(
-        new Command("inspect").description("查看数据集与学习投影").argument("<id>", "Dataset ID"),
-      ).action(async (id: string, opts) => {
-        await datasetInspectCommand(id, opts);
-      }),
-    ),
-);
+    .command("dataset-freeze")
+    .description("冻结经验窗口为数据集（显式成员 + 内容摘要 + 截止点 + 用途许可）")
+    .option("--purpose <purpose>", "development | validation | regression", "development")
+    .option("--cutoff <iso>", "截止时刻（默认现在）"),
+).action(async (opts) => {
+  await datasetFreezeCommand(opts);
+});
+
+withCommon(program.command("dataset-list").description("列出冻结经验集")).action(async (opts) => {
+  await datasetListCommand(opts);
+});
+
+withCommon(
+  program
+    .command("dataset-inspect")
+    .description("查看经验集与学习投影")
+    .argument("<id>", "Dataset ID"),
+).action(async (id: string, opts) => {
+  await datasetInspectCommand(id, opts);
+});
 
 withCommon(
   program

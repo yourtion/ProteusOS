@@ -777,15 +777,20 @@ export class Storage implements KernelStore, RuntimeStore {
 
   insertEvaluation(e: EvaluationRecord): void {
     this.db.run(
-      `INSERT INTO evaluations (id, candidate_id, protocol_digest, baseline_snapshot_id, runs, verdict, metrics, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO evaluations (id, candidate_id, protocol_digest, baseline_snapshot_id, runs, verdict, metrics, dataset_ref, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       e.id,
       e.candidateId,
       e.protocolDigest,
       e.baselineSnapshotId,
       JSON.stringify(e.runs),
       e.verdict,
-      JSON.stringify(e.metrics),
+      JSON.stringify({
+        metrics: e.metrics,
+        policy: e.policy ?? null,
+        datasetSplitRefs: e.datasetSplitRefs ?? null,
+      }),
+      e.datasetRef ?? null,
       e.createdAt,
     );
   }
@@ -1076,6 +1081,19 @@ function mapCandidate(row: CandidateRow): CandidateRecord {
 }
 
 function mapEvaluation(row: EvaluationRow): EvaluationRecord {
+  // metrics 列承载 { metrics, policy, datasetSplitRefs }（v7 起包装；
+  // 兼容旧记录的裸 metrics JSON）
+  let parsed: {
+    metrics?: EvaluationRecord["metrics"];
+    policy?: EvaluationRecord["policy"] | null;
+    datasetSplitRefs?: string[] | null;
+  };
+  const raw = JSON.parse(row.metrics) as Record<string, unknown>;
+  if (raw && typeof raw === "object" && "metrics" in raw) {
+    parsed = raw as typeof parsed;
+  } else {
+    parsed = { metrics: raw as unknown as EvaluationRecord["metrics"] };
+  }
   return {
     id: row.id,
     candidateId: row.candidate_id,
@@ -1083,7 +1101,10 @@ function mapEvaluation(row: EvaluationRow): EvaluationRecord {
     baselineSnapshotId: row.baseline_snapshot_id,
     runs: JSON.parse(row.runs) as EvaluationRecord["runs"],
     verdict: row.verdict as EvaluationRecord["verdict"],
-    metrics: JSON.parse(row.metrics) as EvaluationRecord["metrics"],
+    metrics: parsed.metrics!,
+    policy: parsed.policy ?? undefined,
+    datasetSplitRefs: parsed.datasetSplitRefs ?? undefined,
+    datasetRef: row.dataset_ref,
     createdAt: row.created_at,
   };
 }

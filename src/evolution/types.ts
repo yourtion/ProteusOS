@@ -20,7 +20,7 @@ export interface CandidateRecord {
 }
 
 export interface EvaluationRunOutcome {
-  role: "new-capability" | "regression" | "baseline";
+  role: "new-capability" | "regression" | "baseline" | "policy-base" | "policy-candidate";
   purpose: string;
   runId: string;
   snapshotId: string;
@@ -37,6 +37,19 @@ export interface EvaluationMetrics {
   cost: null;
 }
 
+/** 策略评估的单臂分列指标（m3-policy-eval-v1；多目标不合成总分） */
+export interface PolicyArmMetrics {
+  runs: number;
+  successRate: number;
+  /** 路由选择与期望一致的比例（无期望的 case 不计入分母） */
+  routeAccuracy: number | null;
+  abstainRate: number;
+  latencyP50Ms: number;
+  latencyP95Ms: number;
+  /** 成功率跨 repeat 的样本方差（重复运行保留方差，evolution.md §6） */
+  successRateVariance: number;
+}
+
 export interface EvaluationRecord {
   id: string;
   candidateId: string;
@@ -46,6 +59,17 @@ export interface EvaluationRecord {
   /** eligible=requisite 全过；rejected=候选失败；inconclusive=评估环境不可信（可重评） */
   verdict: "eligible" | "rejected" | "inconclusive";
   metrics: EvaluationMetrics;
+  /** 策略评估（m3-policy-eval-v1）：双臂分列指标 + 门槛 + 方差 */
+  policy?: {
+    base: PolicyArmMetrics;
+    candidate: PolicyArmMetrics;
+    thresholds: { minSuccessRate: number; minImprovement: number; minSamples: number };
+    repeats: number;
+  };
+  /** 评估数据集引用（held-out 使用计数经此查询；domain-model §变化记录） */
+  datasetRef?: string | null;
+  /** 验证集成员标识（case 级切分引用） */
+  datasetSplitRefs?: string[];
   createdAt: number;
 }
 
