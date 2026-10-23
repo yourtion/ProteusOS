@@ -68,6 +68,21 @@ Clock、ID 生成、外部调用和持久化作为内部 seam 注入。公开 Pr
 
 不要将模型生成的字符串直接作为内部命令。Provider 响应、配置文件和持久化记录在边界做运行时 schema 校验；静态 TypeScript 类型不能验证外部输入。
 
+## 应用交互与 Web 的扩展方向
+
+Web 为优先界面，CLI 保留，未来 TUI 复用统一应用 Interface。当前 `src/app/commands.ts` 的业务操作、实例生命周期和 console 输出需要按用例分离；HTTP handler 与页面不复制 Runtime/Evolution/Kernel 的规则。
+
+规划增加 `src/app/contracts/`、`use-cases/`、`host/` 与 `http/`，前端放在 `web/`；实施时创建实际代码，不建立空包。纯交互合同可供浏览器导入，不能携带 Node.js、Storage、Runtime 或模型 SDK 依赖。
+
+```text
+Web / 未来 TUI ──→ 交互合同 + 客户端 Adapter ──→ HTTP/SSE Adapter
+CLI ──→ 应用 Interface（进程内或 Host 客户端）
+HTTP/SSE Adapter ──→ 应用 Interface / 用例 Module
+应用用例 ──→ runtime / evolution / federation / kernel / 授权查询
+```
+
+长驻 Host 拥有实例资源、后台运行调度与订阅；同一实例由一个控制所有者派发，CLI 不能在 Host 在途时绕过它启动第二个 runner。浏览器断开只结束观察；显式取消沿用现有领域流程。完整合同、目录、阶段和验收见 [交互设计](./interaction.md)。
+
 ## 4. 实例数据与源码分开
 
 实例根目录由操作者显式配置，例如 `<instance-root>/`：

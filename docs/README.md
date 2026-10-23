@@ -10,12 +10,19 @@
 | [设计原则](./principles.md) | 约束、证据与用户控制 |
 | [领域词汇](./CONTEXT.md) | 统一术语 |
 | [总体架构](./architecture.md) | 模块职责、依赖和不变量 |
+| [Web 与应用 Interface](./interaction.md) | Web 优先、CLI/TUI 复用、Host、操作/查询/订阅与交付切片 |
 | [领域模型](./domain-model.md) | 当前记录、归属和关联 |
 | [运行时合同](./runtime.md) | DAG、决策调用、派发、取消与恢复 |
 | [进化与继承](./evolution.md) | 经验冻结、候选、评估、晋升与共享 |
 | [签名共享与 registry](./sharing-registry.md) | 公钥、凭据、网络交换和撤销 |
 | [仓库设计](./repository.md) | 源码、实例数据、检查和测试布局 |
 | [路线图](./roadmap.md) | 里程碑验收与尚未验证事项 |
+| [原始架构差距](./architecture-gaps.md) | Jev/决策层、预测、记忆、归因与当前实现的逐项核对 |
+| [后续迭代规划](./iteration-plan.md) | 决策层优先的 P0/M5–M8 方向、DSPy 适用范围与效果门 |
+| [适应能力执行计划](./execution-plan.md) | P0、M6a/b/c 的交付顺序、依赖、验收门和逐步执行记录 |
+| [DSPy 论文研究](./research/dspy-paper.md) | 论文概念、当前官方实现与项目适用边界 |
+| [DSPy 与 Harness² 联合分析](./research/dspy-harness2.md) | 可编译策略、任务内试探和改进经验库的代码映射 |
+| [Jev 决策层研究](./research/jev-decision-plane.md) | 官方接口、问题类型、概率证据与接入边界 |
 | [本体决策实验](./experiments/organism-decision-v1.md) | 规则/LLM 对照协议、指标和运行命令 |
 
 ## 架构决策

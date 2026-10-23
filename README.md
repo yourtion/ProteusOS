@@ -8,6 +8,10 @@ M0–M4 的本地闭环已实现：任务执行与恢复、外部委托、能力
 
 日常验收使用固定 fixture、真实 SQLite 和本机 HTTP。真实外部 agent 测试需显式启用；真实 LLM 收益、外网部署与共进化仍待验证或开发。各阶段完成范围和剩余工作统一见 [路线图](./docs/roadmap.md)。
 
+决策层目前只在有限 choice 上接通规则与通用 LLM；Jev Adapter、概率校准与决策级联尚未实现。原始架构还包含预测、记忆、归因和更完整的经验适应闭环，具体差距与后续顺序见 [架构差距](./docs/architecture-gaps.md) 和 [迭代规划](./docs/iteration-plan.md)。
+
+交互方向确定为 Web 优先、CLI 保留，未来 TUI 复用共享应用 Interface。Web/长驻 Host 尚未实现，列入近期 U0/U1；页面、合同与验收见 [交互设计](./docs/interaction.md)。
+
 ## 快速开始
 
 ```bash

@@ -1,15 +1,20 @@
 # 总体架构
 
-设计基线：稳定基质维护身份、约束、不可变版本和受控变更；Runtime 组织执行；Evolution 从证据提出改进；外部模型和 Agent 通过 Provider 接入。采用单仓库、模块化单进程控制面起步，执行工作可以分布到多个受控进程。
+设计基线：稳定基质维护身份、约束、不可变版本和受控变更；Runtime 组织执行；Evolution 从证据提出改进；外部模型和 Agent 通过 Provider 接入。Application Module 提供统一操作、查询和订阅，Web 为优先交互 Adapter，CLI 保留、未来 TUI 复用相同 Interface。采用单仓库、模块化单进程控制面起步，执行工作可以分布到多个受控进程。
 
 ## 系统结构
 
-下图表示职责和主要数据流，不表示每个框都需要独立包或服务。
+下图表示目标职责和主要数据流，不表示每个框都需要独立包或服务。统一 Application Interface、Web 与长驻 Host 尚未实现；当前 CLI 仍直接组装领域操作。
 
 ```mermaid
 flowchart TB
-  User[操作者 / CLI] --> Runtime[Runtime：任务图与运行生命周期]
-  User --> Federation[Federation：发布 / 来源信任 / 继承]
+  User[操作者] --> Web[Web Adapter：优先界面]
+  User --> CLI[CLI / 后续 TUI Adapter]
+  Web --> App[Application Module：操作 / 查询 / 订阅]
+  CLI --> App
+  App --> Runtime[Runtime：任务图与运行生命周期]
+  App --> Federation[Federation：发布 / 来源信任 / 继承]
+  App --> Evolution
   Federation --> Evolution
   Federation --> Kernel
   Federation --> Storage
@@ -29,6 +34,37 @@ flowchart TB
   Ledger --> Storage
 ```
 
+## 分层与原始目标的对应
+
+职责分层和可塑性分层是两个不同维度。前者决定一个操作由哪个 Module 负责；后者决定某类状态多久、凭什么证据和授权可以改变。
+
+| 职责层 | 拥有的行为 | 当前与目标的关系 |
+| --- | --- | --- |
+| 交互 Adapter | Web 页面、CLI 输出、未来 TUI 导航 | CLI 已有；Web 优先实施，共享应用 Interface 待提取 |
+| Application Module | 用例编排、身份与个体上下文、命令回执、授权查询与订阅 | 现有 app 装配/命令是起点；长驻 Host 与稳定交互合同待完成 |
+| Runtime 与领域工作 | 运行生命周期、Decision、候选/评价流程、发布与继承 | 部分工程闭环已成立；Jev、完整类型化决策与持续适应继续补齐 |
+| 认知与学习策略 | 生成候选、预测、记忆/Skill、PolicyLearner、参数编译 | 外部 Agent 承载部分生成；一般规划、预测与记忆不是已完成能力 |
+| Kernel 稳定基质 | 身份、访问权、版本/快照、晋升不变量 | 已实现，不导入 UI、HTTP、模型或数据库驱动 |
+| Persistence 与 Provider Adapter | 持久化、blob、外部模型/执行协议映射 | 实现可替换 seam；不获得领域选择或授权权力 |
+
+各层不是串行必经步骤：Evolution 可以提交评价 Run，Decision 可以选择已固定的候选，Kernel 可以被多个领域 Module 调用。认知/学习策略提供候选与证据，权限及生效规则始终保留在现有领域合同中。
+
+| 可塑性层 | 典型内容 | 变化规则 |
+| --- | --- | --- |
+| L0：稳定基质 | 身份、权限、版本完整性、晋升/回滚协议 | 受审查的软件发布与迁移；不参加日常自动学习 |
+| L1：架构与学习机制 | Module 组合、评价协议、学习方法、Provider 拓扑 | 慢变化，独立审查/比较与兼容验证 |
+| L2：可继承行为 | Skill、Policy、模型、Prompt、Graph、能力实现 | 精确版本、Candidate、独立 Evaluation 与授权 Promotion |
+| L3：适应状态 | 任务内工作记忆、可调整上下文、未来的记忆权重/阈值 | 有用途和生命周期；影响跨 Run 行为的阈值仍须版本化与受控采用 |
+| L4：临时运行状态 | 当前计划、scratchpad、执行进度 | 可快速变化，关联来源；不自动作为下一代行为 |
+
+L3/L4 部分机制仍未实现。Web/CLI 实现通过普通软件开发迭代；它们呈现个体状态与变化依据，不作为持续身份或学习主体。详细一致性核对见 [架构差距](./architecture-gaps.md)，交互合同见 [Web 与应用 Interface](./interaction.md)。
+
+### Application 与交互 Adapter
+
+共享 Interface 应隐藏身份检查、实例生命周期、操作幂等、后台执行和事件游标；调用者获取结构化回执、授权 DTO 与订阅。Web、CLI、TUI 的展示与输入各自实现。Application Module 调用 Runtime/Evolution/Federation 等用例，不把领域不变量复制到页面或 HTTP handler。
+
+首个 Web 交付包括个体总览、任务提交、Run DAG/事件/结果、决策证据，以及候选比较与显式晋升/回滚。界面与 Jev 并列为近期工作；能力未实现时明确标注，不以界面模型数据代替真实闭环。长任务由应用 Host 承载，浏览器刷新只影响观察。
+
 ### Kernel：稳定规则
 
 拥有身份归属、授权判断、资源约束、ArtifactVersion 与 Lineage 不变量、快照完整性和晋升提交规则。它知道“这个版本能否被合法采用”，不知道某份内容是如何完成代码审查的。
@@ -45,7 +81,9 @@ Kernel 不依赖外部执行协议或模型 SDK。固定的图算法、检索、
 
 ### Decision：选择机制
 
-当前将有限 choice 交给规则或模型，校验结果并记录来源；不支持、超时、弃权与非法输出分别结案。排序和 gate 仅有类型声明。Decision 是 Runtime 的独立 seam，Provider 不拥有权限或晋升权。
+当前将有限 choice 交给规则或通用 LLM，校验结果并记录来源；不支持、超时、弃权与非法输出分别结案。DecisionProvider 与名称注册表已有，规则 Adapter 还包含 allow/deny 分支，但 gate/rank 没有完整 DAG 运行语义。Jev、本地决策模型、统一概率证据、校准与决策级联尚未实现。Decision 是 Runtime 的独立 seam，Provider 不拥有权限或晋升权。
+
+原始方向为可替换的 Decision/Policy 层：Jev、规则、本地分类器或小模型分别实现具体合同；生成方案与选择行为分开，Serving 与 Learning 分开。DSPy 思路用于离线优化部分模块参数，不能代替在线决策层。尚未落地的原始方向与优先级见 [架构差距](./architecture-gaps.md) 和 [迭代规划](./iteration-plan.md)。
 
 Planner 的开放式生成可先由 Executor 承载，不为尚无第二种实现的能力创建额外公共接口。形成独立需求后再引入生成模块。
 
@@ -95,6 +133,8 @@ Experience 快照 → 巩固/学习 → Candidate → 固定基线 Evaluation
 
 | 模块 | 权威状态或规则 | 对外小接口 | 明确交给其他模块的职责 |
 | --- | --- | --- | --- |
+| Application | 用例上下文、操作回执、实例生命周期、授权查询与订阅 | 任务/演化/共享操作与观察 | 具体渲染、模型推理、版本晋升不变量 |
+| Web / CLI / TUI Adapter | 输入、导航、展示与传输映射 | 调用共享应用 Interface | 直接写存储、授予权限、实现领域状态机 |
 | Kernel | 身份、版本与晋升不变量、授权约束 | 注册版本、解析快照、检查授权、提交晋升/回滚 | 图调度、模型推理、训练算法 |
 | Runtime | 任务运行和执行状态机 | 提交、观察、取消、恢复 | 产物选择生效、外部协议细节 |
 | Decision | 结构化问题、结果校验与调用来源 | 决策 | 授权、训练、实际副作用 |
@@ -118,6 +158,6 @@ Experience 快照 → 巩固/学习 → Candidate → 固定基线 Evaluation
 
 ## 当前范围
 
-当前系统支持多个体运行、规则/LLM 决策、外部委托、能力自举、经验驱动策略候选和签名版本交换。动态图、持续自主学习、大规模联邦与研究型模型能力未实现；剩余工作统一记录于路线图。
+当前系统支持多个体运行、规则/LLM 决策、外部委托、能力自举、经验驱动策略候选和签名版本交换。统一 Application Interface、长驻 Host/Web、Jev 决策层、最小预测/回放等尚需实施；动态图、持续自主学习、大规模联邦与研究型模型能力仍未实现。原始目标保持持续个体的经验适应，剩余工作统一记录于路线图。
 
 源码布局见[仓库设计](./repository.md)，记录关系见[领域模型](./domain-model.md)，实现阶段见[路线图](./roadmap.md)。

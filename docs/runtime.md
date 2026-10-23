@@ -23,7 +23,7 @@ Kernel 检查身份、版本、授权与快照/晋升不变量。Runtime 验证�
 
 ## 3. DecisionProvider：结构化选择
 
-当前可运行路径使用 choice。gate/rank 仅保留类型声明，未实现通用调度语义。实际类型位于 `src/decision/index.ts`：
+当前图运行路径使用 choice。gate/rank 保留类型声明，规则 Adapter 有 allow/deny 分支，但未实现它们的通用图调度语义。Jev、binary/score 合同、概率证据与决策级联尚未实现；实施方向见 [架构差距](./architecture-gaps.md)。实际类型位于 `src/decision/index.ts`：
 
 ```ts
 interface DecisionProvider {
