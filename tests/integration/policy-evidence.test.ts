@@ -5,6 +5,7 @@ import type { AppInstance } from "../../src/app/instance.ts";
 import { ensureCapabilityGenome } from "../../src/evolution/assets.ts";
 import type { PolicyEvaluationPlan } from "../../src/evolution/index.ts";
 import type { CapabilityModule } from "../../src/runtime/capability.ts";
+import { SqliteDb } from "../../src/storage/sqlite.ts";
 import {
   bootSeededInstance,
   fixturePath,
@@ -130,6 +131,18 @@ describe("冻结策略验证证据", () => {
     expect(first.evaluation.policy?.candidate.successRateVariance).toBe(0);
     expect(first.evaluation.datasetRef).toBe(validationSetId);
     expect(first.evaluation.datasetSplitRefs).toEqual([statsRegression.id]);
+    const evidence = first.evaluation.policyEvidence!;
+    expect(evidence.version).toBe("m3-policy-evidence-v1");
+    expect(evidence.samples).toMatchObject({
+      validationCases: 0,
+      independentValidationFamilies: 0,
+      regressionCases: 1,
+      regressionFamilies: 1,
+    });
+    expect(evidence.trials).toHaveLength(6);
+    expect(evidence.arms.candidate.decisions.value).toBe(3);
+    expect(evidence.arms.candidate.resources.sentModelCalls).toBe(0);
+    expect(app.storage.getEvaluation(first.evaluation.id)?.policyEvidence).toEqual(evidence);
     expect(app.storage.getRun(first.evaluation.runs[0]!.runId)?.purpose).toBe("evaluation");
     expect(app.evolution.validationSet(validationSetId).usageCount).toBe(1);
     const repeatedSetPlan = {
@@ -157,6 +170,33 @@ describe("冻结策略验证证据", () => {
         createdBy: "principal-local",
       }),
     ).toThrow(/验证经历不得作为 development/);
+
+    // 已有包装记录和更早的裸 metrics 记录都允许缺失新版证据，不伪造补齐。
+    const legacyDb = new SqliteDb(join(app.root, "metadata.sqlite"));
+    try {
+      legacyDb.run(
+        "UPDATE evaluations SET metrics = ? WHERE id = ?",
+        JSON.stringify({
+          metrics: first.evaluation.metrics,
+          policy: first.evaluation.policy,
+          datasetSplitRefs: first.evaluation.datasetSplitRefs,
+        }),
+        first.evaluation.id,
+      );
+      const oldWrapped = app.storage.getEvaluation(first.evaluation.id)!;
+      expect(oldWrapped.policyEvidence).toBeUndefined();
+      expect(oldWrapped.policy).toEqual(first.evaluation.policy);
+      legacyDb.run(
+        "UPDATE evaluations SET metrics = ? WHERE id = ?",
+        JSON.stringify(first.evaluation.metrics),
+        first.evaluation.id,
+      );
+      const oldBare = app.storage.getEvaluation(first.evaluation.id)!;
+      expect(oldBare.policyEvidence).toBeUndefined();
+      expect(oldBare.metrics).toEqual(first.evaluation.metrics);
+    } finally {
+      legacyDb.close();
+    }
   });
 
   it("基线所有 case 失败时结果 inconclusive；plan/task/schema/threshold 漂移在领用前拒绝", async () => {

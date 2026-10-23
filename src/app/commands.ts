@@ -725,12 +725,28 @@ export async function evaluatePolicyCommand(
         latencyP95Ms: number;
         successRateVariance: number;
       }) =>
-        `成功率 ${(m.successRate * 100).toFixed(0)}%、路由准确 ${m.routeAccuracy === null ? "n/a" : `${(m.routeAccuracy * 100).toFixed(0)}%`}、弃权 ${(m.abstainRate * 100).toFixed(0)}%、p50/p95 ${m.latencyP50Ms}/${m.latencyP95Ms}ms、方差 ${m.successRateVariance.toFixed(3)}`;
+        `成功率 ${(m.successRate * 100).toFixed(0)}%、路由准确 ${m.routeAccuracy === null ? "n/a" : `${(m.routeAccuracy * 100).toFixed(0)}%`}、无选择 ${(m.abstainRate * 100).toFixed(0)}%、p50/p95 ${m.latencyP50Ms}/${m.latencyP95Ms}ms、方差 ${m.successRateVariance.toFixed(3)}`;
       console.log(`  基线臂   ${fmt(evaluation.policy.base)}`);
       console.log(`  候选臂   ${fmt(evaluation.policy.candidate)}`);
       console.log(
         `  门槛     成功率 ≥ ${(evaluation.policy.thresholds.minSuccessRate * 100).toFixed(0)}%、改善 ≥ ${(evaluation.policy.thresholds.minImprovement * 100).toFixed(0)}pp、样本 ≥ ${evaluation.policy.thresholds.minSamples}`,
       );
+    }
+    if (evaluation.policyEvidence) {
+      const evidence = evaluation.policyEvidence;
+      const samples = evidence.samples;
+      console.log(
+        `  样本     验证 ${samples.validationCases} 项/${samples.independentValidationFamilies} 个独立 family；回归 ${samples.regressionCases} 项；各重复 ${evidence.repeats} 次`,
+      );
+      for (const arm of ["base", "candidate"] as const) {
+        const { decisions, resources } = evidence.arms[arm];
+        const errors = decisions.invalid_output + decisions.transport_error + decisions.timeout;
+        console.log(
+          `  ${arm === "base" ? "基线" : "候选"}明细 明确弃权 ${decisions.model_abstain}、服务拒绝 ${decisions.service_refusal}、异常 ${errors}、unknown ${decisions.unknown}；已发送模型调用 ${resources.sentModelCalls}、费用未知 ${resources.unknownCostCalls} 次（仅决策调用）`,
+        );
+      }
+    } else if (evaluation.policy) {
+      console.log("  明细证据不可用（历史评估）");
     }
     console.log(
       evaluation.verdict === "eligible"

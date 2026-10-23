@@ -156,3 +156,15 @@ Experience 保存 Run 的终态、验收、输出摘要、耗时、Attempt 数�
 - normal/evaluation 预算池独立；导入能力代码要求真实隔离后端，固定 fixture 工程验收不能代替真实隔离或模型收益结论。
 
 实现理由见 [ADR 0008](./adr/0008-m3-experience-driven-evolution.md)、[ADR 0009](./adr/0009-m4-selective-local-sharing.md) 与 [ADR 0010](./adr/0010-signed-sharing-and-registry.md)。
+
+## 12. 版本化策略观测证据
+
+新策略评估附带 `policyEvidence`，版本为 `m3-policy-evidence-v1`。它冻结 case/family、验证或回归角色、arm/repeat、Run/DecisionCall 引用、真实调用状态、摘要和用量；从这些明细可以离线重算汇总。SQLite 沿用评估 JSON 包装保存该字段，旧包装记录与更早的裸 metrics 记录仍可读取，缺项为 unavailable，不事后补造证据。
+
+验证 case 数、family 数、重复运行数和回归样本分列。回归 family 与验证 family 重叠会显式报告，并从独立验证 family 数中排除。配对 family 记录改善、退化、不变或未完成；缺失 trial 补为 not_run，未到终态时成功率及改善为 null。
+
+决策明确区分主动弃权、服务拒绝、弃权来源缺失、非法输出、传输错误、超时、取消、unknown 和在途状态。没有 DecisionCall 不等于弃权；`expectedChoice: null` 仅表示未标注选择，也不能作为正确弃权标签。
+
+资源汇总目前范围明确为 decision-calls-only：只汇总已发送模型调用，预留另列；token 记录已知小计和未知调用数，所有已发调用均缺用量时小计为 null。已知金额按币种分别汇总，未知金额保留未知；执行器及学习过程的资源不冒充已包含在内。
+
+已有 `m3-policy-eval-v1` 的 verdict、门槛与字段语义保持兼容：其 minSamples 仍为 Run 数，历史 abstainRate 实为未获得选择的比例，CLI 因此显示“无选择”。新增证据提供精确分类与样本依据，不改变旧正式判定；新实验的统计门槛需要单独预注册。

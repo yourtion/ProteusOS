@@ -1,4 +1,5 @@
 import type { ConsolidationParams } from "./consolidation.ts";
+import type { PolicyEvaluationEvidence } from "./policy-evidence.ts";
 
 /**
  * Evolution 领域类型（M2）。三种记录分别表达的事实不可合并（docs/evolution.md §5）：
@@ -68,6 +69,8 @@ export interface EvaluationRecord {
     thresholds: { minSuccessRate: number; minImprovement: number; minSamples: number };
     repeats: number;
   };
+  /** 版本化的可复算观测；旧记录缺省，不影响已有正式 verdict。 */
+  policyEvidence?: PolicyEvaluationEvidence;
   /** 评估数据集引用（held-out 使用计数经此查询；domain-model §变化记录） */
   datasetRef?: string | null;
   /** 验证集成员标识（case 级切分引用） */

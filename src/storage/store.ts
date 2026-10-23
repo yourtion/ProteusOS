@@ -925,6 +925,7 @@ export class Storage implements KernelStore, RuntimeStore {
       JSON.stringify({
         metrics: e.metrics,
         policy: e.policy ?? null,
+        policyEvidence: e.policyEvidence ?? null,
         datasetSplitRefs: e.datasetSplitRefs ?? null,
       }),
       e.datasetRef ?? null,
@@ -1750,6 +1751,7 @@ function mapEvaluation(row: EvaluationRow): EvaluationRecord {
   let parsed: {
     metrics?: EvaluationRecord["metrics"];
     policy?: EvaluationRecord["policy"] | null;
+    policyEvidence?: EvaluationRecord["policyEvidence"] | null;
     datasetSplitRefs?: string[] | null;
   };
   const raw = JSON.parse(row.metrics) as Record<string, unknown>;
@@ -1767,6 +1769,7 @@ function mapEvaluation(row: EvaluationRow): EvaluationRecord {
     verdict: row.verdict as EvaluationRecord["verdict"],
     metrics: parsed.metrics!,
     policy: parsed.policy ?? undefined,
+    policyEvidence: parsed.policyEvidence ?? undefined,
     datasetSplitRefs: parsed.datasetSplitRefs ?? undefined,
     datasetRef: row.dataset_ref,
     createdAt: row.created_at,

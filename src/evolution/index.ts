@@ -25,6 +25,7 @@ import {
   type RouteProposer,
   type RouteSample,
 } from "./consolidation.ts";
+import { createPolicyEvidence, type PolicyTrialObservation } from "./policy-evidence.ts";
 import type {
   CandidateRecord,
   CandidateStatus,
@@ -1880,6 +1881,7 @@ export class Evolution {
     const armRouteOk = { base: [] as boolean[], candidate: [] as boolean[] };
     const armAbstain = { base: [] as boolean[], candidate: [] as boolean[] };
     const regressionHealth = { base: [] as boolean[], candidate: [] as boolean[] };
+    const observations: PolicyTrialObservation[] = [];
     // 确定性顺序：case 序 × repeat 序 × 双臂（base 先）
     for (let caseIndex = 0; caseIndex < plan.cases.length; caseIndex++) {
       const c = plan.cases[caseIndex]!;
@@ -1901,6 +1903,38 @@ export class Evolution {
           const chosen = this.routeChoiceOf(summary.runId);
           const abstained = chosen === null;
           const routeOk = c.expectedChoice !== null && chosen === c.expectedChoice;
+          const calls = this.deps.storage.listDecisionCalls(summary.runId);
+          const events = this.deps.storage.listEvents({ runId: summary.runId }, 1000);
+          observations.push({
+            caseId: c.id,
+            familyId: c.familyId,
+            role: c.role ?? "validation",
+            arm,
+            repeat,
+            runId: summary.runId,
+            snapshotId,
+            state: summary.state,
+            failureReason: summary.failureReason,
+            durationMs: experience?.outcome.durationMs ?? null,
+            chosenOption: chosen,
+            decisions: calls.map((call) => {
+              const origin = events.find(
+                (event) =>
+                  event.type === "decision.abstained" && event.payload["decisionId"] === call.id,
+              )?.payload["origin"];
+              return {
+                callId: call.id,
+                nodeId: call.nodeId,
+                kind: call.kind,
+                state: call.state,
+                sent: call.sent,
+                abstainOrigin: origin === "model" || origin === "service_refusal" ? origin : null,
+                requestDigest: call.requestDigest,
+                responseDigest: call.responseDigest,
+                usage: call.usage,
+              };
+            }),
+          });
           outcomes.push({
             role: arm === "base" ? "policy-base" : "policy-candidate",
             purpose: `${arm} 臂 case ${caseIndex + 1}×${repeat}`,
@@ -1999,6 +2033,7 @@ export class Evolution {
         cost: null,
       },
       policy: { base, candidate: candidateArm, thresholds, repeats: plan.repeats },
+      policyEvidence: createPolicyEvidence(plan, observations),
       datasetRef: candidate.sourceRefs["validationSetId"],
       datasetSplitRefs: plan.cases.map((c) => c.id),
       createdAt: this.deps.clock.now(),
