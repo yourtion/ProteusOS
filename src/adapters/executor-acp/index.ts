@@ -12,6 +12,7 @@ import {
   type SessionUpdate,
 } from "@agentclientprotocol/sdk";
 import type { ExecutionRequest, ExecutionResult, ExecutorProvider } from "../../runtime/types.ts";
+import { ExecutionTrace, boundedOutput } from "../../runtime/execution-evidence.ts";
 
 /**
  * ACP 执行器（M1）：以 ACP client 身份 spawn agent 侧适配器
@@ -71,14 +72,20 @@ export class AcpExecutor implements ExecutorProvider {
 
   async start(req: ExecutionRequest): Promise<ExecutionResult> {
     const startedAt = Date.now();
+    const trace = new ExecutionTrace();
+    trace.record("session.started", { attemptId: req.attemptId });
     const child = spawn(process.execPath, [this.agentEntry, ...this.agentArgs], {
       stdio: ["pipe", "pipe", "pipe"],
       env: process.env,
     });
 
     let stderr = "";
+    let stderrTruncated = false;
+    let stdoutTruncated = false;
     child.stderr?.on("data", (chunk: Buffer) => {
-      stderr = `${stderr}${chunk.toString("utf8")}`.slice(-8000);
+      const captured = boundedOutput(stderr, chunk.toString("utf8"));
+      stderr = captured.text;
+      stderrTruncated ||= captured.truncated;
     });
 
     const updates: SessionUpdate[] = [];
@@ -93,12 +100,32 @@ export class AcpExecutor implements ExecutorProvider {
     const app = client({ name: "proteus" })
       .onRequest(methods.client.session.requestPermission, async (ctx) => {
         const decision = await this.permissionPolicy(ctx.params);
+        trace.record("permission", {
+          toolCallId: ctx.params.toolCall.toolCallId,
+          outcome: decision.outcome.outcome,
+          optionId: decision.outcome.outcome === "selected" ? decision.outcome.optionId : null,
+        });
         permissions.push({ toolCall: ctx.params.toolCall, options: ctx.params.options, decision });
         return decision;
       })
       .onNotification(methods.client.session.update, async (ctx) => {
-        updates.push(ctx.params.update);
-        stdoutText = `${stdoutText}${textOf(ctx.params.update)}`.slice(-8000);
+        const update = ctx.params.update;
+        if (update.sessionUpdate !== "agent_thought_chunk" && updates.length < 256)
+          updates.push(update);
+        const text = textOf(update);
+        const captured = boundedOutput(stdoutText, text);
+        stdoutText = captured.text;
+        stdoutTruncated ||= captured.truncated;
+        if (update.sessionUpdate === "agent_message_chunk") trace.record("message", { text });
+        else if (
+          update.sessionUpdate === "tool_call" ||
+          update.sessionUpdate === "tool_call_update"
+        )
+          trace.record("tool", {
+            toolCallId: update.toolCallId,
+            status: update.status ?? null,
+            title: update.title ?? null,
+          });
       });
 
     let timedOut = false;
@@ -167,6 +194,7 @@ export class AcpExecutor implements ExecutorProvider {
     }
 
     const ok = !timedOut && stopReason === "end_turn";
+    trace.record("session.completed", { stopReason, timedOut, protocolError: failure !== null });
     return {
       ok,
       exitCode: ok ? 0 : null,
@@ -185,6 +213,11 @@ export class AcpExecutor implements ExecutorProvider {
         .join("\n"),
       durationMs: Date.now() - startedAt,
       outputRef: null,
+      evidence: trace.finish("executor-acp-v1", "agent-events", !timedOut && failure === null, {
+        stdoutTruncated,
+        stderrTruncated,
+        detail: timedOut ? "timeout" : failure === null ? null : "protocol_error",
+      }),
     };
   }
 }

@@ -140,6 +140,9 @@ describe("冻结策略验证证据", () => {
       regressionFamilies: 1,
     });
     expect(evidence.trials).toHaveLength(6);
+    expect(
+      evidence.trials.every((trial) => trial.executions?.[0]?.evidence?.traceStatus === "complete"),
+    ).toBe(true);
     expect(evidence.arms.candidate.decisions.value).toBe(3);
     expect(evidence.arms.candidate.resources.sentModelCalls).toBe(0);
     expect(app.storage.getEvaluation(first.evaluation.id)?.policyEvidence).toEqual(evidence);

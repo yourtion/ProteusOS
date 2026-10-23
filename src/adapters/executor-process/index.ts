@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import type { ExecutionRequest, ExecutionResult, ExecutorProvider } from "../../runtime/types.ts";
+import { ExecutionTrace, boundedOutput } from "../../runtime/execution-evidence.ts";
 
 /**
  * 本地受信进程执行器（M0）：spawn 固定 worker 脚本，等待完成。
@@ -20,25 +21,37 @@ export class LocalProcessExecutor implements ExecutorProvider {
   start(req: ExecutionRequest): Promise<ExecutionResult> {
     return new Promise((resolve) => {
       const startedAt = Date.now();
+      const trace = new ExecutionTrace();
+      trace.record("process.started", { attemptId: req.attemptId });
       const child = spawn(process.execPath, [this.workerPath, req.workspaceDir], {
         stdio: ["ignore", "pipe", "pipe"],
       });
       let stdout = "";
       let stderr = "";
       let timedOut = false;
+      let stdoutTruncated = false;
+      let stderrTruncated = false;
+      let finished = false;
       const timer = setTimeout(() => {
         timedOut = true;
         child.kill("SIGKILL");
       }, req.timeoutMs);
 
       child.stdout.on("data", (chunk: Buffer) => {
-        stdout += chunk.toString("utf8");
+        const captured = boundedOutput(stdout, chunk.toString("utf8"));
+        stdout = captured.text;
+        stdoutTruncated ||= captured.truncated;
       });
       child.stderr.on("data", (chunk: Buffer) => {
-        stderr += chunk.toString("utf8");
+        const captured = boundedOutput(stderr, chunk.toString("utf8"));
+        stderr = captured.text;
+        stderrTruncated ||= captured.truncated;
       });
 
       const finish = (exitCode: number | null) => {
+        if (finished) return;
+        finished = true;
+        trace.record("process.completed", { exitCode, timedOut });
         const outputRef = join(req.workspaceDir, "output.json");
         const hasOutput = existsSync(outputRef);
         resolve({
@@ -49,6 +62,12 @@ export class LocalProcessExecutor implements ExecutorProvider {
           stderr: timedOut ? `${stderr}\n[executor] 执行超时被终止` : stderr,
           durationMs: Date.now() - startedAt,
           outputRef: hasOutput ? outputRef : null,
+          evidence: trace.finish(
+            "executor-process-v1",
+            "lifecycle",
+            !timedOut && exitCode !== null,
+            { stdoutTruncated, stderrTruncated },
+          ),
         });
       };
 

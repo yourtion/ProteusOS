@@ -168,3 +168,5 @@ Experience 保存 Run 的终态、验收、输出摘要、耗时、Attempt 数�
 资源汇总目前范围明确为 decision-calls-only：只汇总已发送模型调用，预留另列；token 记录已知小计和未知调用数，所有已发调用均缺用量时小计为 null。已知金额按币种分别汇总，未知金额保留未知；执行器及学习过程的资源不冒充已包含在内。
 
 已有 `m3-policy-eval-v1` 的 verdict、门槛与字段语义保持兼容：其 minSamples 仍为 Run 数，历史 abstainRate 实为未获得选择的比例，CLI 因此显示“无选择”。新增证据提供精确分类与样本依据，不改变旧正式判定；新实验的统计门槛需要单独预注册。
+
+`trials.executions` 进一步冻结各 Attempt 的轨迹状态、范围与内容引用；读取时校验 blob 摘要。执行资源单列，不静默并入 decision-calls-only 汇总，完整合同见 [执行轨迹与用量](./execution-evidence.md)。

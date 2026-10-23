@@ -1,5 +1,6 @@
 import type { DecisionCallKind, DecisionCallState, DecisionCallUsage } from "../decision/call.ts";
 import type { RunState } from "../runtime/types.ts";
+import type { StoredExecutionEvidence } from "../runtime/execution-evidence.ts";
 
 export const POLICY_EVIDENCE_VERSION = "m3-policy-evidence-v1";
 export type PolicyArm = "base" | "candidate";
@@ -38,6 +39,8 @@ export interface PolicyTrialObservation {
   durationMs: number | null;
   chosenOption: string | null;
   decisions: PolicyDecisionObservation[];
+  /** 冻结当时的 Attempt 证据引用；旧观测缺项仍为 unavailable。 */
+  executions?: Array<{ attemptId: string; evidence: StoredExecutionEvidence | null }>;
 }
 
 const DECISION_OUTCOMES = [

@@ -40,6 +40,16 @@ const app = agent({ name: "fake-acp-agent" })
     const { params, client } = reqCtx;
     const text = params.prompt.map((block) => (block.type === "text" ? block.text : "")).join("\n");
 
+    if (text.includes("HIDDEN-MODE")) {
+      await client.notify(methods.client.session.update, {
+        sessionId: sessionState.sessionId,
+        update: {
+          sessionUpdate: "agent_thought_chunk",
+          content: { type: "text", text: "HIDDEN-THOUGHT-MARKER" },
+        },
+      });
+    }
+
     if (text.includes("EXIT-MODE")) {
       // 模拟 agent 崩溃：发一个 update 后进程退出，连接关闭
       await client.notify(methods.client.session.update, {

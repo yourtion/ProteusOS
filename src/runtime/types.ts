@@ -1,4 +1,5 @@
 import type { DecisionCallRecord } from "../decision/call.ts";
+import type { ExecutionEvidence, StoredExecutionEvidence } from "./execution-evidence.ts";
 
 /**
  * Runtime 领域类型与持久化 port。
@@ -184,7 +185,13 @@ export interface RunSummary {
   graphSource: "pipeline-v1" | "dag-v1";
   nodes: RunSummaryNode[];
   decisions: RunSummaryDecision[];
-  attempts: Array<{ id: string; ordinal: number; state: AttemptState; exitCode: number | null }>;
+  attempts: Array<{
+    id: string;
+    ordinal: number;
+    state: AttemptState;
+    exitCode: number | null;
+    evidence?: StoredExecutionEvidence;
+  }>;
   checks: OutcomeCheck[];
   experienceId: string | null;
 }
@@ -333,6 +340,8 @@ export interface ExecutionResult {
   durationMs: number;
   /** 工作区内 output.json 的绝对路径；不存在为 null */
   outputRef: string | null;
+  /** 可选以兼容旧 Adapter；缺项明确为 unavailable。 */
+  evidence?: ExecutionEvidence;
 }
 
 export interface ExecutorProvider {

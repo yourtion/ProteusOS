@@ -36,6 +36,7 @@ import {
 import type {
   AttemptRecord,
   ExecutorProvider,
+  ExecutionResult,
   OrganismBudget,
   OutcomeCheck,
   RunPurpose,
@@ -48,6 +49,11 @@ import type {
   TaskRecord,
 } from "./types.ts";
 import { isCapabilityName, parseCapabilityModule, runCapabilityModule } from "./capability.ts";
+import {
+  ExecutionTrace,
+  executionInputDigest,
+  type StoredExecutionEvidence,
+} from "./execution-evidence.ts";
 import type { SandboxBackend } from "./sandbox.ts";
 
 export interface TaskSubmission {
@@ -629,6 +635,9 @@ export class Runtime {
         }
         if (node.type === "execute") {
           outputs.set(node.id, await this.runExecute(runId, run, task, node, decisions, versions));
+          // 成功节点已与 Attempt 结果在同一事务提交；这里只更新当前内存投影。
+          nodeStates.set(node.id, "succeeded");
+          continue;
         } else {
           const inputNode = dag.nodes.find((n) => n.id === node.inputFrom);
           const inputWorkspace = inputNode ? this.nodeWorkspace(runId, inputNode) : "";
@@ -978,6 +987,14 @@ export class Runtime {
       });
     }
     const decisionMap = new Map<string, RunSummaryDecision>();
+    const executionEvidence = new Map<string, StoredExecutionEvidence>();
+    for (const event of events) {
+      if (event.type === "attempt.evidence.recorded") {
+        const evidence = event.payload["evidence"] as StoredExecutionEvidence | undefined;
+        if (evidence?.version === "execution-evidence-v1")
+          executionEvidence.set(evidence.attemptId, evidence);
+      }
+    }
     for (const e of events) {
       if (e.type !== "decision.recorded") continue;
       const nodeId = String(e.payload["nodeId"]);
@@ -1005,6 +1022,7 @@ export class Runtime {
         ordinal: a.ordinal,
         state: a.state,
         exitCode: a.exitCode,
+        ...(executionEvidence.has(a.id) ? { evidence: executionEvidence.get(a.id) } : {}),
       })),
       checks: experience?.outcome.checks ?? [],
       experienceId: experience?.id ?? null,
@@ -1950,6 +1968,12 @@ export class Runtime {
     // 工作区准备与外部执行都在事务之外（docs/runtime.md §7）
     const workspace = join(this.instanceWorkspacesRoot(), runId, node.id);
     this.prepareWorkspace(workspace, task.inputs);
+    let inputDigest: string | null = null;
+    try {
+      inputDigest = executionInputDigest(join(workspace, "inputs"));
+    } catch {
+      /* 未采集到指纹，保留 null。 */
+    }
 
     const result = await executor.start({
       runId,
@@ -1962,6 +1986,14 @@ export class Runtime {
 
     const handle = `${executorName}:${dispatchId}`;
     const endedAt = this.deps.clock.now();
+    const evidence = this.captureExecutionEvidence(
+      run,
+      attemptId,
+      executorName,
+      task.goal,
+      inputDigest,
+      result,
+    );
     this.deps.storage.tx(() => {
       this.deps.storage.markDispatched(dispatchId, handle, startedAt);
       this.deps.storage.updateAttempt(attemptId, {
@@ -1972,6 +2004,16 @@ export class Runtime {
         outputRef: result.outputRef,
       });
       this.deps.storage.completeDispatch(dispatchId, endedAt);
+      this.deps.storage.appendEvent({
+        streamId: `attempt-${attemptId}`,
+        type: "attempt.evidence.recorded",
+        payload: { evidence },
+        correlationId: runId,
+        runId,
+        processId,
+        attemptId,
+        occurredAt: endedAt,
+      });
       this.deps.storage.appendEvent({
         streamId: `attempt-${attemptId}`,
         type: result.ok ? "attempt.succeeded" : "attempt.failed",
@@ -1986,6 +2028,7 @@ export class Runtime {
         attemptId,
         occurredAt: endedAt,
       });
+      if (result.ok) this.appendNodeCompleted(runId, node, "succeeded", null);
     });
 
     if (!result.ok) {
@@ -1997,6 +2040,57 @@ export class Runtime {
     // outputRef 对本地 worker 是 output.json；agent 型执行器没有单一输出文件，
     // 其产物是工作区内的代码，由 verify 节点（如 test-runner）验收
     return result.outputRef ?? "";
+  }
+
+  private captureExecutionEvidence(
+    run: RunRecord,
+    attemptId: string,
+    executor: string,
+    prompt: string,
+    inputDigest: string | null,
+    result: ExecutionResult,
+  ): StoredExecutionEvidence {
+    const supplied = result.evidence;
+    const evidence: StoredExecutionEvidence = {
+      version: "execution-evidence-v1",
+      attemptId,
+      executor,
+      adapter: supplied?.adapter ?? null,
+      snapshotId: run.snapshotId,
+      promptDigest: digestOf(prompt),
+      inputDigest,
+      outputDigest: null,
+      stdoutDigest: digestOf(result.stdout),
+      stderrDigest: digestOf(result.stderr),
+      traceStatus: supplied?.trace.status ?? "unavailable",
+      traceCoverage: supplied?.trace.coverage ?? "none",
+      traceRef: null,
+      traceDigest: null,
+      droppedEvents: supplied?.trace.droppedEvents ?? 0,
+      detail: supplied?.trace.detail ?? (supplied ? null : "adapter_did_not_report_evidence"),
+      usage: supplied?.usage ?? null,
+      stdoutTruncated: supplied?.stdoutTruncated ?? false,
+      stderrTruncated: supplied?.stderrTruncated ?? false,
+    };
+    if (result.outputRef) {
+      try {
+        evidence.outputDigest = digestOf(readFileSync(result.outputRef, "utf8"));
+      } catch {
+        /* 交给独立验收处理产物。 */
+      }
+    }
+    if (supplied) {
+      try {
+        const written = this.deps.blobs.write(canonicalJson(supplied.trace));
+        evidence.traceRef = written.ref;
+        evidence.traceDigest = written.digest;
+      } catch {
+        // 工作已经执行，采集失败不能导致自动重派副作用。
+        evidence.traceStatus = "failed";
+        evidence.detail = "trace_persistence_failed";
+      }
+    }
+    return evidence;
   }
 
   private runVerify(
@@ -2143,12 +2237,22 @@ export class Runtime {
             outputRef: null,
           };
         }
-        return runCapabilityModule(
+        const trace = new ExecutionTrace();
+        trace.record("capability.started", {
+          versionId: version.id,
+          sandbox: this.deps.capabilitySandbox?.name ?? "bare-process",
+        });
+        const result = runCapabilityModule(
           parsed.module,
           req.workspaceDir,
           req.timeoutMs,
           this.deps.capabilitySandbox,
         );
+        trace.record("capability.completed", { exitCode: result.exitCode });
+        return {
+          ...result,
+          evidence: trace.finish("capability-process-v1", "lifecycle", result.exitCode !== null),
+        };
       },
     };
   }
@@ -2336,12 +2440,7 @@ export class Runtime {
           })
         : [],
       decisions: ctx?.decisions ?? [],
-      attempts: attempts.map((a) => ({
-        id: a.id,
-        ordinal: a.ordinal,
-        state: a.state,
-        exitCode: a.exitCode,
-      })),
+      attempts: this.getRunSummary(runId).attempts,
       checks,
       experienceId,
     };

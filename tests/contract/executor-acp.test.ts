@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { mkdtempSync } from "node:fs";
@@ -52,6 +52,12 @@ describe("AcpExecutor 合同（fake ACP agent）", () => {
     expect(trace.stopReason).toBe("end_turn");
     expect(trace.updates.length).toBeGreaterThan(0);
     expect(trace.permissions[0]!.decision.outcome.outcome).toBe("selected");
+    expect(result.evidence).toMatchObject({
+      adapter: "executor-acp-v1",
+      usage: null,
+      trace: { status: "complete", coverage: "agent-events" },
+    });
+    expect(result.evidence!.trace.events.some((event) => event.kind === "permission")).toBe(true);
   });
 
   it("stopReason=error 不映射为成功", async () => {
@@ -85,6 +91,7 @@ describe("AcpExecutor 合同（fake ACP agent）", () => {
       updates: Array<{ sessionUpdate: string }>;
     };
     expect(trace.updates.length).toBeGreaterThan(0); // 崩溃前的 update 已入 trace
+    expect(result.evidence!.trace.status).toBe("partial");
   });
 
   it("超时：先请求 session/cancel，agent 响应 cancelled 后不强杀", async () => {
@@ -101,5 +108,20 @@ describe("AcpExecutor 合同（fake ACP agent）", () => {
     expect(result.ok).toBe(false);
     expect(result.stderr).toContain("session/cancel");
     expect(result.stderr).toContain("stopReason=cancelled");
+    expect(result.evidence!.trace.status).toBe("partial");
+  });
+
+  it("工作区 trace 文件写入失败时仍返回内存观测，隐藏推理不进入两种轨迹", async () => {
+    const ws = workspace();
+    writeFileSync(join(ws, ".proteus"), "occupied");
+    const result = await executor().start(request("HIDDEN-MODE 实现 wordcount", ws));
+    expect(result.ok).toBe(true);
+    expect(result.evidence!.trace.status).toBe("complete");
+    expect(JSON.stringify(result.evidence)).not.toContain("HIDDEN-THOUGHT-MARKER");
+    const other = workspace();
+    await executor().start(request("HIDDEN-MODE 实现 wordcount", other));
+    expect(readFileSync(join(other, ".proteus", "acp-trace.json"), "utf8")).not.toContain(
+      "HIDDEN-THOUGHT-MARKER",
+    );
   });
 });

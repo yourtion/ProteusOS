@@ -1917,6 +1917,10 @@ export class Evolution {
             failureReason: summary.failureReason,
             durationMs: experience?.outcome.durationMs ?? null,
             chosenOption: chosen,
+            executions: summary.attempts.map((attempt) => ({
+              attemptId: attempt.id,
+              evidence: attempt.evidence ?? null,
+            })),
             decisions: calls.map((call) => {
               const origin = events.find(
                 (event) =>

@@ -1,4 +1,9 @@
 import type { ExecutionRequest, ExecutionResult, ExecutorProvider } from "../../runtime/types.ts";
+import {
+  ExecutionTrace,
+  type ExecutionEvidence,
+  type ExecutionUsage,
+} from "../../runtime/execution-evidence.ts";
 
 /**
  * pi 执行器（M1）：经官方 SDK @earendil-works/pi-coding-agent 进程内直连。
@@ -17,6 +22,7 @@ export type PiRunner = (options: PiRunOptions) => Promise<{
   ok: boolean;
   stdout: string;
   stderr: string;
+  evidence?: ExecutionEvidence;
 }>;
 
 export class PiExecutor implements ExecutorProvider {
@@ -43,6 +49,7 @@ export class PiExecutor implements ExecutorProvider {
       stderr: result.stderr,
       durationMs: Date.now() - startedAt,
       outputRef: null,
+      evidence: result.evidence,
     };
   }
 }
@@ -60,6 +67,36 @@ export const defaultPiRunner: PiRunner = async (options) => {
     tools: ["read", "write", "edit", "bash", "grep", "find", "ls"],
     settingsManager,
   });
+  const trace = new ExecutionTrace();
+  trace.record("session.started");
+  const unsubscribe = session.subscribe((event) => {
+    if (event.type === "tool_execution_start" || event.type === "tool_execution_end") {
+      trace.record(event.type, {
+        toolCallId: event.toolCallId,
+        toolName: event.toolName,
+        isError: event.type === "tool_execution_end" ? event.isError : false,
+      });
+    } else if (event.type === "message_end" && event.message.role === "assistant") {
+      for (const block of event.message.content) {
+        if (block.type === "text") trace.record("message", { text: block.text });
+      }
+    }
+  });
+  const usage = (): ExecutionUsage | null => {
+    try {
+      const stats = session.getSessionStats();
+      // SDK 的 cost 缺少本项目所需的币种/价格依据，不能当可核对金额。
+      return {
+        inputTokens: stats.tokens.input,
+        outputTokens: stats.tokens.output,
+        costAmount: null,
+        costCurrency: null,
+        priceRef: null,
+      };
+    } catch {
+      return null;
+    }
+  };
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     await Promise.race([
@@ -71,15 +108,27 @@ export const defaultPiRunner: PiRunner = async (options) => {
         );
       }),
     ]);
-    return { ok: true, stdout: "pi: prompt 完成（判定由 verify 节点负责）", stderr: "" };
+    trace.record("session.completed", { ok: true });
+    return {
+      ok: true,
+      stdout: "pi: prompt 完成（判定由 verify 节点负责）",
+      stderr: "",
+      evidence: trace.finish("executor-pi-v1", "agent-events", true, { usage: usage() }),
+    };
   } catch (err) {
+    trace.record("session.completed", { ok: false });
     return {
       ok: false,
       stdout: "",
       stderr: err instanceof Error ? err.message : String(err),
+      evidence: trace.finish("executor-pi-v1", "agent-events", false, {
+        usage: usage(),
+        detail: "session_error",
+      }),
     };
   } finally {
     if (timer) clearTimeout(timer);
+    unsubscribe();
     session.dispose();
   }
 };
