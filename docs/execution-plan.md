@@ -4,7 +4,7 @@
 
 先完成可复现的工程基线和证据合同，再实现可编译策略、任务内试探与跨任务经验复用。Jev 决策层和 Web 工作线继续保留。每次交付一个可独立验证的切片，完成后把命令、结果及下一项写回本文件。
 
-P0-01/02/03/04 均已完成工程验收。M6a-01 也已完成：以已有通用 LLM choice 冻结基线、视图与示例池，只开放示例选择和顺序，请求持久化与旧快照恢复均通过验证。下一切片为 M6a-02 的有限搜索、报告与唯一候选。Jev 与 Web 工作线仍按独立依赖推进。
+P0-01/02/03/04 均已完成工程验收。M6a-01 也已完成：以已有通用 LLM choice 冻结基线、视图与示例池，只开放示例选择和顺序，请求持久化与旧快照恢复均通过验证。M6a-02 的有界搜索、报告、累计预算与唯一候选也已完成工程验收。下一项是 M6a-03：先满足受信预算后端、独立资料与全轮冻结，再执行真实效果验证。Jev 与 Web 工作线仍按独立依赖推进。
 
 ## 执行规则
 
@@ -28,8 +28,8 @@ P0-01/02/03/04 均已完成工程验收。M6a-01 也已完成：以已有通用 
 | M5-01 | Jev choice 最小接入 | P0-02，官方接口核验 | 待前置 | 同一 Decision 合同下版本、概率、调用账本及恢复通过；真实兼容单独验证 |
 | U0/U1 | 应用 Interface、Host 与任务 Web | P0-01；按交互设计切片 | 待执行 | 页面与 CLI 使用同一用例，异步任务可观察、取消和恢复 |
 | M6a-01 | [可编译策略内容与参数合同](./compiled-policy.md) | P0-04，已有通用 LLM choice | 已完成 | 只开放许可参数；请求可重建；旧策略/快照/Run 兼容 |
-| M6a-02 | 有界搜索、报告与唯一候选 | M6a-01 | 待执行 | train/search/formal 隔离；每次调用记账；零候选、取消和 unknown 路径通过 |
-| M6a-03 | 单模块真实效果验证 | M6a-02、独立数据、冻结预算 | 待前置 | 未见 family 上满足预注册质量或成本门；不足则停止扩展 |
+| M6a-02 | [有界搜索、报告与唯一候选](./policy-compilation.md) | M6a-01 | 已完成 | train/search/formal 隔离；每次调用记账；零候选、取消和 unknown 路径通过 |
+| M6a-03 | 单模块真实效果验证 | M6a-02、受信预算后端、独立数据、全轮冻结 | 待前置 | 未见 family 上满足预注册质量或成本门；不足则停止扩展 |
 | M6b-01 | 单步任务内适应会话 | M6a-03 通过，P0-03 | 待效果门 | 独立快照试跑、会话累计预算、组合后实测、不改变 active、不重复副作用 |
 | M6b-02 | 同预算适应实验 | M6b-01 | 待效果门 | 与原方案多次执行对照，证明额外编排的质量或成本价值 |
 | M6c-01 | 改进经验资产与冻结检索 | M6b-02 通过 | 待效果门 | 来源/反例/用途可追溯；任务固定所读库版本；采用受治理 |
@@ -120,6 +120,9 @@ env -u PROTEUS_E2E -u PROTEUS_SANDBOX PATH="/opt/homebrew/bin:$PATH" \
 | 2026-10-24 | M6a-01 策略与参数 | 新 `llm-choice-demos-v1` 冻结基线/视图/池与来源，只开放示例选择和顺序；严格响应、特征、train 用途、摘要与大小界限 | 已完成，合同见可编译策略文档；未实现搜索器或自动采用 |
 | 2026-10-24 | M6a-01 请求与恢复 | 请求渲染归 Adapter，完整正文及视图来源进入 request blob；prepared 原 ID/额度恢复、unknown 不重发、完成证据不重复执行、端点/正文漂移拒绝 | 旧 v1 请求布局、promptDigest、快照与 prepared Run 兼容，无数据库迁移；SDK 默认端点与来源记录统一 |
 | 2026-10-24 | M6a-01 验证 | 新增 17 个用例；含旧决策运行的定向验收 35/35，扩展的旧 v1 prepared 恢复通过；lint、format、typecheck、文档检查通过 | 56 个测试文件全过，290 passed / 5 skipped；真实模型兼容与收益均 not_run |
+| 2026-10-24 | M6a-02 来源与搜索 | operator 独立标注并核验冻结 normal 经验、原调用/视图/验收及许可；train/search/formal 隔离；冻结参数网格、family 等权评分和同分规则 | 已完成；只输出至多一个 compiled-policy 候选，搜索不创建 Evaluation、不领用正式次数、不切 active |
+| 2026-10-24 | M6a-02 调用与恢复 | migration 15 增加编译 Case/Job/Trial，复用累计 learning_calls；来源费用/执行证据、硬 token 预留、绝对截止点、fixture/real 配置和完整报告持久化 | prepared 沿原预留恢复；started/unknown 不重发；结果、候选/绑定/报告原子提交；取消、并发领取、后端漂移与真实团队撤权通过 |
+| 2026-10-24 | M6a-02 验证 | 新增 13 个 SQLite/本地 worker 集成用例和 3 个纯报告用例；包含三个崩溃点、零候选、源漂移、预算耗尽、未知费用、旧归纳回归；静态与文档检查通过 | 58 个测试文件全过，306 passed / 5 skipped；真实模型兼容/效果及正式采用均 not_run；原生 Adapter 尚无可核验 token 上界，不自动启用真实编译 |
 
 P0-01 的最小复现与回归命令：
 
@@ -148,4 +151,14 @@ env -u PROTEUS_E2E -u PROTEUS_SANDBOX PATH="/opt/homebrew/bin:$PATH" \
   /opt/homebrew/bin/node node_modules/vitest/vitest.mjs run \
   tests/unit/llm-demos-policy.test.ts tests/contract/llm-demos-adapter.test.ts \
   tests/integration/llm-demos-runtime.test.ts tests/integration/decision-runtime.test.ts
+```
+
+
+M6a-02 的定向验收命令：
+
+```bash
+env -u PROTEUS_E2E -u PROTEUS_SANDBOX PATH="/opt/homebrew/bin:$PATH" \
+  /opt/homebrew/bin/node node_modules/vitest/vitest.mjs run \
+  tests/unit/compile-report.test.ts tests/integration/policy-compiler.test.ts \
+  tests/unit/llm-demos-policy.test.ts tests/integration/consolidation-recovery.test.ts
 ```

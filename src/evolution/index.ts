@@ -1,3 +1,5 @@
+import { PolicyCompiler } from "./policy-compiler.ts";
+import type { CompileBackend } from "./compile-types.ts";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import type { Clock, IdGen, PromotionRecord } from "../kernel/index.ts";
@@ -52,10 +54,32 @@ const EXPERIENCE_FILTER_VERSION_EXPLICIT = "v1:explicit-run-ids";
 
 export class Evolution {
   readonly deps: EvolutionRuntimeDeps;
+  readonly compiler: PolicyCompiler;
   private readonly activeLearningAborts = new Map<string, AbortController>();
 
   constructor(deps: EvolutionRuntimeDeps) {
     this.deps = deps;
+    this.compiler = new PolicyCompiler({
+      ...deps,
+      backend: deps.compileBackend,
+      datasetView: (id) => this.experienceDatasetView(id),
+      taskDigest: (task) =>
+        evaluationPlanDigest({
+          newCapability: task,
+          regression: task,
+          requestedBy: task.requestedBy,
+        }),
+      validation: (id) => {
+        const set = this.validationSet(id);
+        if (set.state !== "ready" || set.usageCount !== 0 || !set.planRef || !set.planDigest)
+          throw new EvolutionError("validation_set_exhausted", "编译需要未使用的固定正式计划");
+        const plan = JSON.parse(deps.blobs.read(set.planRef)) as PolicyEvaluationPlan;
+        if (policyEvaluationPlanDigest(plan) !== set.planDigest)
+          throw new EvolutionError("evaluation_plan_drift", "正式计划摘要漂移");
+        this.assertValidationIsolation(set, plan);
+        return set;
+      },
+    });
   }
 
   /**
@@ -2209,6 +2233,7 @@ export interface EvaluationPlan {
 }
 
 export interface EvolutionRuntimeDeps {
+  compileBackend?: CompileBackend;
   actorId?: string;
   learningCallTimeoutMs?: number;
   kernel: Kernel;

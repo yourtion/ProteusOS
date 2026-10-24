@@ -2,7 +2,7 @@
 
 协议 ID：`adaptive-behavior-v1`，报告合同同名，冻结日期：2026-10-24。与 [organism-decision-v1](./organism-decision-v1.md) 独立，不修改旧实验或 `m3-policy-eval-v1` 的判定。实现见 [冻结与复算合同](../../src/app/experiment/adaptive.ts)。
 
-当前交付为 **P0-04 工程验收**：可冻结清单、隔离用途、预检预算并离线复算；fixture 和本地 worker 演练均不提供真实模型收益证据。编译器、任务内适应、经验库、真实实验 runner 及正式 Evaluation 桥接尚未实现。这个离线模块不会调用服务、创建 Candidate/Evaluation、消费正式验证集或晋升版本。
+当前交付为 **P0-04 工程验收**：可冻结清单、隔离用途、预检预算并离线复算；fixture 和本地 worker 演练均不提供真实模型收益证据。有界示例编译器已完成工程实现；任务内适应、经验库、真实实验 runner 及正式 Evaluation 桥接尚未实现。这个离线模块不会调用服务、创建 Candidate/Evaluation、消费正式验证集或晋升版本。
 
 ## 1. 问题、变量与阶段
 
@@ -102,4 +102,4 @@ env -u PROTEUS_E2E -u PROTEUS_SANDBOX PATH="/opt/homebrew/bin:$PATH" \
 - [单元反例](../../tests/unit/adaptive-experiment.test.ts)：重叠 family/任务、摘要漂移、读入正式资料、重复引用、超额、缺测、unknown、币种/价格缺失、关键回归、无标签选择器。
 - [完整管道演练](../../tests/acceptance/adaptive-experiment.test.ts)：60 次 fake 决策、60 次真实本地 worker，加 4 张开发收据。三臂使用现有策略，仅演练新合同；本地输出由独立计算的完整 JSON 验收。保存 manifest/observations/report 到临时目录后只读重算，断言无额外请求、标签不进入模型请求、activeGenome 不变。全部成功也不会产生编译改善结论。
 
-当前真实模型兼容及收益均为 not_run。M6a-01 的新增示例参数及请求合同见 [可编译策略](../compiled-policy.md)；搜索、真实 runner 与独立正式 Evaluation 桥接仍待 M6a 后续切片。Jev 仍是独立 M5 工作线。
+当前真实模型兼容及收益均为 not_run。M6a-01 的新增示例参数及请求合同见 [可编译策略](../compiled-policy.md)；有界搜索与报告见 [编译作业](../policy-compilation.md)；真实 runner 与独立正式 Evaluation 桥接仍待 M6a-03。Jev 仍是独立 M5 工作线。

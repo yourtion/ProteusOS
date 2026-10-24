@@ -1,3 +1,4 @@
+import type { CompileBackend } from "../evolution/compile-types.ts";
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -121,6 +122,7 @@ export function openInstance(
     organismId?: string;
     actorId?: string;
     routeProposer?: RouteProposer;
+    compileBackend?: CompileBackend;
     learningCallTimeoutMs?: number;
     logger?: Logger;
     organismBudget?: OrganismBudget;
@@ -168,6 +170,7 @@ export function openInstance(
   const evolution = new Evolution({
     actorId,
     routeProposer: options.routeProposer ?? llmProposerFromEnv() ?? undefined,
+    compileBackend: options.compileBackend,
     learningCallTimeoutMs: options.learningCallTimeoutMs,
     kernel,
     storage,

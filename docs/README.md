@@ -23,6 +23,7 @@
 | [DSPy 论文研究](./research/dspy-paper.md) | 论文概念、当前官方实现与项目适用边界 |
 | [DSPy 与 Harness² 联合分析](./research/dspy-harness2.md) | 可编译策略、任务内试探和改进经验库的代码映射 |
 | [Jev 决策层研究](./research/jev-decision-plane.md) | 官方接口、问题类型、概率证据与接入边界 |
+| [编译作业与报告](./policy-compilation.md) | 来源标注与隔离、有界示例搜索、累计预算、恢复和唯一候选 |
 | [可编译策略](./compiled-policy.md) | 冻结示例池、选择/顺序参数、模型请求持久化与旧策略兼容 |
 | [适应行为实验](./experiments/adaptive-behavior-v1.md) | 新版实验冻结、四类数据隔离、同预算比较与无真实调用演练 |
 | [本体决策实验](./experiments/organism-decision-v1.md) | 规则/LLM 对照协议、指标和运行命令 |

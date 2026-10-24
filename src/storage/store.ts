@@ -1,3 +1,8 @@
+import type {
+  CompileCaseRecord,
+  CompileJobRecord,
+  CompileTrial,
+} from "../evolution/compile-types.ts";
 import type { PublicationRecord, ImportRecord } from "../federation/types.ts";
 import type {
   PublicationKey,
@@ -946,6 +951,87 @@ export class Storage implements KernelStore, RuntimeStore {
         limit,
       )
       .map(mapEvaluation);
+  }
+
+  // ---- 有界策略编译：记录更新由调用方在同一事务中与额度/候选一起提交 ----
+  insertCompileCase(record: CompileCaseRecord): void {
+    this.db.run(
+      "INSERT INTO policy_compile_cases VALUES (?, ?, ?, ?)",
+      record.id,
+      record.organismId,
+      record.experienceId,
+      JSON.stringify(record),
+    );
+  }
+  compileCases(organismId: string): CompileCaseRecord[] {
+    return this.db
+      .all<{ record: string }>(
+        "SELECT record FROM policy_compile_cases WHERE organism_id = ? ORDER BY id",
+        organismId,
+      )
+      .map((r) => JSON.parse(r.record));
+  }
+  getCompileCase(id: string): CompileCaseRecord | undefined {
+    const row = this.db.get<{ record: string }>(
+      "SELECT record FROM policy_compile_cases WHERE id = ?",
+      id,
+    );
+    return row ? JSON.parse(row.record) : undefined;
+  }
+  insertCompileJob(record: CompileJobRecord): void {
+    this.db.run(
+      "INSERT INTO policy_compile_jobs VALUES (?, ?, ?, ?)",
+      record.id,
+      record.organismId,
+      record.planDigest,
+      JSON.stringify(record),
+    );
+  }
+  compileJobs(organismId: string): CompileJobRecord[] {
+    return this.db
+      .all<{ record: string }>(
+        "SELECT record FROM policy_compile_jobs WHERE organism_id = ? ORDER BY id",
+        organismId,
+      )
+      .map((r) => JSON.parse(r.record));
+  }
+  getCompileJob(id: string): CompileJobRecord | undefined {
+    const row = this.db.get<{ record: string }>(
+      "SELECT record FROM policy_compile_jobs WHERE id = ?",
+      id,
+    );
+    return row ? JSON.parse(row.record) : undefined;
+  }
+  updateCompileJob(record: CompileJobRecord): void {
+    this.db.run(
+      "UPDATE policy_compile_jobs SET record = ? WHERE id = ?",
+      JSON.stringify(record),
+      record.id,
+    );
+  }
+  compileTrials(jobId: string): CompileTrial[] {
+    return this.db
+      .all<{ record: string }>(
+        "SELECT record FROM policy_compile_trials WHERE job_id = ? ORDER BY ordinal",
+        jobId,
+      )
+      .map((r) => JSON.parse(r.record));
+  }
+  insertCompileTrial(record: CompileTrial): void {
+    this.db.run(
+      "INSERT INTO policy_compile_trials VALUES (?, ?, ?, ?)",
+      record.id,
+      record.jobId,
+      record.ordinal,
+      JSON.stringify(record),
+    );
+  }
+  updateCompileTrial(record: CompileTrial): void {
+    this.db.run(
+      "UPDATE policy_compile_trials SET record = ? WHERE id = ?",
+      JSON.stringify(record),
+      record.id,
+    );
   }
 
   // ---- M3：冻结经验集 ----

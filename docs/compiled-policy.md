@@ -1,6 +1,6 @@
 # 可编译 LLM 策略：示例参数合同
 
-更新：2026-10-24。对应 [执行计划](./execution-plan.md) 的 M6a-01，实验边界见 [adaptive-behavior-v1](./experiments/adaptive-behavior-v1.md)。当前已实现可版本化内容、有限参数、确定性请求渲染与恢复兼容；尚未实现搜索器、学习作业、CompileReport 或真实模型效果实验。
+更新：2026-10-24。对应 [执行计划](./execution-plan.md) 的 M6a-01，实验边界见 [adaptive-behavior-v1](./experiments/adaptive-behavior-v1.md)。已实现可版本化内容、有限参数、确定性请求渲染与恢复兼容。M6a-02 的作业、来源核验、有界搜索和 CompileReport 见 [编译执行合同](./policy-compilation.md)；真实模型效果尚未验证。
 
 ## 1. 新内容格式与固定部分
 
@@ -29,7 +29,7 @@
 
 来源必须声明 `purpose=development`、`split=train`、`permission=synthetic|permitted`，以及 dataset/case/family、Run/DecisionCall、verificationRef 和 view/response 摘要。search/formal/regression 均不能直接作为示例来源。响应 value 必须属于冻结选项；弃权理由非空且不超过 512 字符，不允许 confidence 或解释等额外字段。
 
-来源中的 `verificationRef` 指向后续 learner 要读取的独立验收证据。这个切片只验证字段/用途和内容摘要，不从存储提取或核验 teacher 成绩；M6a-02 必须核对原始 Run、调用、许可、family 与验收证据。不能把 `split=train` 的自报或任务最终成功当作每个中间选择正确的证明。
+来源中的 `verificationRef` 指向后续 learner 要读取的独立验收证据。这个切片只验证字段/用途和内容摘要，不从存储提取或核验 teacher 成绩；M6a-02 的 `registerCase` 已核对原始 Run、调用、许可、family 与独立标注及完整验收；具体边界见编译执行合同。不能把 `split=train` 的自报或任务最终成功当作每个中间选择正确的证明。
 
 来源记录保留在受控策略产物里，遵循其版本权限。渲染只取被选示例的 view 和规范化 response，不发送示例 ID、dataset/case/family、split、Run/DecisionCall、verificationRef、digest 或未选示例。正式标签与验收资料也不进入模型正文。
 
@@ -73,4 +73,4 @@ env -u PROTEUS_E2E -u PROTEUS_SANDBOX PATH="/opt/homebrew/bin:$PATH" \
 - [Adapter 合同](../tests/contract/llm-demos-adapter.test.ts)：以 SDK 替身核对实际提交参数、signal、无重试及来源摘要，非法正文零调用，服务 refusal 与传输失败分离。
 - [Runtime 集成](../tests/integration/llm-demos-runtime.test.ts)：真实 SQLite、ArtifactVersion 依赖、快照、本地 worker、完整请求持久化；重启时 prepared 原 ID/额度/正文恢复、unknown 不重发、完成证据不重复执行；旧 v1 快照和缺少新字段可用；正文与端点漂移被拒绝。
 
-这些是工程验证；远端 SDK/服务兼容与真实收益均未运行。下一切片 M6a-02 接入受许可经验、有限搜索、持久化累计预算、CompileTrial/CompileReport、唯一候选，以及取消/unknown/零候选路径。正式采用继续要求独立 Evaluation 与 operator Promotion。
+这些是工程验证；远端 SDK/服务兼容与真实收益均未运行。M6a-02 已接入受许可经验、有限搜索、持久化累计预算、CompileTrial/CompileReport、唯一候选，以及取消/unknown/零候选路径。正式采用继续要求独立 Evaluation 与 operator Promotion。

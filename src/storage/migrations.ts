@@ -517,4 +517,31 @@ CREATE TABLE registry_credentials (
 );
 `,
   },
+  {
+    version: 15,
+    name: "bounded-policy-compilation",
+    sql: `
+CREATE TABLE policy_compile_cases (
+  id TEXT PRIMARY KEY,
+  organism_id TEXT NOT NULL,
+  experience_id TEXT NOT NULL,
+  record TEXT NOT NULL,
+  UNIQUE(organism_id, experience_id)
+);
+CREATE TABLE policy_compile_jobs (
+  id TEXT PRIMARY KEY,
+  organism_id TEXT NOT NULL,
+  plan_digest TEXT NOT NULL,
+  record TEXT NOT NULL,
+  UNIQUE(organism_id, plan_digest)
+);
+CREATE TABLE policy_compile_trials (
+  id TEXT PRIMARY KEY,
+  job_id TEXT NOT NULL REFERENCES policy_compile_jobs(id),
+  ordinal INTEGER NOT NULL,
+  record TEXT NOT NULL,
+  UNIQUE(job_id, ordinal)
+);
+`,
+  },
 ];
