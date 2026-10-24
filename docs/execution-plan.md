@@ -1,10 +1,10 @@
 # ProteusOS 适应能力执行计划
 
-更新：2026-10-23。设计依据见 [演化合同](./evolution.md)、[DSPy 论文](https://arxiv.org/pdf/2310.03714) 和 [Harness² 论文](https://arxiv.org/pdf/2610.14224)。本文件记录交付顺序、验收门与执行状态；研究笔记保留事实依据，路线图保留阶段概览。
+更新：2026-10-24。设计依据见 [演化合同](./evolution.md)、[DSPy 论文](https://arxiv.org/pdf/2310.03714) 和 [Harness² 论文](https://arxiv.org/pdf/2610.14224)。本文件记录交付顺序、验收门与执行状态；研究笔记保留事实依据，路线图保留阶段概览。
 
 先完成可复现的工程基线和证据合同，再实现可编译策略、任务内试探与跨任务经验复用。Jev 决策层和 Web 工作线继续保留。每次交付一个可独立验证的切片，完成后把命令、结果及下一项写回本文件。
 
-本轮实施范围为恢复基线、评估证据、执行轨迹，对应 P0-01/02/03，三项均已完成并通过全量回归。后续候选项为 P0-04 实验冻结；新实验和后续阶段各按其依赖与验收推进。
+P0-01/02/03/04 均已完成工程验收。本轮 P0-04 已交付新协议、冻结/复算合同和无真实调用演练，并通过全量回归。下一候选项为 M6a-01，以已有通用 LLM choice 作为首个 Provider；Jev 与 Web 工作线仍按独立依赖推进。
 
 ## 执行规则
 
@@ -24,10 +24,10 @@
 | P0-01 | 恢复与取消测试的确定性基线 | 无 | 已完成 | 当前恢复失败定位并修复，崩溃点由明确事件控制，针对性与全量检查通过 |
 | P0-02 | 版本化评估证据与指标口径 | P0-01 | 已完成 | 独立 family、重复稳定性、明确弃权/异常及用量缺失可区分，旧协议兼容 |
 | P0-03 | [执行轨迹与用量合同](./execution-evidence.md) | P0-01，复用 P0-02 的口径 | 已完成 | ACP/pi/本地执行均能返回明确的轨迹可用性和用量状态，证据持久化且可复算 |
-| P0-04 | 新实验协议及数据隔离合同 | P0-02/03 | 待执行 | 固定预算、数据 split、对照、指标和停止条件，形成无真实调用的完整演练 |
+| P0-04 | [新实验协议及数据隔离合同](./experiments/adaptive-behavior-v1.md) | P0-02/03 | 已完成 | 固定预算、数据 split、对照、指标和停止条件，形成无真实调用的完整演练 |
 | M5-01 | Jev choice 最小接入 | P0-02，官方接口核验 | 待前置 | 同一 Decision 合同下版本、概率、调用账本及恢复通过；真实兼容单独验证 |
 | U0/U1 | 应用 Interface、Host 与任务 Web | P0-01；按交互设计切片 | 待执行 | 页面与 CLI 使用同一用例，异步任务可观察、取消和恢复 |
-| M6a-01 | 可编译策略内容与参数合同 | P0-04，选定首个 Provider | 待前置 | 只开放许可参数；请求可重建；旧策略/快照/Run 兼容 |
+| M6a-01 | 可编译策略内容与参数合同 | P0-04，已有通用 LLM choice | 待执行 | 只开放许可参数；请求可重建；旧策略/快照/Run 兼容 |
 | M6a-02 | 有界搜索、报告与唯一候选 | M6a-01 | 待前置 | train/search/formal 隔离；每次调用记账；零候选、取消和 unknown 路径通过 |
 | M6a-03 | 单模块真实效果验证 | M6a-02、独立数据、冻结预算 | 待前置 | 未见 family 上满足预注册质量或成本门；不足则停止扩展 |
 | M6b-01 | 单步任务内适应会话 | M6a-03 通过，P0-03 | 待效果门 | 独立快照试跑、会话累计预算、组合后实测、不改变 active、不重复副作用 |
@@ -114,6 +114,9 @@ env -u PROTEUS_E2E -u PROTEUS_SANDBOX PATH="/opt/homebrew/bin:$PATH" \
 | 2026-10-23 | P0-03 恢复边界 | 崩溃注入证明“Attempt 已成功、节点完成未提交”时会执行两次；成功结果、节点完成和轨迹引用改为同事务提交 | 回归已通过，执行次数保持 1 |
 | 2026-10-23 | P0-03 观测与持久化 | 有界公开事件、Adapter 用量/缺失、输入输出指纹、blob 摘要与回放、失败/截断/迟到事件、工作区清理和旧记录；评估明细冻结 Attempt 引用 | 已完成，完整合同见执行轨迹文档 |
 | 2026-10-23 | 本轮最终验证 | lint、format、typecheck 通过；51 个测试文件全过，260 passed / 5 skipped；真实 Agent 与 Microsandbox 未启用 | P0-01/02/03 工程验收通过；未产生真实模型收益结论 |
+| 2026-10-24 | P0-04 冻结合同 | 新协议固定四类 split、三臂、示例修改白名单、累计额度/截止点与效果门；拒绝跨 split family/内容、摘要漂移与重复计量 | 已完成；离线审计不替代运行时持久化预算与正式 Evaluation |
+| 2026-10-24 | P0-04 演练 | 40 张公开收据可重复复算；60 次 fake 决策与真实本地 worker 完整验收；模型请求无标签/验收资料、activeGenome 不变 | 12 个单元用例及 1 个完整管道用例通过；fixture 永不产生真实收益结论 |
+| 2026-10-24 | P0-04 边界与最终验证 | 恰好 5 个百分点的浮点门槛、unknown/缺测、币种与价格缺失、关键回归、无标签选择器均覆盖；lint、format、typecheck 与文档检查通过 | 53 个测试文件全过，273 passed / 5 skipped；真实 Agent / Microsandbox 未启用，真实模型兼容与收益均 not_run |
 
 P0-01 的最小复现与回归命令：
 
@@ -123,4 +126,13 @@ env -u PROTEUS_E2E -u PROTEUS_SANDBOX PATH="/opt/homebrew/bin:$PATH" \
   tests/integration/recovery.test.ts tests/acceptance/registry-cli.test.ts
 ```
 
-后续 P0-04 需要另行冻结新实验协议及完整资源汇总规则。现有正式判定与冻结门槛保持原语义；资源视图明确区分决策调用汇总与各 Attempt 的执行用量。
+P0-04 的新版协议与完整资源汇总规则见 [适应行为实验 v1](./experiments/adaptive-behavior-v1.md)。本切片只做离线冻结/审计，不装配真实 runner；M6a 在真实运行前补齐持久化预留、调用/token 上界与正式 Evaluation 桥接。现有正式判定与冻结门槛保持原语义。
+
+
+P0-04 的定向验收命令：
+
+```bash
+env -u PROTEUS_E2E -u PROTEUS_SANDBOX PATH="/opt/homebrew/bin:$PATH" \
+  /opt/homebrew/bin/node node_modules/vitest/vitest.mjs run \
+  tests/unit/adaptive-experiment.test.ts tests/acceptance/adaptive-experiment.test.ts
+```

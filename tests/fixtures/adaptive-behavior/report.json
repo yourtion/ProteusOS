@@ -1,0 +1,193 @@
+{
+  "protocol": "adaptive-behavior-v1",
+  "manifestDigest": "46e53766c0eaac2dd041df43b6dbef01327fd083f8102a0bf541c753b8a6024a",
+  "engineering": "passed",
+  "realModel": "not_run",
+  "benefit": "not_evaluated",
+  "adoption": "requires-independent-evaluation-and-operator-promotion",
+  "qualityGate": true,
+  "missing": [],
+  "open": [],
+  "problems": [],
+  "criticalFailures": [],
+  "elapsedMs": 595,
+  "reserved": {
+    "modelCalls": 64,
+    "inputTokens": 131072,
+    "outputTokens": 16384,
+    "durationMs": 1920000
+  },
+  "resources": {
+    "modelCalls": {
+      "knownTotal": 64,
+      "unknownUnits": 0
+    },
+    "inputTokens": {
+      "knownTotal": 640,
+      "unknownUnits": 0
+    },
+    "outputTokens": {
+      "knownTotal": 128,
+      "unknownUnits": 0
+    },
+    "unknownCostUnits": 40,
+    "knownCosts": []
+  },
+  "arms": {
+    "single": {
+      "repeatSuccessRates": [0, 0, 0],
+      "repeatVariance": 0,
+      "formal": {
+        "planned": 6,
+        "families": 2,
+        "successRate": 0,
+        "misrouteRate": 1,
+        "failureRate": 0,
+        "p95Ms": 5
+      },
+      "regression": {
+        "planned": 6,
+        "families": 2,
+        "successRate": 1,
+        "misrouteRate": 0,
+        "failureRate": 0,
+        "p95Ms": 5
+      },
+      "resources": {
+        "modelCalls": {
+          "knownTotal": 12,
+          "unknownUnits": 0
+        },
+        "inputTokens": {
+          "knownTotal": 120,
+          "unknownUnits": 0
+        },
+        "outputTokens": {
+          "knownTotal": 24,
+          "unknownUnits": 0
+        },
+        "unknownCostUnits": 12,
+        "knownCosts": []
+      },
+      "decisions": {
+        "value": 12
+      }
+    },
+    "budget-matched": {
+      "repeatSuccessRates": [0, 0, 0],
+      "repeatVariance": 0,
+      "formal": {
+        "planned": 6,
+        "families": 2,
+        "successRate": 0,
+        "misrouteRate": 1,
+        "failureRate": 0,
+        "p95Ms": 5
+      },
+      "regression": {
+        "planned": 6,
+        "families": 2,
+        "successRate": 1,
+        "misrouteRate": 0,
+        "failureRate": 0,
+        "p95Ms": 5
+      },
+      "resources": {
+        "modelCalls": {
+          "knownTotal": 36,
+          "unknownUnits": 0
+        },
+        "inputTokens": {
+          "knownTotal": 360,
+          "unknownUnits": 0
+        },
+        "outputTokens": {
+          "knownTotal": 72,
+          "unknownUnits": 0
+        },
+        "unknownCostUnits": 12,
+        "knownCosts": []
+      },
+      "decisions": {
+        "value": 12
+      }
+    },
+    "compiled": {
+      "repeatSuccessRates": [1, 1, 1],
+      "repeatVariance": 0,
+      "formal": {
+        "planned": 6,
+        "families": 2,
+        "successRate": 1,
+        "misrouteRate": 0,
+        "failureRate": 0,
+        "p95Ms": 5
+      },
+      "regression": {
+        "planned": 6,
+        "families": 2,
+        "successRate": 1,
+        "misrouteRate": 0,
+        "failureRate": 0,
+        "p95Ms": 5
+      },
+      "resources": {
+        "modelCalls": {
+          "knownTotal": 16,
+          "unknownUnits": 0
+        },
+        "inputTokens": {
+          "knownTotal": 160,
+          "unknownUnits": 0
+        },
+        "outputTokens": {
+          "knownTotal": 32,
+          "unknownUnits": 0
+        },
+        "unknownCostUnits": 16,
+        "knownCosts": []
+      },
+      "decisions": {
+        "value": 16
+      }
+    }
+  },
+  "families": [
+    {
+      "split": "formal",
+      "familyId": "formal-family-0",
+      "single": 0,
+      "budgetMatched": 0,
+      "compiled": 1,
+      "differenceVsSingle": 1,
+      "differenceVsBudgetMatched": 1
+    },
+    {
+      "split": "formal",
+      "familyId": "formal-family-1",
+      "single": 0,
+      "budgetMatched": 0,
+      "compiled": 1,
+      "differenceVsSingle": 1,
+      "differenceVsBudgetMatched": 1
+    },
+    {
+      "split": "regression",
+      "familyId": "regression-family-0",
+      "single": 1,
+      "budgetMatched": 1,
+      "compiled": 1,
+      "differenceVsSingle": 0,
+      "differenceVsBudgetMatched": 0
+    },
+    {
+      "split": "regression",
+      "familyId": "regression-family-1",
+      "single": 1,
+      "budgetMatched": 1,
+      "compiled": 1,
+      "differenceVsSingle": 0,
+      "differenceVsBudgetMatched": 0
+    }
+  ]
+}
