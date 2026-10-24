@@ -1069,12 +1069,14 @@ export class Runtime {
     // 视图装配（decision-view 节点）：Runtime 构建受限视图并校验大小
     let view: DecisionView | undefined;
     let viewVersionId: string | null = null;
+    let viewSource: DecisionRequest["viewSource"];
     if (node.view) {
       const version = versions.get("decision-view");
       if (!version) {
         throw new NodeFailure("missing_binding", "快照缺少 decision-view 槽位（实验图）");
       }
       viewVersionId = version.id;
+      viewSource = { versionId: version.id, contentDigest: version.contentDigest };
       let content;
       try {
         content = parseDecisionViewContent(JSON.parse(this.deps.blobs.read(version.contentRef)));
@@ -1115,20 +1117,12 @@ export class Runtime {
         provider,
         view,
         viewVersionId,
+        viewSource,
         remainingMs,
         nodeStates,
       });
     }
 
-    // 新调用：请求内容写入受控 blob（实际发送视图与序列化消息的完整内容）
-    const requestCanonical = canonicalJson({
-      problem: node.problem,
-      options: node.options,
-      view: view ?? null,
-      context: node.context ?? {},
-    });
-    const requestDigest = digestOf(requestCanonical);
-    const { ref: requestRef } = this.deps.blobs.write(requestCanonical);
     const decisionId = this.deps.ids.next();
     const kind: DecisionCallKind = provider.remote === true ? "model" : "local";
     const request = this.buildDecisionRequest({
@@ -1138,8 +1132,28 @@ export class Runtime {
       runId,
       remainingMs,
       view,
+      viewSource,
       requires: task.requires,
     });
+    try {
+      const prepared = provider.prepareRequest?.(request);
+      if (prepared) request.prepared = prepared;
+    } catch (error) {
+      throw new NodeFailure(
+        "decision_request_invalid",
+        `请求准备失败，未预留或发送：${String(error)}`,
+      );
+    }
+    // 新格式同时保存实际正文；旧 Provider/llm-choice-v1 的请求结构不变。
+    const requestCanonical = canonicalJson({
+      problem: node.problem,
+      options: node.options,
+      view: view ?? null,
+      context: node.context ?? {},
+      ...(request.prepared ? { prepared: request.prepared, viewSource } : {}),
+    });
+    const requestDigest = digestOf(requestCanonical);
+    const { ref: requestRef } = this.deps.blobs.write(requestCanonical);
 
     // 事务一：额度检查与预留 + prepared 记录（远端调用才查额度；本地计算不消耗）
     const now = this.deps.clock.now();
@@ -1313,6 +1327,7 @@ export class Runtime {
       provider: DecisionProvider;
       view: DecisionView | undefined;
       viewVersionId: string | null;
+      viewSource?: DecisionRequest["viewSource"];
       remainingMs: number;
       nodeStates: Map<string, NodeState>;
     },
@@ -1378,6 +1393,8 @@ export class Runtime {
       options: string[];
       view: DecisionView | null;
       context: Record<string, unknown>;
+      prepared?: DecisionRequest["prepared"];
+      viewSource?: DecisionRequest["viewSource"];
     };
     const request = this.buildDecisionRequest({
       node,
@@ -1386,6 +1403,7 @@ export class Runtime {
       runId: run.id,
       remainingMs: args.remainingMs,
       view: parsedStored.view ?? view,
+      viewSource: args.viewSource,
       options: parsedStored.options,
       context: parsedStored.context,
     });
@@ -1394,6 +1412,26 @@ export class Runtime {
         "decision_policy_drift",
         `决策调用 ${existing.id} 的策略版本 ${existing.policyVersionId} 与快照解析结果 ${args.policy.versionId} 不一致，拒绝恢复`,
       );
+    }
+    try {
+      const rebuilt = provider.prepareRequest?.(request);
+      if (
+        canonicalJson(rebuilt ?? null) !== canonicalJson(parsedStored.prepared ?? null) ||
+        (parsedStored.prepared &&
+          canonicalJson(parsedStored.viewSource) !== canonicalJson(args.viewSource))
+      )
+        throw new Error("已保存的模型正文或视图来源与当前冻结输入不一致");
+      if (parsedStored.prepared) {
+        request.prepared = parsedStored.prepared;
+        const provenance = provider.callProvenance?.(request);
+        if (
+          provenance?.adapter !== existing.provenance.adapter ||
+          provenance?.serviceId !== existing.provenance.serviceId
+        )
+          throw new Error("已冻结调用的 Adapter 或端点发生变化");
+      }
+    } catch (error) {
+      throw new NodeFailure("decision_request_drift", `冻结请求不可恢复：${String(error)}`);
     }
     return this.sendDecisionCall(existing.id, {
       run,
@@ -1744,6 +1782,7 @@ export class Runtime {
     runId: string;
     remainingMs: number;
     view?: DecisionView;
+    viewSource?: DecisionRequest["viewSource"];
     options?: string[];
     context?: Record<string, unknown>;
     requires?: string[];
@@ -1770,6 +1809,7 @@ export class Runtime {
         args.run.budget.maxAttempts - this.listRunAttempts(args.runId).length,
       ),
       ...(args.view ? { view: args.view } : {}),
+      ...(args.viewSource ? { viewSource: args.viewSource } : {}),
     };
   }
 

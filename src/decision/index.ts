@@ -15,6 +15,12 @@ export interface DecisionProvenance {
   policyVersion: string;
 }
 
+export interface PreparedDecisionRequest {
+  /** 不含认证头/凭据的版本化请求正文，由受信 Provider 渲染。 */
+  format: string;
+  body: Record<string, unknown>;
+}
+
 export interface DecisionRequest {
   problem: DecisionProblem;
   /** choice / gate / rank 的候选选项 */
@@ -31,6 +37,10 @@ export interface DecisionRequest {
    * 不接收整个 Task、存储对象或工作区访问能力。旧图（无 view）不携带。
    */
   view?: DecisionView;
+  /** 精确快照视图来源，供带冻结签名的策略核对。 */
+  viewSource?: { versionId: string; contentDigest: string };
+  /** prepared 之前保存的实际请求；恢复不能改用新渲染结果。 */
+  prepared?: PreparedDecisionRequest;
   /** 底层请求取消信号：Runtime 在 deadline/取消时触发；Provider 应尽力传播 */
   signal?: AbortSignal;
 }
@@ -82,6 +92,8 @@ export interface DecisionProvider {
   readonly remote?: boolean;
   capabilities(): { problems: DecisionProblem[] };
   decide(request: DecisionRequest): Promise<DecisionResult>;
+  /** 同步、无副作用的请求渲染；旧 Provider 可不实现。 */
+  prepareRequest?(request: DecisionRequest): PreparedDecisionRequest | undefined;
   /** 受信 Adapter 填充的调用来源（服务/模型/采样/提示摘要）；不信模型自报 */
   callProvenance?(request: DecisionRequest): {
     adapter: string;
@@ -122,3 +134,5 @@ export * from "./view.ts";
 export * from "./response.ts";
 export * from "./call.ts";
 export * from "./llm-policy.ts";
+
+export * from "./llm-demos-policy.ts";

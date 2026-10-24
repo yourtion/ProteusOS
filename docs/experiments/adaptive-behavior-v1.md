@@ -102,4 +102,4 @@ env -u PROTEUS_E2E -u PROTEUS_SANDBOX PATH="/opt/homebrew/bin:$PATH" \
 - [单元反例](../../tests/unit/adaptive-experiment.test.ts)：重叠 family/任务、摘要漂移、读入正式资料、重复引用、超额、缺测、unknown、币种/价格缺失、关键回归、无标签选择器。
 - [完整管道演练](../../tests/acceptance/adaptive-experiment.test.ts)：60 次 fake 决策、60 次真实本地 worker，加 4 张开发收据。三臂使用现有策略，仅演练新合同；本地输出由独立计算的完整 JSON 验收。保存 manifest/observations/report 到临时目录后只读重算，断言无额外请求、标签不进入模型请求、activeGenome 不变。全部成功也不会产生编译改善结论。
 
-当前真实模型兼容及收益均为 not_run。下一切片为 M6a-01：在已有通用 LLM choice 上定义受控的示例参数格式、可重建请求和旧快照兼容；Jev 仍是独立 M5 工作线。
+当前真实模型兼容及收益均为 not_run。M6a-01 的新增示例参数及请求合同见 [可编译策略](../compiled-policy.md)；搜索、真实 runner 与独立正式 Evaluation 桥接仍待 M6a 后续切片。Jev 仍是独立 M5 工作线。

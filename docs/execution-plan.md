@@ -4,7 +4,7 @@
 
 先完成可复现的工程基线和证据合同，再实现可编译策略、任务内试探与跨任务经验复用。Jev 决策层和 Web 工作线继续保留。每次交付一个可独立验证的切片，完成后把命令、结果及下一项写回本文件。
 
-P0-01/02/03/04 均已完成工程验收。本轮 P0-04 已交付新协议、冻结/复算合同和无真实调用演练，并通过全量回归。下一候选项为 M6a-01，以已有通用 LLM choice 作为首个 Provider；Jev 与 Web 工作线仍按独立依赖推进。
+P0-01/02/03/04 均已完成工程验收。M6a-01 也已完成：以已有通用 LLM choice 冻结基线、视图与示例池，只开放示例选择和顺序，请求持久化与旧快照恢复均通过验证。下一切片为 M6a-02 的有限搜索、报告与唯一候选。Jev 与 Web 工作线仍按独立依赖推进。
 
 ## 执行规则
 
@@ -27,8 +27,8 @@ P0-01/02/03/04 均已完成工程验收。本轮 P0-04 已交付新协议、冻�
 | P0-04 | [新实验协议及数据隔离合同](./experiments/adaptive-behavior-v1.md) | P0-02/03 | 已完成 | 固定预算、数据 split、对照、指标和停止条件，形成无真实调用的完整演练 |
 | M5-01 | Jev choice 最小接入 | P0-02，官方接口核验 | 待前置 | 同一 Decision 合同下版本、概率、调用账本及恢复通过；真实兼容单独验证 |
 | U0/U1 | 应用 Interface、Host 与任务 Web | P0-01；按交互设计切片 | 待执行 | 页面与 CLI 使用同一用例，异步任务可观察、取消和恢复 |
-| M6a-01 | 可编译策略内容与参数合同 | P0-04，已有通用 LLM choice | 待执行 | 只开放许可参数；请求可重建；旧策略/快照/Run 兼容 |
-| M6a-02 | 有界搜索、报告与唯一候选 | M6a-01 | 待前置 | train/search/formal 隔离；每次调用记账；零候选、取消和 unknown 路径通过 |
+| M6a-01 | [可编译策略内容与参数合同](./compiled-policy.md) | P0-04，已有通用 LLM choice | 已完成 | 只开放许可参数；请求可重建；旧策略/快照/Run 兼容 |
+| M6a-02 | 有界搜索、报告与唯一候选 | M6a-01 | 待执行 | train/search/formal 隔离；每次调用记账；零候选、取消和 unknown 路径通过 |
 | M6a-03 | 单模块真实效果验证 | M6a-02、独立数据、冻结预算 | 待前置 | 未见 family 上满足预注册质量或成本门；不足则停止扩展 |
 | M6b-01 | 单步任务内适应会话 | M6a-03 通过，P0-03 | 待效果门 | 独立快照试跑、会话累计预算、组合后实测、不改变 active、不重复副作用 |
 | M6b-02 | 同预算适应实验 | M6b-01 | 待效果门 | 与原方案多次执行对照，证明额外编排的质量或成本价值 |
@@ -117,6 +117,9 @@ env -u PROTEUS_E2E -u PROTEUS_SANDBOX PATH="/opt/homebrew/bin:$PATH" \
 | 2026-10-24 | P0-04 冻结合同 | 新协议固定四类 split、三臂、示例修改白名单、累计额度/截止点与效果门；拒绝跨 split family/内容、摘要漂移与重复计量 | 已完成；离线审计不替代运行时持久化预算与正式 Evaluation |
 | 2026-10-24 | P0-04 演练 | 40 张公开收据可重复复算；60 次 fake 决策与真实本地 worker 完整验收；模型请求无标签/验收资料、activeGenome 不变 | 12 个单元用例及 1 个完整管道用例通过；fixture 永不产生真实收益结论 |
 | 2026-10-24 | P0-04 边界与最终验证 | 恰好 5 个百分点的浮点门槛、unknown/缺测、币种与价格缺失、关键回归、无标签选择器均覆盖；lint、format、typecheck 与文档检查通过 | 53 个测试文件全过，273 passed / 5 skipped；真实 Agent / Microsandbox 未启用，真实模型兼容与收益均 not_run |
+| 2026-10-24 | M6a-01 策略与参数 | 新 `llm-choice-demos-v1` 冻结基线/视图/池与来源，只开放示例选择和顺序；严格响应、特征、train 用途、摘要与大小界限 | 已完成，合同见可编译策略文档；未实现搜索器或自动采用 |
+| 2026-10-24 | M6a-01 请求与恢复 | 请求渲染归 Adapter，完整正文及视图来源进入 request blob；prepared 原 ID/额度恢复、unknown 不重发、完成证据不重复执行、端点/正文漂移拒绝 | 旧 v1 请求布局、promptDigest、快照与 prepared Run 兼容，无数据库迁移；SDK 默认端点与来源记录统一 |
+| 2026-10-24 | M6a-01 验证 | 新增 17 个用例；含旧决策运行的定向验收 35/35，扩展的旧 v1 prepared 恢复通过；lint、format、typecheck、文档检查通过 | 56 个测试文件全过，290 passed / 5 skipped；真实模型兼容与收益均 not_run |
 
 P0-01 的最小复现与回归命令：
 
@@ -135,4 +138,14 @@ P0-04 的定向验收命令：
 env -u PROTEUS_E2E -u PROTEUS_SANDBOX PATH="/opt/homebrew/bin:$PATH" \
   /opt/homebrew/bin/node node_modules/vitest/vitest.mjs run \
   tests/unit/adaptive-experiment.test.ts tests/acceptance/adaptive-experiment.test.ts
+```
+
+
+M6a-01 的定向验收命令：
+
+```bash
+env -u PROTEUS_E2E -u PROTEUS_SANDBOX PATH="/opt/homebrew/bin:$PATH" \
+  /opt/homebrew/bin/node node_modules/vitest/vitest.mjs run \
+  tests/unit/llm-demos-policy.test.ts tests/contract/llm-demos-adapter.test.ts \
+  tests/integration/llm-demos-runtime.test.ts tests/integration/decision-runtime.test.ts
 ```

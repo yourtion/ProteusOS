@@ -5,9 +5,14 @@ import type {
   DecisionRequest,
   DecisionResult,
   DecisionView,
-  LlmChoicePolicyContent,
 } from "../../decision/index.ts";
-import { parseChoiceResponse, parseLlmPolicy } from "../../decision/index.ts";
+import { parseChoiceResponse, parseLlmPolicy, isLlmDemosPolicy } from "../../decision/index.ts";
+import {
+  prepareLlmDemosRequest,
+  resolveLlmDemosRequest,
+  buildLlmChoiceBody,
+  llmPromptDigest,
+} from "./request.ts";
 import { canonicalJson } from "../../storage/blobs.ts";
 
 /**
@@ -19,7 +24,7 @@ import { canonicalJson } from "../../storage/blobs.ts";
  * 取消经 AbortSignal 传播；超时由 Runtime 的 deadline 竞速兜底。
  *
  * 提示模板、服务/模型标识与采样参数全部来自快照 routing-policy 槽位的
- * llm-choice-v1 产物（版本化冻结，合同见 src/decision/llm-policy.ts），
+ * llm-choice-v1 或 llm-choice-demos-v1 产物（版本化冻结，合同归 Decision），
  * env 只注入凭据与端点，避免配置漂移：
  * - PROTEUS_LLM_API_KEY（必需）
  * - PROTEUS_LLM_BASE_URL（默认 https://api.z.ai/api/anthropic）
@@ -53,10 +58,10 @@ export class LlmDecisionProvider implements DecisionProvider {
   private readonly config: LlmAdapterConfig;
 
   constructor(config: LlmAdapterConfig) {
-    this.config = config;
+    this.config = { ...config, baseUrl: config.baseUrl ?? DEFAULT_LLM_BASE_URL };
     this.client = new Anthropic({
       apiKey: config.apiKey,
-      baseURL: config.baseUrl,
+      baseURL: this.config.baseUrl,
       maxRetries: 0,
       timeout: config.requestTimeoutMs ?? 30_000,
     });
@@ -68,8 +73,9 @@ export class LlmDecisionProvider implements DecisionProvider {
 
   async decide(request: DecisionRequest): Promise<DecisionResult> {
     const provenance = { provider: this.name, policyVersion: request.policy.versionId };
-    const policy = parseLlmPolicy(request.policy.content);
-    if (!policy) {
+    const demos = isLlmDemosPolicy(request.policy.content);
+    const policy = demos ? undefined : parseLlmPolicy(request.policy.content);
+    if (!policy && !demos) {
       return {
         kind: "invalid_output",
         detail: `策略内容不是合法的 llm-choice-v1（版本 ${request.policy.versionId}）`,
@@ -85,19 +91,22 @@ export class LlmDecisionProvider implements DecisionProvider {
         raw: canonicalJson({ error: "missing-decision-view" }),
       };
     }
-    const { system, user } = buildPrompt(policy, request.view, request.options);
+    let body;
+    try {
+      body = demos
+        ? resolveLlmDemosRequest(request)
+        : buildLlmChoiceBody(policy!, request.view, request.options);
+    } catch (error) {
+      return {
+        kind: "invalid_output",
+        detail: String(error),
+        provenance,
+        raw: canonicalJson({ error: "invalid-llm-demos-request" }),
+      };
+    }
 
     // 网络调用：自动重试关闭；取消经 signal 传播；错误向上抛（Runtime 分类 transport_error）
-    const response = await this.client.messages.create(
-      {
-        model: policy.model,
-        max_tokens: policy.sampling.maxOutputTokens,
-        temperature: policy.sampling.temperature,
-        system,
-        messages: [{ role: "user", content: user }],
-      },
-      { signal: request.signal },
-    );
+    const response = await this.client.messages.create(body, { signal: request.signal });
 
     const text: string = extractText(response);
     const stopReason = readStopReason(response);
@@ -143,7 +152,22 @@ export class LlmDecisionProvider implements DecisionProvider {
     };
   }
 
+  prepareRequest(request: DecisionRequest) {
+    return isLlmDemosPolicy(request.policy.content) ? prepareLlmDemosRequest(request) : undefined;
+  }
+
   callProvenance(request: DecisionRequest) {
+    if (isLlmDemosPolicy(request.policy.content)) {
+      const body = resolveLlmDemosRequest(request);
+      return {
+        adapter: "anthropic-messages@sdk-0.127.0",
+        serviceId: this.config.baseUrl ?? DEFAULT_LLM_BASE_URL,
+        requestedModel: body.model,
+        sampling: { temperature: body.temperature, maxOutputTokens: body.max_tokens },
+        promptDigest: llmPromptDigest(body),
+        reproducibility: "recorded-inputs-only" as const,
+      };
+    }
     const policy = parseLlmPolicy(request.policy.content);
     return {
       adapter: `anthropic-messages@sdk-0.127.0`,
@@ -156,22 +180,11 @@ export class LlmDecisionProvider implements DecisionProvider {
           }
         : null,
       promptDigest: policy
-        ? digest(buildPrompt(policy, request.view ?? emptyView(), request.options).system)
+        ? digest(buildLlmChoiceBody(policy, request.view ?? emptyView(), request.options).system)
         : null,
       reproducibility: "recorded-inputs-only" as const,
     };
   }
-}
-
-function buildPrompt(
-  policy: LlmChoicePolicyContent,
-  view: DecisionView,
-  options: string[],
-): { system: string; user: string } {
-  const system = policy.promptTemplate
-    .replaceAll("{{OPTIONS}}", options.map((id) => `- ${id}`).join("\n"))
-    .replaceAll("{{VIEW}}", canonicalJson(view));
-  return { system, user: "请给出决策 JSON。" };
 }
 
 function emptyView(): DecisionView {
