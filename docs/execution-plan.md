@@ -40,7 +40,7 @@ P0-01/02/03/04、M6a-01/02 均已完成工程验收。M6a-03 分解为持久化�
 | M6a-03-02b3a | [JSON 验收正文与只读 Run 核验](./verification-evidence.md) | M6a-03-02b2 | 已完成 | 保存当次实际正文并复算；绑定 Run、裁判及成功 Attempt 输出；旧项和采集失败不冒充证明 |
 | M6a-03-02b3b | 冻结任务与三臂 Run 收据 | M6a-03-02b3a | 进行中 | 核对输入投影、策略和快照，绑定重复执行选择器、缺测及全部调用成本，接入 Journal |
 | M6a-03-02b3b1 | [冻结任务输入与裁判资料绑定](./verification-evidence.md) | M6a-03-02b3a | 已完成 | 同一读事务内核对实际输入、目标/修订与独立裁判摘要；清理后可复算，所有 Attempt 与缺测不遗漏 |
-| M6a-03-02b3b2 | 策略臂、选择与 Journal 收据 | M6a-03-02b3b1 | 待执行 | 固定策略/组件，绑定实验预留、重复执行选择、全部调用成本及缺测，接入 Journal |
+| M6a-03-02b3b2 | [策略臂、选择与 Journal 收据](./adaptive-arm-evidence.md) | M6a-03-02b3b1 | 进行中 | 策略/组件及原始决策选择已可核验；继续绑定预派发槽位、Run 身份、全部成本和缺测，再接入 Journal |
 | M6a-03-03 | 受信 runner 与正式 Evaluation | M6a-03-02，预算后端 | 待前置 | 实际调用受约束，正式集一次领用，三臂完整执行与新版 Evaluation；采用仍显式授权 |
 | M6a-03-04 | 独立真实轮 | M6a-03-03，独立数据 | 待前置 | 全轮冻结后真实执行，按原协议记录 supported / not_demonstrated / inconclusive |
 | M6b-01 | 单步任务内适应会话 | M6a-03 通过，P0-03 | 待效果门 | 独立快照试跑、会话累计预算、组合后实测、不改变 active、不重复副作用 |
@@ -150,6 +150,8 @@ env -u PROTEUS_E2E -u PROTEUS_SANDBOX PATH="/opt/homebrew/bin:$PATH" \
 | 2026-10-25 | M6a-03-02b3a 验证 | lint、format、typecheck、文档链接及全量检查通过；历史 pipeline/test-runner 判定保持不变，重复验收证据拒绝歧义 | 62 个测试文件全过，349 passed / 5 skipped；JSON 验收范围可核验，Journal 正式收据仍为 unverified-host-receipts；下一项 M6a-03-02b3b，真实模型兼容/效果与正式采用仍未运行 |
 | 2026-10-25 | M6a-03-02b3b1 冻结任务 | 纯文件投影复算派发前目录摘要；同一读事务核对全部 Attempt 输入、目标/修订、formal/regression 用途及冻结裁判正文 | 新增 20 个用例；定向 56/56，覆盖同统计不同输入、清理重开、嵌套 UTF-8、额外空目录、负验收与零执行缺测；预登记、策略臂及成本明确未核验 |
 | 2026-10-25 | M6a-03-02b3b1 验证 | lint、format、typecheck、文档链接及全量检查通过；旧 JSON 核验合同保留，新入口只读且不修改 active | 63 个测试文件全过，369 passed / 5 skipped；下一项 M6a-03-02b3b2 策略臂、选择与 Journal 收据；真实模型兼容/效果和正式采用均未运行 |
+| 2026-10-25 | M6a-03-02b3b2 策略臂与选择 | 同一读事务核对仅策略不同的快照、固定组件、原始 DecisionCall 请求/响应/事件及实际执行器；固定 1/3/1 槽位按无标签规则复算，汇总全部调用及未知开销 | 新增 14 个集成用例；定向 49/49，包含首次负验收不可跳过、null 票、worker 失败、缺测、倒排、来源漂移、额外调用和清理重开；预派发槽位及正式 Run 顺序仍未核验 |
+| 2026-10-25 | M6a-03-02b3b2 本轮验证 | lint、format、typecheck、文档链接及全量检查通过；旧请求与任务核验保持兼容，不派发新调用、不修改 active、不产生正式 Evaluation | 64 个测试文件全过，383 passed / 5 skipped；Journal 仍为 unverified-host-receipts；下一项绑定预派发槽位、Run 身份及实际顺序，真实模型兼容/效果与采用未运行 |
 
 P0-01 的最小复现与回归命令：
 

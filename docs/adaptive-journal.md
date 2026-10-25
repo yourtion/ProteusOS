@@ -39,6 +39,8 @@ M6a-03-01，2026-10-25。实现见 [AdaptiveJournal](../src/app/experiment/journ
 
 后续 [编译开发证据核验](./compile-evidence.md) 和 [开发单元映射](./compile-development.md) 已接入开发侧原始记录。仍需从正式 Run、DecisionCall 和 Attempt 构造收据，绑定策略、快照、任务和独立裁判。不能把宿主提供的 accepted、source 或用量直接当成事实。随后才接入受信 runner、正式验证集的一次领用与新版 Evaluation。独立真实轮通过后，仍由 operator 显式 Promotion。
 
+[冻结任务与 JSON 核验](./verification-evidence.md)、[策略臂与选择器核验](./adaptive-arm-evidence.md) 已可独立读取原始记录。后者尚不证明调用者提供的 Run 槽位在派发前已登记，不能直接接纳为 Journal 正式收据。下一步须持久化槽位、Run 身份和派发顺序，并补齐误派标签及真实来源/预算合同。
+
 ## 验证
 
 [SQLite 集成测试](../tests/integration/adaptive-journal.test.ts) 覆盖完整三臂复算、两个连接竞争、prepared/started/结果提交处的崩溃、事务回滚、绝对期限、取消、超额、迟到、摘要漂移、主体隔离和撤权。[开发绑定测试](../tests/integration/compile-development.test.ts) 另覆盖原子注册回滚、旧合同不升级、来源漂移、缺少核验入口、提交前团队撤权和私有裁判硬链接。测试不调用真实服务。

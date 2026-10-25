@@ -30,6 +30,7 @@
 | [编译开发证据核验](./compile-evidence.md) | 原始正文、学习账本、来源执行证据和获胜候选的只读一致性检查 |
 | [编译开发单元映射](./compile-development.md) | 冻结任务内容、绑定清单、完整计量与未知执行开销 |
 | [JSON 验收证据与 Run 核验](./verification-evidence.md) | 当次验收正文、冻结任务输入、实际执行绑定及旧记录缺项 |
+| [策略臂与选择器核验](./adaptive-arm-evidence.md) | 固定快照、原始决策、无标签选择及全部已知/未知开销 |
 | [本体决策实验](./experiments/organism-decision-v1.md) | 规则/LLM 对照协议、指标和运行命令 |
 
 ## 架构决策

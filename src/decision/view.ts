@@ -164,7 +164,17 @@ export function buildDecisionView(input: {
   options: string[];
   taskInputs: string[];
 }): DecisionView {
-  const { content, goal, options, taskInputs } = input;
+  return buildDecisionViewFromInputs({ ...input, inputs: listInputEntries(input.taskInputs) });
+}
+
+/** 对已冻结的文件清单构造同一受限视图；不读取工作区或验收资料。 */
+export function buildDecisionViewFromInputs(input: {
+  content: DecisionViewContent;
+  goal: string;
+  options: string[];
+  inputs: Array<{ name: string; bytes: number }>;
+}): DecisionView {
+  const { content, goal, options } = input;
   for (const id of options) {
     if (!content.optionDescriptions[id]) {
       throw new DecisionViewError("unknown_option", `decision-view 缺少选项 ${id} 的描述`);
@@ -174,7 +184,9 @@ export function buildDecisionView(input: {
     viewVersion: DECISION_VIEW_KIND,
     goal,
     options: options.map((id) => ({ id, description: content.optionDescriptions[id]! })),
-    inputs: listInputEntries(taskInputs),
+    inputs: input.inputs
+      .map(({ name, bytes }) => ({ name, type: inputTypeOf(name), bytes }))
+      .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0)),
     features: computeViewFeatures(content, goal),
   };
   const limit = content.inputViewLimitBytes ?? DECISION_VIEW_LIMIT_BYTES;
