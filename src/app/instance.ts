@@ -1,4 +1,5 @@
 import type { CompileBackend } from "../evolution/compile-types.ts";
+import { AdaptiveJournal } from "./experiment/journal.ts";
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -38,6 +39,7 @@ export interface AppInstance {
   kernel: Kernel;
   runtime: Runtime;
   evolution: Evolution;
+  adaptive: AdaptiveJournal;
   federation: Federation;
   sharingTrust: PublicationTrust;
   blobs: BlobStore;
@@ -210,6 +212,7 @@ export function openInstance(
     kernel,
     runtime,
     evolution,
+    adaptive: new AdaptiveJournal({ kernel, storage, blobs, clock, ids, organismId, actorId }),
     federation,
     sharingTrust,
     blobs,

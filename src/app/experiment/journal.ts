@@ -1,0 +1,406 @@
+import type { Clock, IdGen, Kernel } from "../../kernel/index.ts";
+import { canonicalJson, digestOf, type BlobStore } from "../../storage/blobs.ts";
+import type { Storage } from "../../storage/store.ts";
+import {
+  adaptiveUnits,
+  freezeAdaptivePlan,
+  parseAdaptiveObservation,
+  reportAdaptiveExperiment,
+  type AdaptiveObservation,
+  type FrozenAdaptivePlan,
+} from "./adaptive.ts";
+import type { AdaptiveJournalRecord, AdaptiveReservationRecord } from "./journal-types.ts";
+
+interface JournalDeps {
+  kernel: Kernel;
+  storage: Storage;
+  blobs: BlobStore;
+  clock: Clock;
+  ids: IdGen;
+  organismId: string;
+  actorId: string;
+}
+
+/**
+ * 串行实验的派发账本。它不发送请求，也不把宿主提供的收据升级为正式证据。
+ * Host 只有在 start 成功提交后才能派发；prepared 可恢复，started 不可重发。
+ */
+export class AdaptiveJournal {
+  private readonly deps: JournalDeps;
+  constructor(deps: JournalDeps) {
+    this.deps = deps;
+  }
+
+  private actor(): void {
+    this.deps.kernel.assertOrganismAccess(this.deps.organismId, this.deps.actorId);
+  }
+
+  private owned(id: string): AdaptiveJournalRecord {
+    const job = this.deps.storage.getAdaptiveExperiment(id);
+    if (!job || job.organismId !== this.deps.organismId)
+      throw new Error("实验不存在或属于其他个体");
+    return job;
+  }
+
+  private blob(ref: string, digest: string): unknown {
+    const content = this.deps.blobs.read(ref);
+    if (digestOf(content) !== digest) throw new Error("实验 blob 摘要漂移");
+    return JSON.parse(content);
+  }
+
+  private inputs(job: AdaptiveJournalRecord) {
+    const frozen = freezeAdaptivePlan(this.blob(job.manifestRef, job.manifestDigest));
+    if (frozen.digest !== job.manifestDigest) throw new Error("manifest 摘要漂移");
+    const raw = this.blob(job.developmentRef, job.developmentDigest);
+    if (!Array.isArray(raw)) throw new Error("开发收据必须为数组");
+    const development = raw.map(parseAdaptiveObservation);
+    const units = adaptiveUnits(frozen.plan);
+    const records = this.deps.storage.adaptiveReservations(job.id);
+    const formal = units.filter((unit) => unit.repeat > 0);
+    for (const [index, record] of records.entries()) {
+      if (record.ordinal !== index || canonicalJson(record.unit) !== canonicalJson(formal[index]))
+        throw new Error("执行预留与冻结单元不匹配");
+      if (
+        (record.state === "prepared" &&
+          (record.startedAt !== null || record.deadlineAt !== null)) ||
+        (record.state !== "prepared" &&
+          (record.startedAt === null || record.deadlineAt === null)) ||
+        (record.state === "completed" || record.state === "unknown") !==
+          (record.observationRef !== null && record.observationDigest !== null)
+      )
+        throw new Error("执行预留状态不完整");
+    }
+    const observations = [
+      ...development,
+      ...records
+        .filter((record) => record.observationRef !== null)
+        .map((record) => {
+          if (!record.observationDigest) throw new Error("收据缺少摘要");
+          const row = parseAdaptiveObservation(
+            this.blob(record.observationRef!, record.observationDigest),
+          );
+          if (row.unitId !== record.unit.id || row.startedAt !== record.startedAt)
+            throw new Error("收据与派发绑定不匹配");
+          return row;
+        }),
+    ];
+    reportAdaptiveExperiment(frozen, observations);
+    return { frozen, development, units, formal, records, observations };
+  }
+
+  private event(job: AdaptiveJournalRecord, type: string, payload: Record<string, unknown> = {}) {
+    this.deps.storage.appendEvent({
+      streamId: `adaptive-${job.id}`,
+      organismId: job.organismId,
+      type: `adaptive.${type}`,
+      payload: { experimentId: job.id, ...payload },
+      occurredAt: this.deps.clock.now(),
+    });
+  }
+
+  register(frozen: FrozenAdaptivePlan, developmentInput: unknown[]): AdaptiveJournalRecord {
+    this.actor();
+    const checked = freezeAdaptivePlan(frozen.plan);
+    if (checked.digest !== frozen.digest) throw new Error("manifest 摘要漂移");
+    if (checked.plan.budget.cost) throw new Error("账本尚无可验证的货币硬上限后端");
+    const development = developmentInput.map(parseAdaptiveObservation);
+    const planned = adaptiveUnits(checked.plan).filter((unit) => unit.repeat === 0);
+    if (
+      development.length !== planned.length ||
+      development.some((row) => !planned.some((unit) => unit.id === row.unitId))
+    )
+      throw new Error("注册须完整固定全部开发收据，不能预填正式结果");
+    development.sort(
+      (a, b) =>
+        planned.findIndex((unit) => unit.id === a.unitId) -
+        planned.findIndex((unit) => unit.id === b.unitId),
+    );
+    const report = reportAdaptiveExperiment(checked, development);
+    if (report.problems.length || report.open.length) throw new Error("开发收据未闭合或已超额");
+    const manifestBlob = this.deps.blobs.write(canonicalJson(checked.plan));
+    const developmentBlob = this.deps.blobs.write(canonicalJson(development));
+    return this.deps.storage.tx(() => {
+      this.actor();
+      const existing = this.deps.storage
+        .adaptiveExperiments(this.deps.organismId)
+        .find((job) => job.manifestDigest === checked.digest);
+      if (existing) {
+        if (existing.developmentDigest !== developmentBlob.digest)
+          throw new Error("同一清单不得替换开发收据");
+        return existing;
+      }
+      const now = this.deps.clock.now();
+      if (now < checked.plan.frozenAt || development.some((row) => row.endedAt! > now))
+        throw new Error("不能注册未来的冻结点或开发收据");
+      const startedAt = Math.min(checked.plan.frozenAt, ...development.map((row) => row.startedAt));
+      const job: AdaptiveJournalRecord = {
+        id: this.deps.ids.next(),
+        organismId: this.deps.organismId,
+        manifestDigest: checked.digest,
+        manifestRef: manifestBlob.ref,
+        developmentDigest: developmentBlob.digest,
+        developmentRef: developmentBlob.ref,
+        state: "ready",
+        createdBy: this.deps.actorId,
+        createdAt: now,
+        startedAt,
+        deadlineAt: startedAt + checked.plan.budget.wallClockMs,
+        error: null,
+      };
+      this.deps.storage.insertAdaptiveExperiment(job);
+      this.event(job, "registered", { manifestDigest: job.manifestDigest });
+      return job;
+    });
+  }
+
+  job(id: string): AdaptiveJournalRecord {
+    this.actor();
+    return this.owned(id);
+  }
+
+  /** 原预留幂等返回；每个实验至多一个在途单元，顺序由清单决定。 */
+  prepare(id: string): AdaptiveReservationRecord | null {
+    this.actor();
+    return this.deps.storage.tx(() => {
+      const job = this.owned(id);
+      if (job.state !== "ready" && job.state !== "running") return null;
+      const { records, formal } = this.inputs(job);
+      if (this.expired(job)) return null;
+      const open = records.find((record) => record.state === "started");
+      if (open) throw new Error("已有执行中的单元，不能并行派发");
+      const prepared = records.find((record) => record.state === "prepared");
+      if (prepared) return prepared;
+      const unit = formal[records.length];
+      if (!unit) {
+        this.deps.storage.updateAdaptiveExperiment({ ...job, state: "completed" });
+        this.event(job, "completed");
+        return null;
+      }
+      const record: AdaptiveReservationRecord = {
+        id: this.deps.ids.next(),
+        experimentId: id,
+        ordinal: records.length,
+        unit,
+        state: "prepared",
+        preparedAt: this.deps.clock.now(),
+        startedAt: null,
+        deadlineAt: null,
+        observationRef: null,
+        observationDigest: null,
+      };
+      this.deps.storage.insertAdaptiveReservation(record);
+      this.deps.storage.updateAdaptiveExperiment({ ...job, state: "running" });
+      this.event(job, "reserved", { reservationId: record.id, unitId: unit.id });
+      return record;
+    });
+  }
+
+  /** 唯一派发许可；重复 start 抛错，调用方不得在提交前发送请求。 */
+  start(id: string, reservationId: string): AdaptiveReservationRecord {
+    this.actor();
+    const result = this.deps.storage.tx(() => {
+      const job = this.owned(id);
+      const { records } = this.inputs(job);
+      const record = records.find((row) => row.id === reservationId);
+      if (job.state !== "running" || !record || record.state !== "prepared")
+        throw new Error("单元不处于可派发状态，禁止重发");
+      if (this.expired(job)) return null;
+      const now = this.deps.clock.now();
+      const started = {
+        ...record,
+        state: "started" as const,
+        startedAt: now,
+        deadlineAt: Math.min(job.deadlineAt, now + record.unit.allowance.durationMs),
+      };
+      this.deps.storage.updateAdaptiveReservation(started);
+      this.event(job, "started", { reservationId });
+      return started;
+    });
+    if (!result) throw new Error("全轮截止点已到达");
+    return result;
+  }
+
+  /**
+   * 保存严格宿主收据。超额也保留原始收据并封闭实验，不能重试以覆盖坏结果。
+   * 这里尚未核验 Runtime/DecisionCall/Attempt 的原始数据库证据。
+   */
+  complete(id: string, reservationId: string, input: unknown): AdaptiveReservationRecord {
+    this.actor();
+    const row = parseAdaptiveObservation(input);
+    return this.deps.storage.tx(() => {
+      const job = this.owned(id);
+      const { frozen, records, observations } = this.inputs(job);
+      const record = records.find((item) => item.id === reservationId);
+      if (!record) throw new Error("未知执行预留");
+      const content = canonicalJson(row);
+      if (record.observationDigest === digestOf(content)) return record;
+      if (job.state !== "running" || record.state !== "started")
+        throw new Error("单元已经封闭，不能替换结果或接纳迟到收据");
+      if (
+        row.unitId !== record.unit.id ||
+        row.startedAt !== record.startedAt ||
+        row.endedAt === null ||
+        row.endedAt > this.deps.clock.now()
+      )
+        throw new Error("收据与派发单元、时间不匹配");
+      const report = reportAdaptiveExperiment(frozen, [...observations, row]);
+      const blob = this.deps.blobs.write(content);
+      const completed: AdaptiveReservationRecord = {
+        ...record,
+        state: row.state === "unknown" ? "unknown" : "completed",
+        observationRef: blob.ref,
+        observationDigest: blob.digest,
+      };
+      this.deps.storage.updateAdaptiveReservation(completed);
+      const error =
+        row.state === "unknown"
+          ? "执行结果 unknown，禁止补跑"
+          : row.state === "cancelled"
+            ? "执行单元已取消"
+            : report.problems.length
+              ? report.problems.join("; ")
+              : this.deps.clock.now() >= job.deadlineAt
+                ? "全轮截止点已到达"
+                : this.deps.clock.now() >= record.deadlineAt!
+                  ? "执行单元截止点已到达"
+                  : null;
+      const state = error
+        ? row.state === "cancelled"
+          ? "cancelled"
+          : "failed"
+        : report.missing.length
+          ? "running"
+          : "completed";
+      this.deps.storage.updateAdaptiveExperiment({ ...job, state, error });
+      this.event(job, "observed", { reservationId, observationDigest: blob.digest, state });
+      return completed;
+    });
+  }
+
+  private expired(job: AdaptiveJournalRecord): boolean {
+    const now = this.deps.clock.now();
+    const unitExpired = this.deps.storage
+      .adaptiveReservations(job.id)
+      .some((record) => record.state === "started" && now >= record.deadlineAt!);
+    if (now < job.deadlineAt && !unitExpired) return false;
+    this.sealStarted(job, "unknown");
+    this.deps.storage.updateAdaptiveExperiment({
+      ...job,
+      state: "failed",
+      error: unitExpired ? "执行单元截止点已到达" : "全轮截止点已到达",
+    });
+    this.event(job, "expired");
+    return true;
+  }
+
+  /** 已开始但无结果时封存 unknown；预留永不退款。调用者负责停止实际执行器。 */
+  private sealStarted(job: AdaptiveJournalRecord, decision: "unknown" | "cancelled"): void {
+    for (const record of this.deps.storage.adaptiveReservations(job.id)) {
+      if (record.state !== "started") continue;
+      const row: AdaptiveObservation = {
+        unitId: record.unit.id,
+        manifestDigest: job.manifestDigest,
+        source: this.inputs(job).frozen.plan.mode,
+        startedAt: record.startedAt!,
+        endedAt: this.deps.clock.now(),
+        state: "unknown",
+        accepted: false,
+        decision,
+        misrouted: null,
+        evidenceRefs: [`adaptive-reservation:${record.id}`],
+        usage: {
+          modelCalls: null,
+          inputTokens: null,
+          outputTokens: null,
+          costAmount: null,
+          costCurrency: null,
+          priceRef: null,
+        },
+      };
+      const blob = this.deps.blobs.write(canonicalJson(row));
+      this.deps.storage.updateAdaptiveReservation({
+        ...record,
+        state: "unknown",
+        observationRef: blob.ref,
+        observationDigest: blob.digest,
+      });
+    }
+  }
+
+  cancel(id: string): AdaptiveJournalRecord {
+    this.actor();
+    return this.deps.storage.tx(() => {
+      const job = this.owned(id);
+      if (job.state !== "ready" && job.state !== "running") return job;
+      this.sealStarted(job, "cancelled");
+      const cancelled = { ...job, state: "cancelled" as const, error: "操作者封闭实验" };
+      this.deps.storage.updateAdaptiveExperiment(cancelled);
+      this.event(job, "cancelled");
+      return cancelled;
+    });
+  }
+
+  /** 仅在旧 Host/执行器已停止后显式调用；不猜测远端是否已完成。 */
+  recover(id: string): AdaptiveJournalRecord {
+    this.actor();
+    return this.deps.storage.tx(() => {
+      const job = this.owned(id);
+      if (job.state !== "ready" && job.state !== "running") return job;
+      const { records, formal } = this.inputs(job);
+      if (records.some((record) => record.state === "started")) {
+        this.sealStarted(job, "unknown");
+        const failed = {
+          ...job,
+          state: "failed" as const,
+          error: "恢复发现 started，保留 unknown",
+        };
+        this.deps.storage.updateAdaptiveExperiment(failed);
+        this.event(job, "recovered-unknown");
+        return failed;
+      }
+      if (this.expired(job)) return this.owned(id);
+      if (
+        records.length === formal.length &&
+        records.every((record) => record.state === "completed")
+      )
+        this.deps.storage.updateAdaptiveExperiment({ ...job, state: "completed" });
+      this.event(job, "recovered");
+      return this.owned(id);
+    });
+  }
+
+  report(id: string) {
+    this.actor();
+    return this.deps.storage.tx(() => this.snapshot(id));
+  }
+
+  private snapshot(id: string) {
+    const job = this.owned(id);
+    const { frozen, development, records, observations, units } = this.inputs(job);
+    const reservedUnits = units.filter(
+      (unit) =>
+        development.some((row) => row.unitId === unit.id) ||
+        records.some((r) => r.unit.id === unit.id),
+    );
+    const reserved = Object.fromEntries(
+      (["modelCalls", "inputTokens", "outputTokens", "durationMs"] as const).map((key) => [
+        key,
+        reservedUnits.reduce((sum, unit) => sum + unit.allowance[key], 0),
+      ]),
+    );
+    return {
+      job,
+      reservations: records,
+      observations,
+      reserved,
+      report: {
+        ...reportAdaptiveExperiment(frozen, observations),
+        // 在原始账本/裁判绑定桥接完成前，宿主导入不能支持真实收益或采用。
+        benefit: frozen.plan.mode === "fixture" ? "not_evaluated" : "inconclusive",
+        realModel: frozen.plan.mode === "fixture" ? "not_run" : "unknown",
+        evidenceVerification: "unverified-host-receipts",
+        formalEvaluation: "not_run",
+      },
+    };
+  }
+}

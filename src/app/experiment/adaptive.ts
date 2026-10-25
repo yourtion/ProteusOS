@@ -238,13 +238,18 @@ const observationSchema = z.strictObject({
 });
 export type AdaptiveObservation = z.infer<typeof observationSchema>;
 
+/** 持久化宿主收据也使用同一严格边界；不把解析通过当成原始证据核验。 */
+export function parseAdaptiveObservation(input: unknown): AdaptiveObservation {
+  return observationSchema.parse(input);
+}
+
 /** 对冻结后的收据复算；不补跑，不用完成子集替代计划分母。 */
 export function reportAdaptiveExperiment(frozen: FrozenAdaptivePlan, input: unknown[]) {
   const checked = freezeAdaptivePlan(frozen.plan);
   if (checked.digest !== frozen.digest) throw new Error("manifest 摘要漂移");
   const units = adaptiveUnits(checked.plan);
   const byId = new Map(units.map((u) => [u.id, u]));
-  const rows = input.map((row) => observationSchema.parse(row));
+  const rows = input.map(parseAdaptiveObservation);
   const observed = new Map<string, AdaptiveObservation>();
   const refs = new Set<string>();
   const problems: string[] = [];

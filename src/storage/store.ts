@@ -1,4 +1,8 @@
 import type {
+  AdaptiveJournalRecord,
+  AdaptiveReservationRecord,
+} from "../app/experiment/journal-types.ts";
+import type {
   CompileCaseRecord,
   CompileJobRecord,
   CompileTrial,
@@ -83,6 +87,70 @@ export class Storage implements KernelStore, RuntimeStore {
 
   tx<T>(fn: () => T): T {
     return this.db.tx(fn);
+  }
+
+  // ---- 应用实验账本：事务与冻结/恢复规则由 journal 组合 ----
+
+  adaptiveExperiments(organismId: string): AdaptiveJournalRecord[] {
+    return this.db
+      .all<{ record: string }>(
+        "SELECT record FROM adaptive_experiments WHERE organism_id = ? ORDER BY id",
+        organismId,
+      )
+      .map((row) => JSON.parse(row.record) as AdaptiveJournalRecord);
+  }
+
+  getAdaptiveExperiment(id: string): AdaptiveJournalRecord | undefined {
+    const row = this.db.get<{ record: string }>(
+      "SELECT record FROM adaptive_experiments WHERE id = ?",
+      id,
+    );
+    return row ? (JSON.parse(row.record) as AdaptiveJournalRecord) : undefined;
+  }
+
+  insertAdaptiveExperiment(record: AdaptiveJournalRecord): void {
+    this.db.run(
+      "INSERT INTO adaptive_experiments VALUES (?, ?, ?, ?)",
+      record.id,
+      record.organismId,
+      record.manifestDigest,
+      JSON.stringify(record),
+    );
+  }
+
+  updateAdaptiveExperiment(record: AdaptiveJournalRecord): void {
+    this.db.run(
+      "UPDATE adaptive_experiments SET record = ? WHERE id = ?",
+      JSON.stringify(record),
+      record.id,
+    );
+  }
+
+  adaptiveReservations(experimentId: string): AdaptiveReservationRecord[] {
+    return this.db
+      .all<{ record: string }>(
+        "SELECT record FROM adaptive_reservations WHERE experiment_id = ? ORDER BY ordinal",
+        experimentId,
+      )
+      .map((row) => JSON.parse(row.record) as AdaptiveReservationRecord);
+  }
+
+  insertAdaptiveReservation(record: AdaptiveReservationRecord): void {
+    this.db.run(
+      "INSERT INTO adaptive_reservations VALUES (?, ?, ?, ?)",
+      record.id,
+      record.experimentId,
+      record.ordinal,
+      JSON.stringify(record),
+    );
+  }
+
+  updateAdaptiveReservation(record: AdaptiveReservationRecord): void {
+    this.db.run(
+      "UPDATE adaptive_reservations SET record = ? WHERE id = ?",
+      JSON.stringify(record),
+      record.id,
+    );
   }
 
   // ---- KernelStore：身份 ----

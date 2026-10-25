@@ -544,4 +544,24 @@ CREATE TABLE policy_compile_trials (
 );
 `,
   },
+  {
+    version: 16,
+    name: "adaptive-experiment-journal",
+    sql: `
+CREATE TABLE adaptive_experiments (
+  id TEXT PRIMARY KEY,
+  organism_id TEXT NOT NULL,
+  manifest_digest TEXT NOT NULL,
+  record TEXT NOT NULL,
+  UNIQUE(organism_id, manifest_digest)
+);
+CREATE TABLE adaptive_reservations (
+  id TEXT PRIMARY KEY,
+  experiment_id TEXT NOT NULL REFERENCES adaptive_experiments(id),
+  ordinal INTEGER NOT NULL,
+  record TEXT NOT NULL,
+  UNIQUE(experiment_id, ordinal)
+);
+`,
+  },
 ];
