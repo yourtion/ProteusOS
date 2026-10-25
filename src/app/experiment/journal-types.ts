@@ -7,6 +7,8 @@ export interface AdaptiveJournalRecord {
   manifestRef: string;
   developmentDigest: string;
   developmentRef: string;
+  /** 缺项表示旧版/普通宿主收据；不会自动升级为已核验来源。 */
+  compilationEvidence?: { jobId: string; bundleDigest: string; auditDigest: string };
   state: "ready" | "running" | "completed" | "failed" | "cancelled";
   createdBy: string;
   createdAt: number;

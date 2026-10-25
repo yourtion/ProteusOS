@@ -1,7 +1,17 @@
-import { cpSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import {
+  cpSync,
+  linkSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, expect, it } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
+import { randomUUID } from "node:crypto";
+import { AdaptiveJournal } from "../../src/app/experiment/journal.ts";
 import { openInstance, type AppInstance } from "../../src/app/instance.ts";
 import {
   adaptiveTask,
@@ -20,15 +30,16 @@ import { rehearsalPlan } from "../fixtures/adaptive-behavior/rehearsal.ts";
 const opened: AppInstance[] = [];
 const folders: string[] = [];
 afterEach(() => {
+  vi.restoreAllMocks();
   for (const app of opened.splice(0)) app.close();
   for (const dir of folders.splice(0)) rmSync(dir, { recursive: true, force: true });
 });
 
-async function fixture(mode: "fixture" | "real" = "fixture", winner = true) {
+async function fixture(mode: "fixture" | "real" = "fixture", winner = true, shared = false) {
   const dataset = mkdtempSync(join(tmpdir(), "proteus-development-"));
   folders.push(dataset);
   cpSync(DEV_DATASET, dataset, { recursive: true });
-  const h = await compileHarness(false, dataset);
+  const h = await compileHarness(shared, dataset);
   opened.push(h.app);
   h.port.mode = mode;
   if (!winner)
@@ -273,4 +284,163 @@ it("零改善可冻结完整开发成本，但不能用占位候选开始正式�
   );
   expect(h.backend.requests).toHaveLength(4);
   expect(h.app.evolution.validationSet(h.input.validationSetId).usageCount).toBe(0);
+});
+
+it("编译来源、开发收据和实验记录原子绑定；重启及普通幂等调用不会丢掉来源", async () => {
+  const h = await fixture();
+  const prepared = prepareCompileDevelopment(h.deps, h.job.id);
+  const frozen = manifest(prepared);
+  const job = h.app.adaptive.registerCompiled(frozen, h.job.id);
+  expect(job.compilationEvidence).toEqual({
+    jobId: h.job.id,
+    bundleDigest: prepared.record.digest,
+    auditDigest: prepared.bundle.auditDigest,
+  });
+  expect(h.app.adaptive.report(job.id).report).toMatchObject({
+    developmentVerification: "persisted-development-records",
+    evidenceVerification: "unverified-host-receipts",
+    formalEvaluation: "not_run",
+    benefit: "not_evaluated",
+  });
+  expect(h.app.adaptive.registerCompiled(frozen, h.job.id)).toEqual(job);
+  const bound = bindCompileDevelopment(h.deps, h.job.id, frozen);
+  expect(h.app.adaptive.register(frozen, bound.observations)).toEqual(job);
+  rmSync(h.dataset, { recursive: true });
+  const other = openInstance(h.app.root);
+  opened.push(other);
+  expect(other.adaptive.report(job.id)).toEqual(h.app.adaptive.report(job.id));
+  expect(other.adaptive.registerCompiled(frozen, h.job.id)).toEqual(job);
+  const reserved = other.adaptive.prepare(job.id)!;
+  expect(h.app.adaptive.prepare(job.id)).toEqual(reserved);
+  expect(h.app.evolution.validationSet(h.input.validationSetId).usageCount).toBe(0);
+});
+
+it("普通宿主收据注册的实验不能原地升级为编译来源核验合同", async () => {
+  const h = await fixture();
+  const prepared = prepareCompileDevelopment(h.deps, h.job.id);
+  const frozen = manifest(prepared);
+  const bound = bindCompileDevelopment(h.deps, h.job.id, frozen);
+  const job = h.app.adaptive.register(frozen, bound.observations);
+  expect(() => h.app.adaptive.registerCompiled(frozen, h.job.id)).toThrow(
+    "不得替换或升级开发来源合同",
+  );
+  expect(h.app.adaptive.job(job.id).compilationEvidence).toBeUndefined();
+  expect(h.app.adaptive.report(job.id).report.developmentVerification).toBe(
+    "unverified-host-receipts",
+  );
+});
+
+it("实验插入后故障会回滚来源关联和收据引用，重试不会留孤立实验或领用正式集", async () => {
+  const h = await fixture();
+  const frozen = manifest(prepareCompileDevelopment(h.deps, h.job.id));
+  const insert = h.app.storage.insertAdaptiveExperiment.bind(h.app.storage);
+  const fault = vi
+    .spyOn(h.app.storage, "insertAdaptiveExperiment")
+    .mockImplementationOnce((record) => {
+      insert(record);
+      throw new Error("crash-before-registration-commit");
+    });
+  expect(() => h.app.adaptive.registerCompiled(frozen, h.job.id)).toThrow(
+    "crash-before-registration-commit",
+  );
+  fault.mockRestore();
+  expect(h.app.storage.adaptiveExperiments("organism-default")).toHaveLength(0);
+  const job = h.app.adaptive.registerCompiled(frozen, h.job.id);
+  expect(job.compilationEvidence?.jobId).toBe(h.job.id);
+  expect(h.app.storage.adaptiveExperiments("organism-default")).toHaveLength(1);
+  expect(h.app.evolution.validationSet(h.input.validationSetId).usageCount).toBe(0);
+});
+
+it("准备后来源漂移或缺少核验端口会阻止 start；封存未知结果不依赖来源仍可核验", async () => {
+  const h = await fixture();
+  const frozen = manifest(prepareCompileDevelopment(h.deps, h.job.id));
+  const job = h.app.adaptive.registerCompiled(frozen, h.job.id);
+  const reservation = h.app.adaptive.prepare(job.id)!;
+  const original = h.app.storage.compileTrials(h.job.id)[0]!;
+  h.app.storage.tx(() =>
+    h.app.storage.updateCompileTrial({ ...original, correct: !original.correct }),
+  );
+  expect(() => h.app.adaptive.start(job.id, reservation.id)).toThrow("重算结果与评分");
+  expect(h.app.storage.adaptiveReservations(job.id)[0]!.state).toBe("prepared");
+  expect(() => h.app.adaptive.report(job.id)).toThrow("重算结果与评分");
+  h.app.storage.tx(() => h.app.storage.updateCompileTrial(original));
+  const noPort = new AdaptiveJournal({
+    ...h.app,
+    clock: { now: Date.now },
+    ids: { next: randomUUID },
+    organismId: "organism-default",
+    actorId: "principal-local",
+  });
+  expect(() => noPort.start(job.id, reservation.id)).toThrow("未装配");
+  h.app.adaptive.start(job.id, reservation.id);
+  h.app.storage.tx(() =>
+    h.app.storage.updateCompileTrial({ ...original, correct: !original.correct }),
+  );
+  expect(noPort.cancel(job.id).state).toBe("cancelled");
+  expect(h.app.storage.adaptiveReservations(job.id)[0]!.state).toBe("unknown");
+  h.app.storage.tx(() => h.app.storage.updateCompileTrial(original));
+  expect(h.app.adaptive.report(job.id).report.open).toEqual([reservation.unit.id]);
+  expect(h.backend.requests).toHaveLength(4);
+});
+
+it("来源核验结束到 start 提交之间撤销团队读取权，也不能取得派发许可", async () => {
+  const h = await fixture("fixture", true, true);
+  const frozen = manifest(prepareCompileDevelopment(h.deps, h.job.id));
+  const job = h.app.adaptive.registerCompiled(frozen, h.job.id);
+  const reservation = h.app.adaptive.prepare(job.id)!;
+  h.app.storage.tx(() => {
+    h.app.kernel.createPrincipal("principal-reader", "user");
+    for (const action of ["operate", "read"] as const)
+      h.app.kernel.grantAccess(
+        "organism:organism-default",
+        "principal-reader",
+        action,
+        "principal-local",
+      );
+    h.app.kernel.grantAccess(
+      "team:compiler-sources",
+      "principal-reader",
+      "read",
+      "principal-local",
+    );
+  });
+  const reader = openInstance(h.app.root, { actorId: "principal-reader" });
+  opened.push(reader);
+  const journal = new AdaptiveJournal({
+    ...reader,
+    clock: { now: Date.now },
+    ids: { next: randomUUID },
+    organismId: "organism-default",
+    actorId: "principal-reader",
+    bindCompilation: (id, plan) => {
+      const bound = bindCompileDevelopment(
+        { ...reader, organismId: "organism-default", actorId: "principal-reader" },
+        id,
+        plan,
+      );
+      h.app.storage.tx(() =>
+        h.app.kernel.revokeAccess(
+          "team:compiler-sources",
+          "principal-reader",
+          "read",
+          "principal-local",
+        ),
+      );
+      return bound;
+    },
+  });
+  expect(() => journal.start(job.id, reservation.id)).toThrow("read 权限");
+  expect(h.app.storage.adaptiveReservations(job.id)[0]!.state).toBe("prepared");
+  expect(h.backend.requests).toHaveLength(4);
+});
+
+it("任务声明的私有裁判路径不能因位于输入树中而进入任务内容包", async () => {
+  const h = await fixture();
+  const source = h.app.storage.getRun(h.sourceRuns[0]!)!;
+  const task = h.app.storage.getTask(source.taskId)!;
+  linkSync(task.acceptance.outputSchema, join(h.dataset, "bundles", "b01", "private-schema.json"));
+  expect(() => prepareCompileDevelopment(h.deps, h.job.id)).toThrow(
+    "裁判或期望输出文件不能进入任务输入投影",
+  );
+  expect(h.app.storage.compileDevelopmentBundle(h.job.id)).toBeUndefined();
 });

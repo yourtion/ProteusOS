@@ -1,4 +1,4 @@
-import { lstatSync, readdirSync, readFileSync } from "node:fs";
+import { lstatSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { basename, join, posix } from "node:path";
 import { evaluationPlanDigest } from "../../evolution/index.ts";
 import type { CompilePlan } from "../../evolution/compile-types.ts";
@@ -18,6 +18,14 @@ function captureTask(task: TaskRecord) {
   const inputs: Array<{ name: string; content: string }> = [];
   let bytes = 0;
   const roots = new Set<string>();
+  const privateFiles = new Set(
+    [task.acceptance.outputSchema, task.acceptance.expectedOutput]
+      .filter((path): path is string => !!path)
+      .map((path) => {
+        const stat = statSync(path);
+        return `${stat.dev}:${stat.ino}`;
+      }),
+  );
   const visit = (path: string, name: string): void => {
     const stat = lstatSync(path);
     if (stat.isDirectory()) {
@@ -25,6 +33,8 @@ function captureTask(task: TaskRecord) {
       if (!names.length) throw new Error("开发任务投影暂不支持空目录");
       for (const child of names) visit(join(path, child), posix.join(name, child));
     } else if (stat.isFile()) {
+      if (privateFiles.has(`${stat.dev}:${stat.ino}`))
+        throw new Error("裁判或期望输出文件不能进入任务输入投影");
       if (stat.size > 4 * 1024 * 1024 - bytes || inputs.length >= 512)
         throw new Error("开发任务输入超过 4 MiB / 512 文件上限");
       const raw = readFileSync(path);
@@ -68,7 +78,7 @@ const unknownUsage: AdaptiveObservation["usage"] = {
 function readBundle(
   deps: CompileEvidenceDeps,
   record: CompileDevelopmentRecord,
-  auditDigest: string,
+  audit: ReturnType<typeof auditCompileEvidence>,
 ) {
   if (record.organismId !== deps.organismId) throw new Error("开发证据属于其他个体");
   const raw = deps.blobs.read(record.ref);
@@ -77,17 +87,23 @@ function readBundle(
   if (
     bundle.version !== "compile-development-v1" ||
     bundle.jobId !== record.jobId ||
-    bundle.auditDigest !== auditDigest
+    bundle.auditDigest !== audit.digest
   )
     throw new Error("开发证据包与核验结果不匹配");
-  return { record, bundle };
+  return {
+    record,
+    bundle,
+    versionIds: audit.evidenceRefs
+      .filter((ref) => ref.startsWith("version:"))
+      .map((ref) => ref.slice("version:".length)),
+  };
 }
 
 /** 首次读取原始开发资料并冻结；此后使用原包，不依赖工作区或外部输入文件。 */
 export function prepareCompileDevelopment(deps: CompileEvidenceDeps, jobId: string) {
   const audit = auditCompileEvidence(deps, jobId);
   const existing = deps.storage.compileDevelopmentBundle(jobId);
-  if (existing) return readBundle(deps, existing, audit.digest);
+  if (existing) return readBundle(deps, existing, audit);
   const job = deps.storage.getCompileJob(jobId)!;
   const planRaw = deps.blobs.read(job.planRef);
   if (digestOf(planRaw) !== job.planDigest) throw new Error("编译清单摘要漂移");
@@ -294,7 +310,7 @@ export function prepareCompileDevelopment(deps: CompileEvidenceDeps, jobId: stri
     deps.storage.insertCompileDevelopmentBundle(record);
     return record;
   });
-  return readBundle(deps, record, audit.digest);
+  return readBundle(deps, record, audit);
 }
 
 /** 把全部开发开销绑定到冻结清单；不会读取 formal/regression 资料或创建 Evaluation。 */
@@ -305,7 +321,7 @@ export function bindCompileDevelopment(
 ) {
   const checked = freezeAdaptivePlan(frozen.plan);
   if (checked.digest !== frozen.digest) throw new Error("manifest 摘要漂移");
-  const { record, bundle } = prepareCompileDevelopment(deps, jobId);
+  const { record, bundle, versionIds } = prepareCompileDevelopment(deps, jobId);
   if (!bundle.candidateId || !bundle.policies.candidateDigest)
     throw new Error("没有获胜候选，不能开始正式比较");
   if (bundle.mode !== checked.plan.mode || bundle.source !== checked.plan.source)
@@ -346,6 +362,7 @@ export function bindCompileDevelopment(
     bundleDigest: record.digest,
     auditDigest: bundle.auditDigest,
     observations,
+    versionIds,
     evidenceVerification: "persisted-development-records" as const,
   };
 }

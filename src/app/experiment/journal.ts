@@ -10,6 +10,7 @@ import {
   type FrozenAdaptivePlan,
 } from "./adaptive.ts";
 import type { AdaptiveJournalRecord, AdaptiveReservationRecord } from "./journal-types.ts";
+import type { bindCompileDevelopment } from "./development.ts";
 
 interface JournalDeps {
   kernel: Kernel;
@@ -19,6 +20,10 @@ interface JournalDeps {
   ids: IdGen;
   organismId: string;
   actorId: string;
+  bindCompilation?(
+    jobId: string,
+    frozen: FrozenAdaptivePlan,
+  ): ReturnType<typeof bindCompileDevelopment>;
 }
 
 /**
@@ -99,6 +104,32 @@ export class AdaptiveJournal {
   }
 
   register(frozen: FrozenAdaptivePlan, developmentInput: unknown[]): AdaptiveJournalRecord {
+    return this.registerFrozen(frozen, developmentInput);
+  }
+
+  /** 开发来源与实验同事务提交；正式收据仍需另行核验。 */
+  registerCompiled(frozen: FrozenAdaptivePlan, jobId: string): AdaptiveJournalRecord {
+    this.actor();
+    if (!this.deps.bindCompilation) throw new Error("未装配编译开发证据核验入口");
+    const bound = this.deps.bindCompilation(jobId, frozen);
+    return this.registerFrozen(
+      frozen,
+      bound.observations,
+      {
+        jobId,
+        bundleDigest: bound.bundleDigest,
+        auditDigest: bound.auditDigest,
+      },
+      bound.versionIds,
+    );
+  }
+
+  private registerFrozen(
+    frozen: FrozenAdaptivePlan,
+    developmentInput: unknown[],
+    compilationEvidence?: AdaptiveJournalRecord["compilationEvidence"],
+    versionIds: string[] = [],
+  ): AdaptiveJournalRecord {
     this.actor();
     const checked = freezeAdaptivePlan(frozen.plan);
     if (checked.digest !== frozen.digest) throw new Error("manifest 摘要漂移");
@@ -121,12 +152,19 @@ export class AdaptiveJournal {
     const developmentBlob = this.deps.blobs.write(canonicalJson(development));
     return this.deps.storage.tx(() => {
       this.actor();
+      for (const versionId of versionIds)
+        this.deps.kernel.assertVersionAccess(versionId, this.deps.actorId);
       const existing = this.deps.storage
         .adaptiveExperiments(this.deps.organismId)
         .find((job) => job.manifestDigest === checked.digest);
       if (existing) {
         if (existing.developmentDigest !== developmentBlob.digest)
           throw new Error("同一清单不得替换开发收据");
+        if (
+          compilationEvidence &&
+          canonicalJson(existing.compilationEvidence ?? null) !== canonicalJson(compilationEvidence)
+        )
+          throw new Error("同一实验不得替换或升级开发来源合同");
         return existing;
       }
       const now = this.deps.clock.now();
@@ -140,6 +178,7 @@ export class AdaptiveJournal {
         manifestRef: manifestBlob.ref,
         developmentDigest: developmentBlob.digest,
         developmentRef: developmentBlob.ref,
+        ...(compilationEvidence ? { compilationEvidence } : {}),
         state: "ready",
         createdBy: this.deps.actorId,
         createdAt: now,
@@ -148,7 +187,10 @@ export class AdaptiveJournal {
         error: null,
       };
       this.deps.storage.insertAdaptiveExperiment(job);
-      this.event(job, "registered", { manifestDigest: job.manifestDigest });
+      this.event(job, "registered", {
+        manifestDigest: job.manifestDigest,
+        ...(compilationEvidence ? { compilationEvidence } : {}),
+      });
       return job;
     });
   }
@@ -158,10 +200,37 @@ export class AdaptiveJournal {
     return this.owned(id);
   }
 
+  /** 在外层事务之前只读核验，避免 SQLite 嵌套事务；封闭/恢复不依赖来源仍可访问。 */
+  private recheckCompilation(id: string): string[] {
+    const job = this.owned(id);
+    if (!job.compilationEvidence) return [];
+    if (!this.deps.bindCompilation) throw new Error("未装配编译开发证据核验入口");
+    const frozen = freezeAdaptivePlan(this.blob(job.manifestRef, job.manifestDigest));
+    const bound = this.deps.bindCompilation(job.compilationEvidence.jobId, frozen);
+    if (
+      bound.bundleDigest !== job.compilationEvidence.bundleDigest ||
+      bound.auditDigest !== job.compilationEvidence.auditDigest
+    )
+      throw new Error("实验开发来源摘要漂移");
+    const order = new Map(frozen.plan.development.map((unit, i) => [unit.id, i]));
+    const observations = [...bound.observations].sort(
+      (a, b) => order.get(a.unitId)! - order.get(b.unitId)!,
+    );
+    if (digestOf(canonicalJson(observations)) !== job.developmentDigest)
+      throw new Error("实验开发收据与原始来源不匹配");
+    return bound.versionIds;
+  }
+
   /** 原预留幂等返回；每个实验至多一个在途单元，顺序由清单决定。 */
   prepare(id: string): AdaptiveReservationRecord | null {
     this.actor();
+    const versionIds = ["ready", "running"].includes(this.owned(id).state)
+      ? this.recheckCompilation(id)
+      : [];
     return this.deps.storage.tx(() => {
+      this.actor();
+      for (const versionId of versionIds)
+        this.deps.kernel.assertVersionAccess(versionId, this.deps.actorId);
       const job = this.owned(id);
       if (job.state !== "ready" && job.state !== "running") return null;
       const { records, formal } = this.inputs(job);
@@ -198,7 +267,11 @@ export class AdaptiveJournal {
   /** 唯一派发许可；重复 start 抛错，调用方不得在提交前发送请求。 */
   start(id: string, reservationId: string): AdaptiveReservationRecord {
     this.actor();
+    const versionIds = this.recheckCompilation(id);
     const result = this.deps.storage.tx(() => {
+      this.actor();
+      for (const versionId of versionIds)
+        this.deps.kernel.assertVersionAccess(versionId, this.deps.actorId);
       const job = this.owned(id);
       const { records } = this.inputs(job);
       const record = records.find((row) => row.id === reservationId);
@@ -371,7 +444,13 @@ export class AdaptiveJournal {
 
   report(id: string) {
     this.actor();
-    return this.deps.storage.tx(() => this.snapshot(id));
+    const versionIds = this.recheckCompilation(id);
+    return this.deps.storage.tx(() => {
+      this.actor();
+      for (const versionId of versionIds)
+        this.deps.kernel.assertVersionAccess(versionId, this.deps.actorId);
+      return this.snapshot(id);
+    });
   }
 
   private snapshot(id: string) {
@@ -399,6 +478,9 @@ export class AdaptiveJournal {
         benefit: frozen.plan.mode === "fixture" ? "not_evaluated" : "inconclusive",
         realModel: frozen.plan.mode === "fixture" ? "not_run" : "unknown",
         evidenceVerification: "unverified-host-receipts",
+        developmentVerification: job.compilationEvidence
+          ? "persisted-development-records"
+          : "unverified-host-receipts",
         formalEvaluation: "not_run",
       },
     };

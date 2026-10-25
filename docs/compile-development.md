@@ -7,7 +7,7 @@ M6a-03-02b1，2026-10-25。实现见 [development.ts](../src/app/experiment/deve
 1. 调用 `prepareCompileDevelopment(deps, jobId)`，取得 `record` 和 `bundle`。依赖与 `auditCompileEvidence` 相同：kernel、runtime、evolution、storage、blobs、organismId、actorId。
 2. 将 `bundle.cases`、`bundle.development`、`bundle.policies` 与已核验的 `bundle.fixed` 放入实验清单；另行冻结正式/回归资料、工具与环境。开发截止点不能早于资料包创建时间。
 3. `freezeAdaptivePlan(plan)` 校验全轮预算、split 隔离及对照合同，然后 `bindCompileDevelopment(deps, jobId, frozen)` 生成引用该 manifestDigest 的开发收据。
-4. 可将返回的 `observations` 交给 `app.adaptive.register`。当前普通注册不会自动保存 bundleDigest/auditDigest 关联，也不会把正式收据升级为已核验证据。
+4. 调用 `app.adaptive.registerCompiled(frozen, jobId)`，自动核验并在同一事务中保存实验、开发收据及 `jobId/bundleDigest/auditDigest` 来源关联。普通 `register` 仍支持独立宿主收据，但不会自动升级来源合同。
 
 两个入口均不发送模型请求、不读取 formal/regression 文件、不领用正式验证集、不修改 active，也不创建 Evaluation 或 Promotion。fixture 演练使用相同入口，但不证明真实收益。
 
@@ -15,7 +15,7 @@ M6a-03-02b1，2026-10-25。实现见 [development.ts](../src/app/experiment/deve
 
 编译成员的 `taskDigest` 是旧评估任务指纹，包含输入树、预算和裁判资料；实验 taskDigest 则只覆盖 `{goal,inputs:[{name,content}]}`。两者不能直接替换。首次准备资料包时，先采集 Runtime `inputs/<basename>` 布局下的 UTF-8 内容，再前后核对原编译成员指纹和投影，保存两种摘要的关联。验收 schema 与期望输出只用于私有 evaluatorDigest，不进入任务投影。
 
-目录展开后保留根目录名称与相对路径，文件顺序确定。首轮上限为 4 MiB / 512 文件，拒绝符号链接、特殊文件、空目录、输入根名称冲突和非完整 UTF-8。超过边界时拒绝，不截断或忽略输入。
+目录展开后保留根目录名称与相对路径，文件顺序确定。首轮上限为 4 MiB / 512 文件，拒绝符号链接、特殊文件、空目录、输入根名称冲突和非完整 UTF-8。指定的私有裁判/期望输出文件若进入输入树也会拒绝，文件身份检查覆盖硬链接别名。超过边界时拒绝，不截断或忽略输入。
 
 migration 17 保存每个 CompileJob 唯一的内容寻址资料包。此后重启或删除输入、裁判文件及工作区，都复用原包；仍重新核验底层持久化编译证据和当前权限。摘要漂移或来源记录变化会拒绝，不能重新生成一个包来替换已冻结资料。
 
@@ -35,4 +35,4 @@ migration 17 保存每个 CompileJob 唯一的内容寻址资料包。此后重�
 
 [集成测试](../tests/integration/compile-development.test.ts) 覆盖完整计量、遗漏/降额、任务/family/策略/组件错配、截止点、输入/裁判漂移、符号链接、删除资料后的重启复算、后端 real 声明不足以及零候选。
 
-下一项是将开发包引用原子绑定到实验记录，然后实现正式 Run 的任务、快照、策略、独立裁判及多次臂选择收据。当前 Journal 的 `evidenceVerification` 仍为 `unverified-host-receipts`，正式效果和采用仍未运行。
+开发包已可原子绑定到实验记录，见 [实验派发账本](./adaptive-journal.md)。后续预留、开始和报告均重核原始开发证据及当前权限；取消与恢复保留在来源已损坏或撤权时封存未知结果的能力。下一项是正式 Run 的任务、快照、策略、独立裁判及多次臂选择收据。当前 Journal 的整体 `evidenceVerification` 仍为 `unverified-host-receipts`，正式效果和采用仍未运行。
