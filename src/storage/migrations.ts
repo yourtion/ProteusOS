@@ -564,4 +564,15 @@ CREATE TABLE adaptive_reservations (
 );
 `,
   },
+  {
+    version: 17,
+    name: "frozen-compile-development-bundles",
+    sql: `
+CREATE TABLE compile_development_bundles (
+  job_id TEXT PRIMARY KEY REFERENCES policy_compile_jobs(id),
+  organism_id TEXT NOT NULL,
+  record TEXT NOT NULL
+);
+`,
+  },
 ];

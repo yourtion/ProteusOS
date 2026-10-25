@@ -21,7 +21,7 @@ import {
 } from "../../adapters/decision-llm/request.ts";
 import { readExecutionTrace } from "../../runtime/execution-evidence.ts";
 
-interface CompileEvidenceDeps {
+export interface CompileEvidenceDeps {
   kernel: Kernel;
   runtime: Pick<Runtime, "getRunSummary">;
   evolution: Pick<Evolution, "experienceDatasetView">;

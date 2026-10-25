@@ -2,6 +2,7 @@ import type {
   AdaptiveJournalRecord,
   AdaptiveReservationRecord,
 } from "../app/experiment/journal-types.ts";
+import type { CompileDevelopmentRecord } from "../app/experiment/development-types.ts";
 import type {
   CompileCaseRecord,
   CompileJobRecord,
@@ -87,6 +88,23 @@ export class Storage implements KernelStore, RuntimeStore {
 
   tx<T>(fn: () => T): T {
     return this.db.tx(fn);
+  }
+
+  compileDevelopmentBundle(jobId: string): CompileDevelopmentRecord | undefined {
+    const row = this.db.get<{ record: string }>(
+      "SELECT record FROM compile_development_bundles WHERE job_id = ?",
+      jobId,
+    );
+    return row ? (JSON.parse(row.record) as CompileDevelopmentRecord) : undefined;
+  }
+
+  insertCompileDevelopmentBundle(record: CompileDevelopmentRecord): void {
+    this.db.run(
+      "INSERT INTO compile_development_bundles VALUES (?, ?, ?)",
+      record.jobId,
+      record.organismId,
+      JSON.stringify(record),
+    );
   }
 
   // ---- 应用实验账本：事务与冻结/恢复规则由 journal 组合 ----

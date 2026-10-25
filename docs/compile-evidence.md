@@ -36,7 +36,7 @@ const evidence = auditCompileEvidence({
 
 用量核验细分为：编译侧 `response-and-learning-ledger`，来源侧 `frozen-adapter-ledger`，执行侧 `persisted-local-execution-evidence`。旧 Runtime 的 response blob 通常只有模型 choice 正文，没有服务响应头用量；不能据此声称从原始正文重新提取了来源 tokens 或价格。来源任务内容指纹沿用冻结成员摘要，不重新读取其外部输入文件。语义 family 独立性与材料权限仍须独立资料流程证明。
 
-输出固定 `formalEvaluation=not_run`。本切片尚未把这些来源映射为 [持久化实验账本](./adaptive-journal.md) 的开发单元，也没有正式 Run 的任务/裁判证据桥接、正式集一次领用、受信 runner 或 Evaluation。下一步补齐这些连接后，才能运行独立真实轮；这个核验产物不能用于 Promotion。
+输出固定 `formalEvaluation=not_run`。后续 [开发单元映射](./compile-development.md) 已冻结源任务内容并生成可交给 [持久化实验账本](./adaptive-journal.md) 的开发收据；开发包原子关联、正式 Run 的任务/裁判证据桥接、正式集一次领用、受信 runner 和 Evaluation 仍待实现。补齐这些连接后才能运行独立真实轮；这个核验产物不能用于 Promotion。
 
 ## 真实轮的预算可行性
 

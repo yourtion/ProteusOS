@@ -30,7 +30,7 @@ export class CompilerFake extends LlmDecisionProvider {
     };
   }
 }
-export async function compileHarness(shared = false) {
+export async function compileHarness(shared = false, datasetRoot = DEV_DATASET) {
   const seeded = bootExperimentHarness();
   if (shared) {
     seeded.inst.federation.createTeam("compiler-sources", { createdBy: "principal-local" });
@@ -73,12 +73,12 @@ export async function compileHarness(shared = false) {
     const submission = experimentSubmission({
       goal,
       inputs: [
-        join(DEV_DATASET, "bundles", "b01"),
-        join(DEV_DATASET, "changed-files", "b01", "changed-files.json"),
+        join(datasetRoot, "bundles", "b01"),
+        join(datasetRoot, "changed-files", "b01", "changed-files.json"),
       ],
       genomes: seeded.genomes,
-      schema: join(DEV_DATASET, "schemas", "stats-summary.schema.json"),
-      expected: join(DEV_DATASET, "expected", "dev-expl-01.json"),
+      schema: join(datasetRoot, "schemas", "stats-summary.schema.json"),
+      expected: join(datasetRoot, "expected", "dev-expl-01.json"),
     });
     const run = await seeded.inst.runtime.submitTask(
       { ...submission.input, familyId: `source-family-${i}` },
@@ -121,11 +121,11 @@ export async function compileHarness(shared = false) {
       expectedChoice: "local-process",
       task: {
         goal: `reserved-${role} 统计独立输入`,
-        inputs: [join(DEV_DATASET, "bundles", "b01")],
+        inputs: [join(datasetRoot, "bundles", "b01")],
         budget: { maxAttempts: 1, maxWallClockSeconds: 30 },
         acceptance: {
           verifier: "experiment-acceptance",
-          outputSchema: join(DEV_DATASET, "schemas", "stats-summary.schema.json"),
+          outputSchema: join(datasetRoot, "schemas", "stats-summary.schema.json"),
         },
       },
     })),
