@@ -575,4 +575,17 @@ CREATE TABLE compile_development_bundles (
 );
 `,
   },
+  {
+    version: 18,
+    name: "adaptive-run-admission-slots",
+    sql: `
+CREATE TABLE adaptive_run_slots (
+  reservation_id TEXT NOT NULL REFERENCES adaptive_reservations(id),
+  ordinal INTEGER NOT NULL,
+  run_id TEXT UNIQUE REFERENCES runs(id),
+  record TEXT NOT NULL,
+  PRIMARY KEY(reservation_id, ordinal)
+);
+`,
+  },
 ];

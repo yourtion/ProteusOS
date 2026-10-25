@@ -33,7 +33,7 @@ value 还须对应实际执行器。全部 Attempt 的输入证据继续核验�
 
 选择器使用冻结的 `plurality-first-tie-no-gold-v1`：所有槽位投票，同票取最早出现的 choice；对非 null 的结果取它首次出现的 Run。随后才使用该产物的已核验验收结论。相同选项的首次产物验收失败，即使后续同选项产物通过，也保留首次负结果。
 
-选择器不读取 caller 自报的 accepted、expectedChoice 或 preferredRunId。已知倒排或并发时序会拒绝，但 `orderVerification` 仍为 not_verified：同毫秒时间和调用者提供的槽位顺序，不能证明它们在派发前已登记。后续 Journal 需冻结真实的槽位、Run 身份及单次派发顺序。
+选择器不读取 caller 自报的 accepted、expectedChoice 或 preferredRunId。已知倒排或并发时序会拒绝，但此独立入口的 `orderVerification` 仍为 not_verified：同毫秒时间和调用者提供的槽位顺序，不能证明它们在派发前已登记。[Journal Run 槽位绑定](./adaptive-run-slots.md) 已另行冻结实际槽位、原子准入的 Run 身份及单次启动事件，可在外层证明真实顺序。
 
 ## 全开销与未核验项
 
@@ -49,7 +49,7 @@ value 还须对应实际执行器。全部 Attempt 的输入证据继续核验�
 - `costVerification` 为 partial：Attempt 尚无完整模型调用次数及硬上界。没有完整预算证明，不用于解除真实运行门。
 - 尚未核验独立的误派标签；本结果不直接生成 `AdaptiveObservation`，不会把 selectedAcceptance 直接转成 accepted/misrouted。
 
-Journal 整体仍是 `unverified-host-receipts`，`formalEvaluation` 保持 not_run。下一项是持久化预派发槽位、Run 身份和顺序，并将完整原始收据接入 Journal；之后才推进受信 runner 与独立正式 Evaluation。
+Journal 整体仍是 `unverified-host-receipts`，`formalEvaluation` 保持 not_run。预派发槽位、Run 身份和顺序已可持久化核验，下一项为独立误派资料及完整原始收据结案；之后才推进受信 runner 与独立正式 Evaluation。
 
 ## 验证
 

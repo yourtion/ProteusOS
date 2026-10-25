@@ -19,6 +19,8 @@ export interface AdaptiveJournalRecord {
 }
 
 export interface AdaptiveReservationRecord {
+  /** 缺项表示旧宿主收据；只能在 prepared 阶段固定，不允许事后升级。 */
+  runPlan?: { ref: string; digest: string };
   id: string;
   experimentId: string;
   ordinal: number;
@@ -29,4 +31,15 @@ export interface AdaptiveReservationRecord {
   deadlineAt: number | null;
   observationRef: string | null;
   observationDigest: string | null;
+}
+
+export interface AdaptiveRunSlotRecord {
+  reservationId: string;
+  ordinal: number;
+  runId: string | null;
+  state: "reserved" | "admitted" | "started";
+  admittedAt: number | null;
+  startedAt: number | null;
+  admissionEventId: string | null;
+  startEventId: string | null;
 }

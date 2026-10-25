@@ -1,5 +1,6 @@
 import type { CompileBackend } from "../evolution/compile-types.ts";
 import { AdaptiveJournal } from "./experiment/journal.ts";
+import { AdaptiveRunSlots } from "./experiment/run-slots.ts";
 import { bindCompileDevelopment } from "./experiment/development.ts";
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
@@ -41,6 +42,7 @@ export interface AppInstance {
   runtime: Runtime;
   evolution: Evolution;
   adaptive: AdaptiveJournal;
+  adaptiveRuns: AdaptiveRunSlots;
   federation: Federation;
   sharingTrust: PublicationTrust;
   blobs: BlobStore;
@@ -155,7 +157,9 @@ export function openInstance(
   const capabilitySandbox =
     options.capabilitySandbox ??
     (process.env.PROTEUS_SANDBOX === "microsandbox" ? new MicrosandboxBackend() : undefined);
+  let adaptiveRuns: AdaptiveRunSlots;
   const runtime = new Runtime({
+    runGuard: (run, phase) => adaptiveRuns.guard(run, phase),
     storage,
     kernel,
     organismId,
@@ -207,27 +211,39 @@ export function openInstance(
     clock,
     ids,
   });
+  const adaptive = new AdaptiveJournal({
+    kernel,
+    storage,
+    blobs,
+    clock,
+    ids,
+    organismId,
+    actorId,
+    bindCompilation: (jobId, frozen) =>
+      bindCompileDevelopment(
+        { kernel, runtime, evolution, storage, blobs, organismId, actorId },
+        jobId,
+        frozen,
+      ),
+  });
+  adaptiveRuns = new AdaptiveRunSlots({
+    kernel,
+    storage,
+    blobs,
+    clock,
+    organismId,
+    actorId,
+    runtime,
+    journal: adaptive,
+  });
   return {
     root,
     storage,
     kernel,
     runtime,
     evolution,
-    adaptive: new AdaptiveJournal({
-      kernel,
-      storage,
-      blobs,
-      clock,
-      ids,
-      organismId,
-      actorId,
-      bindCompilation: (jobId, frozen) =>
-        bindCompileDevelopment(
-          { kernel, runtime, evolution, storage, blobs, organismId, actorId },
-          jobId,
-          frozen,
-        ),
-    }),
+    adaptive,
+    adaptiveRuns,
     federation,
     sharingTrust,
     blobs,

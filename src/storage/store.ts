@@ -1,6 +1,7 @@
 import type {
   AdaptiveJournalRecord,
   AdaptiveReservationRecord,
+  AdaptiveRunSlotRecord,
 } from "../app/experiment/journal-types.ts";
 import type { CompileDevelopmentRecord } from "../app/experiment/development-types.ts";
 import type {
@@ -169,6 +170,48 @@ export class Storage implements KernelStore, RuntimeStore {
       JSON.stringify(record),
       record.id,
     );
+  }
+
+  adaptiveRunSlots(reservationId: string): AdaptiveRunSlotRecord[] {
+    return this.db
+      .all<{ record: string }>(
+        "SELECT record FROM adaptive_run_slots WHERE reservation_id = ? ORDER BY ordinal",
+        reservationId,
+      )
+      .map((row) => JSON.parse(row.record) as AdaptiveRunSlotRecord);
+  }
+
+  adaptiveRunSlotForRun(runId: string): AdaptiveRunSlotRecord | undefined {
+    const row = this.db.get<{ record: string }>(
+      "SELECT record FROM adaptive_run_slots WHERE run_id = ?",
+      runId,
+    );
+    return row ? (JSON.parse(row.record) as AdaptiveRunSlotRecord) : undefined;
+  }
+
+  insertAdaptiveRunSlot(record: AdaptiveRunSlotRecord): void {
+    this.db.run(
+      "INSERT INTO adaptive_run_slots VALUES (?, ?, ?, ?)",
+      record.reservationId,
+      record.ordinal,
+      record.runId,
+      JSON.stringify(record),
+    );
+  }
+
+  updateAdaptiveRunSlot(record: AdaptiveRunSlotRecord): void {
+    this.db.run(
+      "UPDATE adaptive_run_slots SET run_id = ?, record = ? WHERE reservation_id = ? AND ordinal = ?",
+      record.runId,
+      JSON.stringify(record),
+      record.reservationId,
+      record.ordinal,
+    );
+  }
+
+  eventById(id: string): EventRecord | undefined {
+    const row = this.db.get<EventRow>("SELECT * FROM events WHERE event_id = ?", id);
+    return row ? mapEvent(row) : undefined;
   }
 
   // ---- KernelStore：身份 ----

@@ -14,7 +14,7 @@ import {
 import type { CompileDevelopmentBundle, CompileDevelopmentRecord } from "./development-types.ts";
 
 /** 与 Runtime 的 inputs/<basename> 布局一致；只接受有界 UTF-8 普通文件树。 */
-function captureTask(task: TaskRecord) {
+export function captureTaskProjection(task: Pick<TaskRecord, "goal" | "inputs" | "acceptance">) {
   const inputs: Array<{ name: string; content: string }> = [];
   let bytes = 0;
   const roots = new Set<string>();
@@ -153,7 +153,7 @@ export function prepareCompileDevelopment(deps: CompileEvidenceDeps, jobId: stri
   for (const c of [...plan.train, ...plan.search]) {
     const run = deps.storage.getRun(c.runId)!;
     const task = deps.storage.getTask(run.taskId)!;
-    const projected = captureTask(task);
+    const projected = captureTaskProjection(task);
     if (sourceFingerprint(task) !== c.taskDigest) throw new Error("开发任务输入或裁判资料已漂移");
     const evaluatorDigest = digestOf(
       canonicalJson({
@@ -166,7 +166,7 @@ export function prepareCompileDevelopment(deps: CompileEvidenceDeps, jobId: stri
     );
     if (
       sourceFingerprint(task) !== c.taskDigest ||
-      canonicalJson(captureTask(task)) !== canonicalJson(projected)
+      canonicalJson(captureTaskProjection(task)) !== canonicalJson(projected)
     )
       throw new Error("开发资料在冻结期间发生变化");
     bundle.cases.push({

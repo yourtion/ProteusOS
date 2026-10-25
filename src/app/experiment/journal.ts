@@ -11,6 +11,7 @@ import {
 } from "./adaptive.ts";
 import type { AdaptiveJournalRecord, AdaptiveReservationRecord } from "./journal-types.ts";
 import type { bindCompileDevelopment } from "./development.ts";
+import { adaptiveRunIsClosed } from "./run-slots.ts";
 
 interface JournalDeps {
   kernel: Kernel;
@@ -200,6 +201,12 @@ export class AdaptiveJournal {
     return this.owned(id);
   }
 
+  /** 应用组合入口：在外层事务之前重核来源，调用者在提交内再核对版本权限。 */
+  verifySources(id: string): string[] {
+    this.actor();
+    return this.recheckCompilation(id);
+  }
+
   /** 在外层事务之前只读核验，避免 SQLite 嵌套事务；封闭/恢复不依赖来源仍可访问。 */
   private recheckCompilation(id: string): string[] {
     const job = this.owned(id);
@@ -309,6 +316,19 @@ export class AdaptiveJournal {
       if (record.observationDigest === digestOf(content)) return record;
       if (job.state !== "running" || record.state !== "started")
         throw new Error("单元已经封闭，不能替换结果或接纳迟到收据");
+      if (record.runPlan) {
+        const slots = this.deps.storage.adaptiveRunSlots(record.id);
+        if (
+          slots.length !== (record.unit.arm === "budget-matched" ? 3 : 1) ||
+          slots.some(
+            (slot) =>
+              !slot.runId ||
+              slot.state !== "started" ||
+              !adaptiveRunIsClosed(this.deps.storage, slot.runId),
+          )
+        )
+          throw new Error("绑定的 Run 槽位尚未全部结案，不能用宿主收据提前封闭或并行领取");
+      }
       if (
         row.unitId !== record.unit.id ||
         row.startedAt !== record.startedAt ||
@@ -380,7 +400,23 @@ export class AdaptiveJournal {
         accepted: false,
         decision,
         misrouted: null,
-        evidenceRefs: [`adaptive-reservation:${record.id}`],
+        evidenceRefs: [
+          `adaptive-reservation:${record.id}`,
+          ...this.deps.storage.adaptiveRunSlots(record.id).flatMap((slot) =>
+            slot.runId
+              ? [
+                  `run:${slot.runId}`,
+                  ...this.deps.storage
+                    .listDecisionCalls(slot.runId)
+                    .map((call) => `decision:${call.id}`),
+                  ...this.deps.storage
+                    .listProcesses(slot.runId)
+                    .flatMap((p) => this.deps.storage.listAttempts(p.id))
+                    .map((attempt) => `attempt:${attempt.id}`),
+                ]
+              : [],
+          ),
+        ],
         usage: {
           modelCalls: null,
           inputTokens: null,

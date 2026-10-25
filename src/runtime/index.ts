@@ -94,6 +94,8 @@ export const DEFAULT_MISSING_CAPABILITY_WAIT_SECONDS = 3600;
  * evaluatorVersionId 仅评估用途允许——评估计划固定裁判，候选不能替换本轮裁判。
  */
 export interface SubmitOptions {
+  /** 宿主累计预算的绝对截止；只允许缩短 Run 自身时限。 */
+  deadlineAt?: number;
   purpose?: RunPurpose;
   /** 显式绑定的快照（已注册但未激活的候选/基线/构建器快照） */
   snapshotId?: string;
@@ -131,6 +133,8 @@ export class RuntimeError extends Error {
 }
 
 export interface RuntimeDeps {
+  /** 受信宿主的准入/单次启动/派发守卫；在短事务内同步执行，不能调用外部服务。 */
+  runGuard?(run: RunRecord, phase: "admit" | "start" | "dispatch"): void;
   actorId?: string;
   storage: Storage;
   kernel: Kernel;
@@ -263,6 +267,16 @@ export class Runtime {
 
   /** 提交任务并内联执行到终态；options 提供评估 Run 的显式授权入口（M2） */
   async submitTask(input: TaskSubmission, options: SubmitOptions = {}): Promise<RunSummary> {
+    const admitted = this.admitTask(input, options);
+    return admitted.state === "waiting" ? admitted : this.executeRun(admitted.runId);
+  }
+
+  /** 只准入，不发送调用。受信应用可在同一事务绑定新 Run；绑定失败整体回滚。 */
+  admitTask(
+    input: TaskSubmission,
+    options: SubmitOptions = {},
+    bind?: (runId: string) => void,
+  ): RunSummary {
     this.deps.kernel.assertOrganismAccess(
       this.deps.organismId,
       this.deps.actorId ?? input.requestedBy,
@@ -297,7 +311,6 @@ export class Runtime {
     const runId = this.deps.ids.next();
     const taskId = this.deps.ids.next();
     const purpose: RunPurpose = options.purpose ?? "normal";
-    let missingPending: string[] = [];
 
     this.deps.storage.tx(() => {
       const organism = this.deps.kernel.getOrganism(this.deps.organismId);
@@ -328,7 +341,6 @@ export class Runtime {
       // 不执行图——Run 固定本快照，能力只会出现在未来快照中，出路是接替或到期结案
       const requires = input.requires ?? [];
       const missing = requires.filter((c) => !versions.has(capabilitySlot(c)));
-      missingPending = missing;
 
       const graphContent = this.deps.blobs.read(graphVersion.contentRef);
       const dag = normalizeDag(parseGraph(graphContent));
@@ -349,6 +361,15 @@ export class Runtime {
       }
 
       const now = this.deps.clock.now();
+      if (
+        options.deadlineAt !== undefined &&
+        (!Number.isSafeInteger(options.deadlineAt) || options.deadlineAt <= now)
+      )
+        throw new RuntimeError("budget_exhausted", "宿主绝对截止点无效或已到达");
+      const deadlineAt = Math.min(
+        now + input.budget.maxWallClockSeconds * 1000,
+        options.deadlineAt ?? Infinity,
+      );
       const taskRevision = options.taskRevision ?? 1;
       this.deps.storage.insertTask({
         id: taskId,
@@ -380,7 +401,7 @@ export class Runtime {
         waitingUntil: missing.length > 0 ? now + waitSeconds * 1000 : null,
         evaluatorVersionId: options.evaluatorVersionId ?? null,
         // 截止点持久化：剩余时间由此计算，不能每个节点重新给足总时限（§4.2）
-        deadlineAt: now + input.budget.maxWallClockSeconds * 1000,
+        deadlineAt,
         experimentId: options.experimentId ?? null,
         createdAt: now,
         updatedAt: now,
@@ -410,7 +431,7 @@ export class Runtime {
           purpose,
           requires,
           supersedesRunId: options.supersedesRunId ?? null,
-          deadlineAt: now + input.budget.maxWallClockSeconds * 1000,
+          deadlineAt,
           ...(options.experimentId ? { experimentId: options.experimentId } : {}),
           ...(options.evaluatorVersionId ? { evaluatorVersionId: options.evaluatorVersionId } : {}),
           ...(missing.length > 0
@@ -423,12 +444,10 @@ export class Runtime {
         runId,
         occurredAt: now,
       });
+      bind?.(runId);
+      this.deps.runGuard?.(this.mustGetRun(runId), "admit");
     });
-
-    if (missingPending.length > 0) {
-      return this.getRunSummary(runId);
-    }
-    return this.executeRun(runId);
+    return this.getRunSummary(runId);
   }
 
   /**
@@ -497,6 +516,7 @@ export class Runtime {
     if (!resumable.includes(initial.state)) {
       throw new RuntimeError("run_not_pending", `run ${runId} 状态为 ${initial.state}，不能执行`);
     }
+    this.deps.storage.tx(() => this.deps.runGuard?.(initial, "start"));
     if (initial.state === "pending" && this.deps.storage.hasCancelIntent(runId)) {
       return this.finalize(runId, "cancelled", "cancelled_before_start", []);
     }
@@ -2412,6 +2432,7 @@ export class Runtime {
     task: TaskRecord,
     versions: Map<string, ArtifactVersion>,
   ): void {
+    this.deps.runGuard?.(run, "dispatch");
     const actors = new Set([this.deps.actorId ?? task.requestedBy, task.requestedBy]);
     for (const actor of actors) {
       this.deps.kernel.assertOrganismAccess(run.organismId, actor, "operate");
