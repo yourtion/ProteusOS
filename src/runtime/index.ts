@@ -55,6 +55,10 @@ import {
   type StoredExecutionEvidence,
 } from "./execution-evidence.ts";
 import type { SandboxBackend } from "./sandbox.ts";
+import {
+  persistJsonVerification,
+  type StoredVerificationEvidence,
+} from "./verification-evidence.ts";
 
 export interface TaskSubmission {
   familyId?: string;
@@ -649,6 +653,7 @@ export class Runtime {
             checks,
             evaluatorContent,
             inputWorkspace,
+            evaluator,
           );
           if (evaluation) verifiedDigest ??= evaluation;
         }
@@ -2141,6 +2146,7 @@ export class Runtime {
     checks: OutcomeCheck[],
     evaluatorContent: unknown,
     inputWorkspace: string,
+    evaluator: ArtifactVersion,
   ): string {
     // 裁判按生效验收器产物内容分发：候选不能替换本轮裁判（docs/evolution.md §6）
     const kind = readEvaluatorKind(evaluatorContent);
@@ -2150,6 +2156,11 @@ export class Runtime {
       attestedOutputs?: Record<string, string>;
     };
     let outputDigest: string | null = null;
+    let evidence: StoredVerificationEvidence = {
+      version: "verification-evidence-v1",
+      status: "unavailable",
+      reason: "test_runner_not_json",
+    };
     if (kind === "test-runner-v1") {
       // 测试命令在产出代码的 execute 节点工作区执行
       evaluation = evaluateTestRunner(evaluatorContent, inputWorkspace);
@@ -2164,10 +2175,12 @@ export class Runtime {
       let outputRaw: string;
       let output: unknown;
       let schema: unknown;
+      let schemaRaw: string;
       try {
         outputRaw = readFileSync(outputRef, "utf8");
         output = JSON.parse(outputRaw);
-        schema = JSON.parse(readFileSync(task.acceptance.outputSchema, "utf8"));
+        schemaRaw = readFileSync(task.acceptance.outputSchema, "utf8");
+        schema = JSON.parse(schemaRaw);
       } catch {
         throw new NodeFailure("invalid_output", `verify ${node.id} 无法读取或解析输出`);
       }
@@ -2175,13 +2188,36 @@ export class Runtime {
         kind === "hybrid-acceptance-v1"
           ? evaluateHybridOutput(output, schema)
           : evaluateStatsOutput(output, schema);
+      let expectedRaw: string | null = null;
       if (task.acceptance.expectedOutput) {
-        const expected = JSON.parse(readFileSync(task.acceptance.expectedOutput, "utf8"));
+        expectedRaw = readFileSync(task.acceptance.expectedOutput, "utf8");
+        const expected = JSON.parse(expectedRaw);
         const expectedCheck = evaluateExpectedOutput(output, expected);
         evaluation.checks.push(expectedCheck);
         evaluation.passed &&= expectedCheck.passed;
       }
       outputDigest = digestOf(outputRaw);
+      const run = this.mustGetRun(runId);
+      evidence = persistJsonVerification(
+        this.deps.blobs,
+        {
+          runId,
+          taskId: task.id,
+          snapshotId: run.snapshotId,
+          nodeId: node.id,
+          inputFrom: node.inputFrom!,
+          evaluator: {
+            versionId: evaluator.id,
+            contentRef: evaluator.contentRef,
+            contentDigest: evaluator.contentDigest,
+          },
+          algorithm: kind,
+          passed: evaluation.passed,
+          checks: evaluation.checks,
+          recordedAt: this.deps.clock.now(),
+        },
+        { output: outputRaw, schema: schemaRaw, expected: expectedRaw },
+      );
     }
     checks.push(...evaluation.checks);
     this.deps.storage.tx(() => {
@@ -2192,6 +2228,7 @@ export class Runtime {
           nodeId: node.id,
           passed: evaluation.passed,
           checks: evaluation.checks,
+          evidence,
           ...(evaluation.attestedOutputs ? { attestedOutputs: evaluation.attestedOutputs } : {}),
         },
         correlationId: runId,

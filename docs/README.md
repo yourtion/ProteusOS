@@ -29,6 +29,7 @@
 | [实验派发账本](./adaptive-journal.md) | 冻结收据、单次派发、累计预留、绝对期限与崩溃恢复 |
 | [编译开发证据核验](./compile-evidence.md) | 原始正文、学习账本、来源执行证据和获胜候选的只读一致性检查 |
 | [编译开发单元映射](./compile-development.md) | 冻结任务内容、绑定清单、完整计量与未知执行开销 |
+| [JSON 验收证据与 Run 核验](./verification-evidence.md) | 当次验收正文、独立复算、执行输出绑定及旧记录缺项 |
 | [本体决策实验](./experiments/organism-decision-v1.md) | 规则/LLM 对照协议、指标和运行命令 |
 
 ## 架构决策

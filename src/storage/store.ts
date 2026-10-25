@@ -759,6 +759,17 @@ export class Storage implements KernelStore, RuntimeStore {
       .map(mapEvent);
   }
 
+  /** 证据核验不能用展示用的事件数量上限静默丢弃明细。 */
+  runEventsByType(runId: string, type: string): EventRecord[] {
+    return this.db
+      .all<EventRow>(
+        "SELECT * FROM events WHERE run_id = ? AND type = ? ORDER BY stream_id, seq",
+        runId,
+        type,
+      )
+      .map(mapEvent);
+  }
+
   hasCancelIntent(runId: string): boolean {
     const row = this.db.get<{ n: number }>(
       "SELECT COUNT(*) AS n FROM events WHERE run_id = ? AND type = 'run.cancel_requested'",
