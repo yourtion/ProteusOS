@@ -57,6 +57,8 @@
 
 一个最小清单例子：20 train + 20 search 开发单元各最多 1 次；40 formal + 10 regression 各 3 次重复，三臂分别 1/3/1 次，共 `40 + 50×3×5 = 790` 次。假设每次最多 2,048 input / 256 output tokens，总预留为 1,617,920 / 202,240 tokens。开发与单次任务 allowance 30 秒、多次臂 90 秒时，累计时长预留为 23,700,000 ms。`budget.durationMs` 表示累计执行时长，`budget.wallClockMs` 表示全轮截止时限，二者独立；达到 60 分钟时停止并保留缺测，不能延时补齐。
 
+上例只说明冻结清单算术，不是当前编译器的真实调用配置。M6a-02 至少两组参数 × 20 search，搜索本身即需 40 次；若 40 个来源另用模型采集，总数将达到 830 次而超额。实际单元必须纳入来源和搜索的全部开销；符合合同的本地确定性来源可以将模型调用控制在 790 次。具体可行性见 [开发证据与预算核验](../compile-evidence.md#真实轮的预算可行性)，不能把一次搜索或来源采集从总额中隐去。
+
 在派发前保守预留完整单元上限；冻结时检查所有单元总预留及候选/对照总额。运行时必须持久化已开始的单元和预留，恢复不重置次数。未知调用、超时、取消、非法响应、服务异常不补考，不因缺用量退还额度。尚未开始的计划单元可恢复首次执行，已开始但结果不明的单元保留 unknown。原决策账本的“不自动重发”规则继续适用。
 
 本协议模块只实现**预检与离线审计**；后续 [持久化派发账本](../adaptive-journal.md) 已连接冻结清单、单次派发、预留和恢复，尚未装配真实 runner 或核验原始 Runtime 收据。M6a 在真实运行前必须补齐这一连接，证明输入 token 上界、输出上限及所有执行调用能被宿主/服务约束；不能把离线报告或派发账本当作实际服务的限额控制器。
@@ -67,7 +69,7 @@
 
 ## 5. 收据与离线报告
 
-每个计划单元保存 unitId、manifestDigest、fixture/real 来源、起止时间、终态、独立 evaluator 的 accepted/misrouted、决策分类、Run/DecisionCall/Attempt/学习调用引用及用量。开发单元的 accepted 必须为 null，不把 search 分数伪装成正式验收。模型主动弃权、服务拒绝、非法输出、网络错误、超时、取消、unknown 分列。
+每个计划单元保存 unitId、manifestDigest、fixture/real 来源、起止时间、终态、独立 evaluator 的 accepted/misrouted、决策分类、Run/DecisionCall/Attempt/学习调用引用及用量。开发单元的 accepted 必须为 null，不把 search 分数伪装成正式验收。模型主动弃权、服务拒绝、弃权来源缺失、非法输出、网络错误、超时、取消、unknown 分列。
 
 每项资源只归属一个单元，拒绝重复证据引用；同一多次执行单元内累计全部调用/执行，不能把相同 token 用量从 DecisionCall 与 Attempt 重复相加。tokens/调用缺失列为 unknownUnits，费用缺失列为 unknownCostUnits。已知部分照常求和，不因部分缺失把整个已知开销丢弃。
 

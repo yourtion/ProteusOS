@@ -33,7 +33,7 @@ M6a-03-01，2026-10-25。实现见 [AdaptiveJournal](../src/app/experiment/journ
 
 本版本接受**宿主提供、尚未核验原始账本的收据**，报告固定带有 `evidenceVerification=unverified-host-receipts`、`formalEvaluation=not_run`。fixture 为 `realModel=not_run / benefit=not_evaluated`；real 清单为 `realModel=unknown / benefit=inconclusive`，即使收据自报的数字通过质量门，也不能升级结论。`engineering=passed` 只表示收据完整且符合离线合同。
 
-下一切片需要从实际 CompileJob、Run、DecisionCall 和 Attempt 构造收据，绑定策略、快照、任务和独立裁判；核验实际模式与所有开发/执行开销，不能把宿主提供的 accepted、source 或用量直接当成事实。随后才接入受信 runner、正式验证集的一次领用与新版 Evaluation。独立真实轮通过后，仍由 operator 显式 Promotion。
+后续 [编译开发证据核验](./compile-evidence.md) 已先核对 CompileJob 原始正文、来源账本和执行证据；仍需映射为开发单元并从正式 Run、DecisionCall 和 Attempt 构造收据，绑定策略、快照、任务和独立裁判。不能把宿主提供的 accepted、source 或用量直接当成事实。随后才接入受信 runner、正式验证集的一次领用与新版 Evaluation。独立真实轮通过后，仍由 operator 显式 Promotion。
 
 ## 验证
 

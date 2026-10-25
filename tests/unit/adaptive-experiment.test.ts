@@ -276,7 +276,12 @@ it("超时、主动弃权、服务拒绝分列，缺失费用不会变成零费�
   const units = adaptiveUnits(frozen.plan).filter(
     (u) => u.arm === "compiled" && u.split === "formal",
   );
-  for (const [i, decision] of ["timeout", "model_abstain", "service_refusal"].entries()) {
+  for (const [i, decision] of [
+    "timeout",
+    "model_abstain",
+    "service_refusal",
+    "abstain_origin_unavailable",
+  ].entries()) {
     Object.assign(
       rows.find((r) => r.unitId === units[i]!.id)!,
       { state: "failed", accepted: false, decision },
@@ -288,6 +293,7 @@ it("超时、主动弃权、服务拒绝分列，缺失费用不会变成零费�
     timeout: 1,
     model_abstain: 1,
     service_refusal: 1,
+    abstain_origin_unavailable: 1,
   });
   expect(report.resources.knownCosts).toEqual([]);
   expect(report.resources.unknownCostUnits).toBe(rows.length);

@@ -224,6 +224,7 @@ const observationSchema = z.strictObject({
       "value",
       "model_abstain",
       "service_refusal",
+      "abstain_origin_unavailable",
       "invalid_output",
       "transport_error",
       "timeout",

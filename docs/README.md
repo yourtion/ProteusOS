@@ -27,6 +27,7 @@
 | [可编译策略](./compiled-policy.md) | 冻结示例池、选择/顺序参数、模型请求持久化与旧策略兼容 |
 | [适应行为实验](./experiments/adaptive-behavior-v1.md) | 新版实验冻结、四类数据隔离、同预算比较与无真实调用演练 |
 | [实验派发账本](./adaptive-journal.md) | 冻结收据、单次派发、累计预留、绝对期限与崩溃恢复 |
+| [编译开发证据核验](./compile-evidence.md) | 原始正文、学习账本、来源执行证据和获胜候选的只读一致性检查 |
 | [本体决策实验](./experiments/organism-decision-v1.md) | 规则/LLM 对照协议、指标和运行命令 |
 
 ## 架构决策
