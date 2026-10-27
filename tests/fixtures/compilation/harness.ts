@@ -30,8 +30,12 @@ export class CompilerFake extends LlmDecisionProvider {
     };
   }
 }
-export async function compileHarness(shared = false, datasetRoot = DEV_DATASET) {
-  const seeded = bootExperimentHarness();
+export async function compileHarness(
+  shared = false,
+  datasetRoot = DEV_DATASET,
+  instanceRoot?: string,
+) {
+  const seeded = bootExperimentHarness(instanceRoot);
   if (shared) {
     seeded.inst.federation.createTeam("compiler-sources", { createdBy: "principal-local" });
     const bindings: Record<string, string> = {};

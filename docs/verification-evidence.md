@@ -60,11 +60,11 @@ M6a-03-02b3b1 在 JSON 验收核验之上增加 `auditAdaptiveRunTask(deps, runI
 
 ## 尚未完成的正式证据
 
-原 JSON 范围的核验保留 `taskInputVerification: not_verified`。新冻结任务核验可将输入标为 verified，但仍明确保留 `registrationVerification`、`armVerification` 和 `costVerification` 为 not_verified，以及 `formalEvaluation: not_run`。它没有绑定实验预留、三臂配置、重复执行的无标签选择器、DecisionCall 及完整成本。Journal 整体仍使用 `unverified-host-receipts`；真实收益结论不变。
+原 JSON 范围的核验保留 `taskInputVerification: not_verified`。新冻结任务核验可将输入标为 verified，但仍明确保留 `registrationVerification`、`armVerification` 和 `costVerification` 为 not_verified，以及 `formalEvaluation: not_run`。它没有绑定实验预留、三臂配置、重复执行的无标签选择器、DecisionCall 及完整成本。这些独立入口不会自行升级 Journal 证据；[原始收据闭环](./adaptive-receipts.md) 在上层组合核验，真实收益结论不变。
 
 现有 verify 事件与节点完成的提交边界没有改变。崩溃恢复可能产生重复验收事件，本入口拒绝该歧义，不通过“取最后一条”补成正式收据。后续受信 runner 需明确处理该边界。
 
-[策略臂核验](./adaptive-arm-evidence.md) 已继续绑定固定组件、原始决策和三臂选择，但尚未接入 Journal 预派发槽位。当前任务核验不因调用者提供了一个合法 frozen 对象而证明预派发注册或来源可信。
+[策略臂核验](./adaptive-arm-evidence.md) 已继续绑定固定组件、原始决策和三臂选择，并已通过 [Run 槽位](./adaptive-run-slots.md) 接入 Journal 预派发绑定。当前任务核验不因调用者提供了一个合法 frozen 对象而证明预派发注册或来源可信。
 
 ## 验证
 

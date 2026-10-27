@@ -2,7 +2,7 @@
 
 M6a-03-01，2026-10-25。实现见 [AdaptiveJournal](../src/app/experiment/journal.ts)，通过 `openInstance(...).adaptive` 使用。协议仍为 [adaptive-behavior-v1](./experiments/adaptive-behavior-v1.md)，不改变其预算、数据或效果门槛。
 
-本切片实现冻结清单、派发许可、预留和恢复的持久化。它不发送模型请求或任务，不读取正式资料，不核验原始 Runtime 证据，也不创建 Evaluation 或 Promotion。真实 runner、受信预算后端与独立资料仍是后续前置；不能以此切片的通过替代真实效果验证。
+本切片实现冻结清单、派发许可、预留和恢复的持久化。Journal 本身不发送模型请求或任务；新增 completeFromRuns 可在同一事务核验原始 Runtime 证据并结案，运行由应用侧串行运行器负责，不创建 Evaluation 或 Promotion。真实 runner、受信预算后端与独立资料仍是后续前置；不能以此切片的通过替代真实效果验证。
 
 ## 冻结与注册
 
@@ -20,7 +20,8 @@ M6a-03-01，2026-10-25。实现见 [AdaptiveJournal](../src/app/experiment/journ
 | --- | --- |
 | `prepare(id)` | 按清单预留下一个完整单元；重复调用返回原预留；在途单元未封闭时不能领取下一个 |
 | `start(id, reservationId)` | 事务内将 prepared 改为 started；只有一次能成功；返回单元和绝对截止点 |
-| `complete(id, reservationId, observation)` | 绑定原单元、开始时间和清单；收据 blob、单元终态、实验状态与事件同事务提交 |
+| `complete(id, reservationId, observation)` | 旧宿主收据入口；标签绑定单元不能使用 |
+| `completeFromRuns(id, reservationId)` | 核验冻结标签和原始运行，原子提交推导的观察、收据及状态 |
 | `report(id)` | 在一致的数据库事务中读取清单、预留及收据，只读复算；不补跑缺失单元 |
 | `cancel(id)` | 封闭账本；started 保留 unknown，prepared 保留预留；调用者负责停止实际执行器 |
 | `recover(id)` | 仅在旧 Host/执行器已停止后显式调用；prepared 保留原 ID，started 封为 unknown 并停止本轮 |
@@ -35,11 +36,11 @@ M6a-03-01，2026-10-25。实现见 [AdaptiveJournal](../src/app/experiment/journ
 
 ## 证据边界与后续工作
 
-报告以 `developmentVerification` 区分 `persisted-development-records` 与普通 `unverified-host-receipts`。前者仅表示开发来源已绑定并核验；正式结果仍为宿主提供的收据，整体固定带有 `evidenceVerification=unverified-host-receipts`、`formalEvaluation=not_run`。fixture 为 `realModel=not_run / benefit=not_evaluated`；real 清单为 `realModel=unknown / benefit=inconclusive`，即使收据自报的数字通过质量门，也不能升级结论。`engineering=passed` 只表示收据完整且符合离线合同。
+报告以 developmentVerification 区分开发来源；整体 evidenceVerification 区分未核验宿主收据、部分原始记录、完整 Runtime 记录和完整开发/Runtime 记录。详见 [原始收据闭环](./adaptive-receipts.md)。fixture 仍为 realModel=not_run / benefit=not_evaluated；real 清单保持 unknown / inconclusive。工程通过不表示服务兼容或真实效果通过。
 
 后续 [编译开发证据核验](./compile-evidence.md) 和 [开发单元映射](./compile-development.md) 已接入开发侧原始记录。仍需从正式 Run、DecisionCall 和 Attempt 构造收据，绑定策略、快照、任务和独立裁判。不能把宿主提供的 accepted、source 或用量直接当成事实。随后才接入受信 runner、正式验证集的一次领用与新版 Evaluation。独立真实轮通过后，仍由 operator 显式 Promotion。
 
-[冻结任务与 JSON 核验](./verification-evidence.md)、[策略臂与选择器核验](./adaptive-arm-evidence.md) 已可独立读取原始记录。[Run 槽位绑定](./adaptive-run-slots.md) 进一步在 prepared 阶段冻结任务/快照/后端和槽位，将 Run/预算与槽位同事务准入，并在调用前消费一次启动许可。其事件顺序可只读核验，但宿主 complete 收据仍未升级为正式成绩。下一步补齐独立误派资料、原始收据结案及真实来源/预算合同。
+[冻结任务与 JSON 核验](./verification-evidence.md)、[策略臂与选择器核验](./adaptive-arm-evidence.md) 已可独立读取原始记录。[Run 槽位绑定](./adaptive-run-slots.md) 进一步在 prepared 阶段冻结任务/快照/后端和槽位，将 Run/预算与槽位同事务准入，并在调用前消费一次启动许可。其事件顺序可只读核验，但宿主 complete 收据仍未升级为正式成绩。冻结路由标签、原始收据结案及串行运行器已接入；下一步是真实来源/预算合同与独立正式验证。
 
 ## 验证
 

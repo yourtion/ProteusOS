@@ -27,7 +27,7 @@
 
 标签绑定的单元不能再用 complete 导入宿主成绩。旧实验保留原入口及未核验分类，旧宿主收据不能原地升级。重复结案只重读记录，不重跑模型/worker；提交故障整体回滚。
 
-收据保存全部 Run 和计量项引用。原观察 usage 保持旧协议：合计不完整时为 null；新报告另外保留 `evidence.runtimeResources` 的已知部分和未知项，不因 Attempt 用量缺失而抹掉已知决策 tokens。开发开销另列 `evidence.developmentResources`，未选中和失败执行同样计量。
+收据保存全部 Run 和计量项引用。原观察 usage 保持旧协议：合计不完整时为 null；新报告另外保留 `evidence.runtimeResources` 的已知部分和未知项，不因 Attempt 用量缺失而抹掉已知决策 tokens。开发开销另列 `evidence.developmentResources`，未选中和失败执行同样计量。中断单元尚未形成完整收据时，已发生调用仍计入 runtimeResources，并在 unsettledResources 中明确标记 ledger-subtotals-only；settledResources 只包含完整原始收据，未知预留不退还。
 
 report 每次将已提交收据与原始记录重新核对，支持资料/工作区清理和实例重开；损坏时拒绝，不静默重新生成。所有正式单元均有原始收据时为 persisted-runtime-records；开发来源也绑定时为 persisted-development-and-runtime-records；部分覆盖单列。fixture 的 realModel/benefit 始终为 not_run/not_evaluated。
 

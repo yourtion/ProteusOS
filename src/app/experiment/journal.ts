@@ -12,7 +12,12 @@ import {
 import type { AdaptiveJournalRecord, AdaptiveReservationRecord } from "./journal-types.ts";
 import type { bindCompileDevelopment } from "./development.ts";
 import { adaptiveRunIsClosed } from "./run-slots.ts";
-import { summarizeReceiptResources, type AdaptiveRunReceipt } from "./run-receipt.ts";
+import {
+  summarizeReceiptResources,
+  summarizeRuntimeItems,
+  type AdaptiveRunReceipt,
+} from "./run-receipt.ts";
+import type { StoredExecutionEvidence } from "../../runtime/execution-evidence.ts";
 
 interface JournalDeps {
   /** 在调用者的读/写事务内推导，无网络或额外事务。 */
@@ -545,6 +550,36 @@ export class AdaptiveJournal {
       });
     const completeEvidence =
       receipts.length > 0 && receipts.length === units.filter((u) => u.repeat > 0).length;
+    const unsettled: AdaptiveRunReceipt["resources"]["items"] = [];
+    for (const record of records.filter((record) => record.runPlan && !record.runReceipt)) {
+      for (const slot of this.deps.storage.adaptiveRunSlots(record.id)) {
+        if (!slot.runId) continue;
+        const run = this.deps.storage.getRun(slot.runId);
+        if (!run || run.experimentId !== id || run.organismId !== this.deps.organismId)
+          throw new Error("未结 Run 计量归属漂移");
+        for (const call of this.deps.storage.listDecisionCalls(run.id))
+          unsettled.push({
+            ref: `decision:${call.id}`,
+            kind: "decision",
+            modelCalls: call.kind === "model" && call.sent ? 1 : 0,
+            usage: call.usage,
+          });
+        const events = this.deps.storage.runEventsByType(run.id, "attempt.evidence.recorded");
+        for (const attempt of this.deps.storage
+          .listProcesses(run.id)
+          .flatMap((process) => this.deps.storage.listAttempts(process.id))) {
+          const matches = events.filter((event) => event.attemptId === attempt.id);
+          if (matches.length > 1) throw new Error("未结 Attempt 计量证据重复");
+          const evidence = matches[0]?.payload["evidence"] as StoredExecutionEvidence | undefined;
+          unsettled.push({
+            ref: `attempt:${attempt.id}`,
+            kind: "execution",
+            modelCalls: null,
+            usage: evidence?.usage ?? null,
+          });
+        }
+      }
+    }
     const reservedUnits = units.filter(
       (unit) =>
         development.some((row) => row.unitId === unit.id) ||
@@ -561,12 +596,20 @@ export class AdaptiveJournal {
       reservations: records,
       observations,
       reserved,
-      ...(receipts.length
+      ...(receipts.length || job.judgments
         ? {
             evidence: {
               version: "adaptive-evidence-report-v1",
               receipts,
-              runtimeResources: summarizeReceiptResources(receipts),
+              runtimeResources: summarizeRuntimeItems([
+                ...receipts.flatMap((r) => r.resources.items),
+                ...unsettled,
+              ]),
+              settledResources: summarizeReceiptResources(receipts),
+              unsettledResources: {
+                ...summarizeRuntimeItems(unsettled),
+                verification: "ledger-subtotals-only",
+              },
               developmentResources: reportAdaptiveExperiment(frozen, development).resources,
               labelIndependence: "not_verified",
               formalEvaluation: "not_run",

@@ -49,7 +49,7 @@ value 还须对应实际执行器。全部 Attempt 的输入证据继续核验�
 - `costVerification` 为 partial：Attempt 尚无完整模型调用次数及硬上界。没有完整预算证明，不用于解除真实运行门。
 - 尚未核验独立的误派标签；本结果不直接生成 `AdaptiveObservation`，不会把 selectedAcceptance 直接转成 accepted/misrouted。
 
-Journal 整体仍是 `unverified-host-receipts`，`formalEvaluation` 保持 not_run。预派发槽位、Run 身份和顺序已可持久化核验，下一项为独立误派资料及完整原始收据结案；之后才推进受信 runner 与独立正式 Evaluation。
+独立核验入口仍不自行生成成绩。[原始收据闭环](./adaptive-receipts.md) 已在 Journal 上层组合冻结标签、槽位顺序与实际验收，完整覆盖时标记持久化原始记录；formalEvaluation 保持 not_run，真实预算及独立资料门仍保留。
 
 ## 验证
 

@@ -29,8 +29,7 @@ export interface ExperimentHarness {
 }
 
 /** 临时实例 + seed + 实验快照（R/L/oracle）+ fake LLM 与 oracle Provider */
-export function bootExperimentHarness(): ExperimentHarness {
-  const root = tempInstanceRoot();
+export function bootExperimentHarness(root = tempInstanceRoot()): ExperimentHarness {
   const fake = new FakeLlmDecisionProvider();
   const oracle = new OracleDecisionProvider();
   const inst = openInstance(root, {

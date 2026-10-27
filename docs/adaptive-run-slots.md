@@ -56,12 +56,12 @@ Journal 取消/恢复沿用现有职责边界：Host 负责停止实际执行器
 
 该证明尚不等于正式成绩：
 
-- 现有 `Journal.complete` 仍接收严格的宿主收据；只增加全槽位结案守卫，不将其自报 accepted、misrouted 或费用升级为事实。整体 `evidenceVerification` 仍为 unverified-host-receipts。
-- 尚未装配独立误派标签及从原始账本生成正式收据的提交入口。
+- 旧 Journal.complete 保留宿主收据语义；新标签绑定单元必须使用 completeFromRuns，从原始记录推导结果，不能导入宿主成绩。
+- [冻结路由标签及原始收据入口](./adaptive-receipts.md) 已装配 fixture；资料的真实独立性仍未证明。
 - 原始后端模式、执行器内模型调用次数和 token 硬上界仍不可独立核验，因此 `bind` 拒绝 real 清单。工具环境与完整成本边界沿用策略臂文档。
 - 不领用正式验证集、不创建 Evaluation、不晋升 Candidate；真实兼容和独立效果仍未运行。
 
-下一项是独立误派资料及原始收据结案，并补齐可信来源/预算合同，再推进受信 runner 和一次领用的正式 Evaluation。
+原始收据闭环与完整三臂运行已经接入；下一项补齐可信来源/预算合同，再推进真实 runner 和一次领用的正式 Evaluation。
 
 ## 验证
 

@@ -109,7 +109,10 @@ export type AdaptiveRunReceipt = ReturnType<typeof deriveRunReceipt>;
 
 /** 跨单元保留原始计量项的已知部分；unknown 不会抹掉其他调用的已知 tokens。 */
 export function summarizeReceiptResources(receipts: AdaptiveRunReceipt[]) {
-  const items = receipts.flatMap((r) => r.resources.items);
+  return summarizeRuntimeItems(receipts.flatMap((r) => r.resources.items));
+}
+
+export function summarizeRuntimeItems(items: AdaptiveRunReceipt["resources"]["items"]) {
   if (new Set(items.map((item) => item.ref)).size !== items.length)
     throw new Error("原始收据重复计量同一调用/执行");
   const sum = (key: "modelCalls" | "inputTokens" | "outputTokens") => {

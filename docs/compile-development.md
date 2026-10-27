@@ -35,4 +35,4 @@ migration 17 保存每个 CompileJob 唯一的内容寻址资料包。此后重�
 
 [集成测试](../tests/integration/compile-development.test.ts) 覆盖完整计量、遗漏/降额、任务/family/策略/组件错配、截止点、输入/裁判漂移、符号链接、删除资料后的重启复算、后端 real 声明不足以及零候选。
 
-开发包已可原子绑定到实验记录，见 [实验派发账本](./adaptive-journal.md)。后续预留、开始和报告均重核原始开发证据及当前权限；取消与恢复保留在来源已损坏或撤权时封存未知结果的能力。下一项是正式 Run 的任务、快照、策略、独立裁判及多次臂选择收据。当前 Journal 的整体 `evidenceVerification` 仍为 `unverified-host-receipts`，正式效果和采用仍未运行。
+开发包已可原子绑定到实验记录，见 [实验派发账本](./adaptive-journal.md)。后续预留、开始和报告均重核原始开发证据及当前权限；取消与恢复保留在来源已损坏或撤权时封存未知结果的能力。正式 Run 的任务、快照、策略、独立裁判及多次臂选择已通过 [原始收据闭环](./adaptive-receipts.md) 接入。完整覆盖时 Journal 可核验开发及运行记录；真实来源模式、预算上界、资料独立性和正式采用仍未完成。
