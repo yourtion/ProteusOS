@@ -32,6 +32,7 @@
 | [JSON 验收证据与 Run 核验](./verification-evidence.md) | 当次验收正文、冻结任务输入、实际执行绑定及旧记录缺项 |
 | [策略臂与选择器核验](./adaptive-arm-evidence.md) | 固定快照、原始决策、无标签选择及全部已知/未知开销 |
 | [Journal Run 槽位绑定](./adaptive-run-slots.md) | 预派发槽位、原子准入、单次启动、顺序与崩溃恢复 |
+| [原始收据与完整三臂运行](./adaptive-receipts.md) | 冻结路由标签、证据结案、串行运行与清理后复算 |
 | [本体决策实验](./experiments/organism-decision-v1.md) | 规则/LLM 对照协议、指标和运行命令 |
 
 ## 架构决策

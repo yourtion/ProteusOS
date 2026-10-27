@@ -12,8 +12,11 @@ import {
 import type { AdaptiveJournalRecord, AdaptiveReservationRecord } from "./journal-types.ts";
 import type { bindCompileDevelopment } from "./development.ts";
 import { adaptiveRunIsClosed } from "./run-slots.ts";
+import { summarizeReceiptResources, type AdaptiveRunReceipt } from "./run-receipt.ts";
 
 interface JournalDeps {
+  /** 在调用者的读/写事务内推导，无网络或额外事务。 */
+  readRunReceipt?(id: string, reservationId: string): AdaptiveRunReceipt;
   kernel: Kernel;
   storage: Storage;
   blobs: BlobStore;
@@ -307,67 +310,101 @@ export class AdaptiveJournal {
   complete(id: string, reservationId: string, input: unknown): AdaptiveReservationRecord {
     this.actor();
     const row = parseAdaptiveObservation(input);
+    return this.deps.storage.tx(() => this.commitObservation(id, reservationId, row));
+  }
+
+  /** 从持久化运行证据推导并原子结案，不接受 caller 的 accepted/misrouted/usage。 */
+  completeFromRuns(id: string, reservationId: string): AdaptiveReservationRecord {
+    this.actor();
+    const versions = this.recheckCompilation(id);
     return this.deps.storage.tx(() => {
-      const job = this.owned(id);
-      const { frozen, records, observations } = this.inputs(job);
-      const record = records.find((item) => item.id === reservationId);
-      if (!record) throw new Error("未知执行预留");
-      const content = canonicalJson(row);
-      if (record.observationDigest === digestOf(content)) return record;
-      if (job.state !== "running" || record.state !== "started")
-        throw new Error("单元已经封闭，不能替换结果或接纳迟到收据");
-      if (record.runPlan) {
-        const slots = this.deps.storage.adaptiveRunSlots(record.id);
-        if (
-          slots.length !== (record.unit.arm === "budget-matched" ? 3 : 1) ||
-          slots.some(
-            (slot) =>
-              !slot.runId ||
-              slot.state !== "started" ||
-              !adaptiveRunIsClosed(this.deps.storage, slot.runId),
-          )
-        )
-          throw new Error("绑定的 Run 槽位尚未全部结案，不能用宿主收据提前封闭或并行领取");
-      }
-      if (
-        row.unitId !== record.unit.id ||
-        row.startedAt !== record.startedAt ||
-        row.endedAt === null ||
-        row.endedAt > this.deps.clock.now()
-      )
-        throw new Error("收据与派发单元、时间不匹配");
-      const report = reportAdaptiveExperiment(frozen, [...observations, row]);
-      const blob = this.deps.blobs.write(content);
-      const completed: AdaptiveReservationRecord = {
-        ...record,
-        state: row.state === "unknown" ? "unknown" : "completed",
-        observationRef: blob.ref,
-        observationDigest: blob.digest,
-      };
-      this.deps.storage.updateAdaptiveReservation(completed);
-      const error =
-        row.state === "unknown"
-          ? "执行结果 unknown，禁止补跑"
-          : row.state === "cancelled"
-            ? "执行单元已取消"
-            : report.problems.length
-              ? report.problems.join("; ")
-              : this.deps.clock.now() >= job.deadlineAt
-                ? "全轮截止点已到达"
-                : this.deps.clock.now() >= record.deadlineAt!
-                  ? "执行单元截止点已到达"
-                  : null;
-      const state = error
-        ? row.state === "cancelled"
-          ? "cancelled"
-          : "failed"
-        : report.missing.length
-          ? "running"
-          : "completed";
-      this.deps.storage.updateAdaptiveExperiment({ ...job, state, error });
-      this.event(job, "observed", { reservationId, observationDigest: blob.digest, state });
-      return completed;
+      this.actor();
+      for (const version of versions)
+        this.deps.kernel.assertVersionAccess(version, this.deps.actorId);
+      if (!this.deps.readRunReceipt) throw new Error("未装配原始 Run 收据核验入口");
+      const evidence = this.deps.readRunReceipt(id, reservationId);
+      const blob = this.deps.blobs.write(canonicalJson(evidence));
+      return this.commitObservation(
+        id,
+        reservationId,
+        parseAdaptiveObservation(evidence.observation),
+        blob,
+      );
     });
+  }
+
+  private commitObservation(
+    id: string,
+    reservationId: string,
+    row: AdaptiveObservation,
+    receipt?: { ref: string; digest: string },
+  ): AdaptiveReservationRecord {
+    const job = this.owned(id);
+    const { frozen, records, observations } = this.inputs(job);
+    const record = records.find((item) => item.id === reservationId);
+    if (!record) throw new Error("未知执行预留");
+    const content = canonicalJson(row);
+    if (job.judgments && record.runPlan && !receipt)
+      throw new Error("标签绑定的单元必须从原始 Run 结案，不能导入宿主成绩");
+    if (record.observationDigest === digestOf(content)) {
+      if (receipt && canonicalJson(record.runReceipt ?? null) !== canonicalJson(receipt))
+        throw new Error("旧宿主收据不得事后升级原始证据");
+      return record;
+    }
+    if (job.state !== "running" || record.state !== "started")
+      throw new Error("单元已经封闭，不能替换结果或接纳迟到收据");
+    if (record.runPlan) {
+      const slots = this.deps.storage.adaptiveRunSlots(record.id);
+      if (
+        slots.length !== (record.unit.arm === "budget-matched" ? 3 : 1) ||
+        slots.some(
+          (slot) =>
+            !slot.runId ||
+            slot.state !== "started" ||
+            !adaptiveRunIsClosed(this.deps.storage, slot.runId),
+        )
+      )
+        throw new Error("绑定的 Run 槽位尚未全部结案，不能用宿主收据提前封闭或并行领取");
+    }
+    if (
+      row.unitId !== record.unit.id ||
+      row.startedAt !== record.startedAt ||
+      row.endedAt === null ||
+      row.endedAt > this.deps.clock.now()
+    )
+      throw new Error("收据与派发单元、时间不匹配");
+    const report = reportAdaptiveExperiment(frozen, [...observations, row]);
+    const blob = this.deps.blobs.write(content);
+    const completed: AdaptiveReservationRecord = {
+      ...record,
+      ...(receipt ? { runReceipt: receipt } : {}),
+      state: row.state === "unknown" ? "unknown" : "completed",
+      observationRef: blob.ref,
+      observationDigest: blob.digest,
+    };
+    this.deps.storage.updateAdaptiveReservation(completed);
+    const error =
+      row.state === "unknown"
+        ? "执行结果 unknown，禁止补跑"
+        : row.state === "cancelled"
+          ? "执行单元已取消"
+          : report.problems.length
+            ? report.problems.join("; ")
+            : this.deps.clock.now() >= job.deadlineAt
+              ? "全轮截止点已到达"
+              : this.deps.clock.now() >= record.deadlineAt!
+                ? "执行单元截止点已到达"
+                : null;
+    const state = error
+      ? row.state === "cancelled"
+        ? "cancelled"
+        : "failed"
+      : report.missing.length
+        ? "running"
+        : "completed";
+    this.deps.storage.updateAdaptiveExperiment({ ...job, state, error });
+    this.event(job, "observed", { reservationId, observationDigest: blob.digest, state });
+    return completed;
   }
 
   private expired(job: AdaptiveJournalRecord): boolean {
@@ -492,6 +529,22 @@ export class AdaptiveJournal {
   private snapshot(id: string) {
     const job = this.owned(id);
     const { frozen, development, records, observations, units } = this.inputs(job);
+    const receipts = records
+      .filter((record) => record.runReceipt)
+      .map((record) => {
+        if (!this.deps.readRunReceipt) throw new Error("未装配原始 Run 收据核验入口");
+        const raw = this.deps.blobs.read(record.runReceipt!.ref);
+        if (digestOf(raw) !== record.runReceipt!.digest) throw new Error("原始 Run 收据摘要漂移");
+        const actual = this.deps.readRunReceipt(id, record.id);
+        if (
+          canonicalJson(actual) !== raw ||
+          digestOf(canonicalJson(actual.observation)) !== record.observationDigest
+        )
+          throw new Error("已提交收据与原始运行证据不一致");
+        return actual;
+      });
+    const completeEvidence =
+      receipts.length > 0 && receipts.length === units.filter((u) => u.repeat > 0).length;
     const reservedUnits = units.filter(
       (unit) =>
         development.some((row) => row.unitId === unit.id) ||
@@ -508,12 +561,31 @@ export class AdaptiveJournal {
       reservations: records,
       observations,
       reserved,
+      ...(receipts.length
+        ? {
+            evidence: {
+              version: "adaptive-evidence-report-v1",
+              receipts,
+              runtimeResources: summarizeReceiptResources(receipts),
+              developmentResources: reportAdaptiveExperiment(frozen, development).resources,
+              labelIndependence: "not_verified",
+              formalEvaluation: "not_run",
+            },
+          }
+        : {}),
       report: {
         ...reportAdaptiveExperiment(frozen, observations),
         // 在原始账本/裁判绑定桥接完成前，宿主导入不能支持真实收益或采用。
         benefit: frozen.plan.mode === "fixture" ? "not_evaluated" : "inconclusive",
         realModel: frozen.plan.mode === "fixture" ? "not_run" : "unknown",
-        evidenceVerification: "unverified-host-receipts",
+        evidenceVerification:
+          completeEvidence && job.compilationEvidence
+            ? "persisted-development-and-runtime-records"
+            : completeEvidence
+              ? "persisted-runtime-records"
+              : receipts.length
+                ? "partial-persisted-runtime-records"
+                : "unverified-host-receipts",
         developmentVerification: job.compilationEvidence
           ? "persisted-development-records"
           : "unverified-host-receipts",

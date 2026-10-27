@@ -1,6 +1,8 @@
 import type { AdaptiveUnit } from "./adaptive.ts";
 
 export interface AdaptiveJournalRecord {
+  /** 派发前冻结的路由标签；不会进入 worker 或模型请求。 */
+  judgments?: { ref: string; digest: string };
   id: string;
   organismId: string;
   manifestDigest: string;
@@ -19,6 +21,8 @@ export interface AdaptiveJournalRecord {
 }
 
 export interface AdaptiveReservationRecord {
+  /** 原始运行证据生成的收据；缺项仍是宿主收据。 */
+  runReceipt?: { ref: string; digest: string };
   /** 缺项表示旧宿主收据；只能在 prepared 阶段固定，不允许事后升级。 */
   runPlan?: { ref: string; digest: string };
   id: string;

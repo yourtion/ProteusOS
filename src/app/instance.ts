@@ -212,6 +212,7 @@ export function openInstance(
     ids,
   });
   const adaptive = new AdaptiveJournal({
+    readRunReceipt: (id, reservationId) => adaptiveRuns.deriveReceipt(id, reservationId),
     kernel,
     storage,
     blobs,
