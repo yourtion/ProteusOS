@@ -1,0 +1,525 @@
+{
+  "version": "adaptive-stage-validation-v1",
+  "sourceCommit": "167b67aeba66cc42c393d7d5cd782371b96a76f7",
+  "sourceTreeDirty": false,
+  "recordedAt": "2026-10-27T17:23:49.544Z",
+  "scope": "scripted-fixture-with-real-local-workers",
+  "output": "/var/folders/t4/c013c4kx2mx55szjf79wy7v40000gn/T/proteus-adaptive-stage-cPQfPt",
+  "scenarios": [
+    {
+      "scenario": "improvement",
+      "experimentId": "01a17e63-4166-76ae-86f4-e8ac97d68399",
+      "instanceRoot": "/var/folders/t4/c013c4kx2mx55szjf79wy7v40000gn/T/proteus-adaptive-stage-cPQfPt/improvement/instance",
+      "reportDigest": "28b37e539706ec3d3fa91654092112887fdcef2f6cdb1a573de13457540c8795",
+      "manifestDigest": "6e2bcf487fb9b45bf22d1362b90d9b32a5598c8eff96d12844c4823f8ae76694",
+      "engineering": "passed",
+      "evidenceVerification": "persisted-development-and-runtime-records",
+      "realModel": "not_run",
+      "benefit": "not_evaluated",
+      "numericalQualityGate": true,
+      "arms": {
+        "single": {
+          "formal": {
+            "planned": 6,
+            "families": 2,
+            "successRate": 0,
+            "misrouteRate": 1,
+            "failureRate": 1,
+            "p95Ms": 126
+          },
+          "regression": {
+            "planned": 6,
+            "families": 2,
+            "successRate": 1,
+            "misrouteRate": 0,
+            "failureRate": 0,
+            "p95Ms": 124
+          }
+        },
+        "budget-matched": {
+          "formal": {
+            "planned": 6,
+            "families": 2,
+            "successRate": 0,
+            "misrouteRate": 1,
+            "failureRate": 1,
+            "p95Ms": 370
+          },
+          "regression": {
+            "planned": 6,
+            "families": 2,
+            "successRate": 1,
+            "misrouteRate": 0,
+            "failureRate": 0,
+            "p95Ms": 390
+          }
+        },
+        "compiled": {
+          "formal": {
+            "planned": 6,
+            "families": 2,
+            "successRate": 1,
+            "misrouteRate": 0,
+            "failureRate": 0,
+            "p95Ms": 126
+          },
+          "regression": {
+            "planned": 6,
+            "families": 2,
+            "successRate": 1,
+            "misrouteRate": 0,
+            "failureRate": 0,
+            "p95Ms": 124
+          }
+        }
+      },
+      "knownFormalDecisionCalls": 60,
+      "runtimeResources": {
+        "items": 120,
+        "modelCalls": {
+          "knownTotal": 60,
+          "unknownItems": 60
+        },
+        "inputTokens": {
+          "knownTotal": 1200,
+          "unknownItems": 60
+        },
+        "outputTokens": {
+          "knownTotal": 300,
+          "unknownItems": 60
+        },
+        "unknownCostItems": 120,
+        "digest": "15fae55851d9212a6a8f88a14b2e5a6b889054363af7f74513aa8bf24816f0fc"
+      },
+      "developmentResources": {
+        "modelCalls": {
+          "knownTotal": 7,
+          "unknownUnits": 3
+        },
+        "inputTokens": {
+          "knownTotal": 110,
+          "unknownUnits": 3
+        },
+        "outputTokens": {
+          "knownTotal": 26,
+          "unknownUnits": 3
+        },
+        "unknownCostUnits": 10,
+        "knownCosts": []
+      },
+      "unsettledResources": {
+        "items": 0,
+        "modelCalls": {
+          "knownTotal": null,
+          "unknownItems": 0
+        },
+        "inputTokens": {
+          "knownTotal": null,
+          "unknownItems": 0
+        },
+        "outputTokens": {
+          "knownTotal": null,
+          "unknownItems": 0
+        },
+        "unknownCostItems": 0,
+        "digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "verification": "ledger-subtotals-only"
+      },
+      "completedReceipts": 36,
+      "missingUnits": 0,
+      "criticalFailures": 0,
+      "failure": null,
+      "cleanReopenReplay": "passed",
+      "noAutomaticResend": "passed",
+      "activeUnchanged": true,
+      "formalValidationUsage": 0
+    },
+    {
+      "scenario": "no-improvement",
+      "experimentId": "01a17e63-6b31-7383-b20e-f3117f2ae4ad",
+      "instanceRoot": "/var/folders/t4/c013c4kx2mx55szjf79wy7v40000gn/T/proteus-adaptive-stage-cPQfPt/no-improvement/instance",
+      "reportDigest": "69ad47d5a81afda0dff2f60506aacc9ea480565e51fe190d667a42cba6371d32",
+      "manifestDigest": "4d27e97eea3c98b48f4e90a4558b217b40792837cdfc87e734ce000ccbadbf33",
+      "engineering": "passed",
+      "evidenceVerification": "persisted-development-and-runtime-records",
+      "realModel": "not_run",
+      "benefit": "not_evaluated",
+      "numericalQualityGate": false,
+      "arms": {
+        "single": {
+          "formal": {
+            "planned": 6,
+            "families": 2,
+            "successRate": 1,
+            "misrouteRate": 0,
+            "failureRate": 0,
+            "p95Ms": 124
+          },
+          "regression": {
+            "planned": 6,
+            "families": 2,
+            "successRate": 1,
+            "misrouteRate": 0,
+            "failureRate": 0,
+            "p95Ms": 124
+          }
+        },
+        "budget-matched": {
+          "formal": {
+            "planned": 6,
+            "families": 2,
+            "successRate": 1,
+            "misrouteRate": 0,
+            "failureRate": 0,
+            "p95Ms": 366
+          },
+          "regression": {
+            "planned": 6,
+            "families": 2,
+            "successRate": 1,
+            "misrouteRate": 0,
+            "failureRate": 0,
+            "p95Ms": 371
+          }
+        },
+        "compiled": {
+          "formal": {
+            "planned": 6,
+            "families": 2,
+            "successRate": 1,
+            "misrouteRate": 0,
+            "failureRate": 0,
+            "p95Ms": 124
+          },
+          "regression": {
+            "planned": 6,
+            "families": 2,
+            "successRate": 1,
+            "misrouteRate": 0,
+            "failureRate": 0,
+            "p95Ms": 126
+          }
+        }
+      },
+      "knownFormalDecisionCalls": 60,
+      "runtimeResources": {
+        "items": 120,
+        "modelCalls": {
+          "knownTotal": 60,
+          "unknownItems": 60
+        },
+        "inputTokens": {
+          "knownTotal": 1200,
+          "unknownItems": 60
+        },
+        "outputTokens": {
+          "knownTotal": 300,
+          "unknownItems": 60
+        },
+        "unknownCostItems": 120,
+        "digest": "70e30dbd6ae514a3a39fc97df91568518a3b54699218fd26b82e49840e4da8dd"
+      },
+      "developmentResources": {
+        "modelCalls": {
+          "knownTotal": 7,
+          "unknownUnits": 3
+        },
+        "inputTokens": {
+          "knownTotal": 110,
+          "unknownUnits": 3
+        },
+        "outputTokens": {
+          "knownTotal": 26,
+          "unknownUnits": 3
+        },
+        "unknownCostUnits": 10,
+        "knownCosts": []
+      },
+      "unsettledResources": {
+        "items": 0,
+        "modelCalls": {
+          "knownTotal": null,
+          "unknownItems": 0
+        },
+        "inputTokens": {
+          "knownTotal": null,
+          "unknownItems": 0
+        },
+        "outputTokens": {
+          "knownTotal": null,
+          "unknownItems": 0
+        },
+        "unknownCostItems": 0,
+        "digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "verification": "ledger-subtotals-only"
+      },
+      "completedReceipts": 36,
+      "missingUnits": 0,
+      "criticalFailures": 0,
+      "failure": null,
+      "cleanReopenReplay": "passed",
+      "noAutomaticResend": "passed",
+      "activeUnchanged": true,
+      "formalValidationUsage": 0
+    },
+    {
+      "scenario": "regression",
+      "experimentId": "01a17e63-9476-7107-83ab-5e8e0da4f21c",
+      "instanceRoot": "/var/folders/t4/c013c4kx2mx55szjf79wy7v40000gn/T/proteus-adaptive-stage-cPQfPt/regression/instance",
+      "reportDigest": "88d5b511fea41b776421ac1694502fcde13e8baee7ac3f50abcc9df31108eba2",
+      "manifestDigest": "613f7d3f50e99b9c263a6f949bf1358f5d5a3682eccfa8b87c8f7689d18e3b07",
+      "engineering": "passed",
+      "evidenceVerification": "persisted-development-and-runtime-records",
+      "realModel": "not_run",
+      "benefit": "not_evaluated",
+      "numericalQualityGate": false,
+      "arms": {
+        "single": {
+          "formal": {
+            "planned": 6,
+            "families": 2,
+            "successRate": 0,
+            "misrouteRate": 1,
+            "failureRate": 1,
+            "p95Ms": 124
+          },
+          "regression": {
+            "planned": 6,
+            "families": 2,
+            "successRate": 1,
+            "misrouteRate": 0,
+            "failureRate": 0,
+            "p95Ms": 126
+          }
+        },
+        "budget-matched": {
+          "formal": {
+            "planned": 6,
+            "families": 2,
+            "successRate": 0,
+            "misrouteRate": 1,
+            "failureRate": 1,
+            "p95Ms": 367
+          },
+          "regression": {
+            "planned": 6,
+            "families": 2,
+            "successRate": 1,
+            "misrouteRate": 0,
+            "failureRate": 0,
+            "p95Ms": 369
+          }
+        },
+        "compiled": {
+          "formal": {
+            "planned": 6,
+            "families": 2,
+            "successRate": 1,
+            "misrouteRate": 0,
+            "failureRate": 0,
+            "p95Ms": 124
+          },
+          "regression": {
+            "planned": 6,
+            "families": 2,
+            "successRate": 0,
+            "misrouteRate": 1,
+            "failureRate": 1,
+            "p95Ms": 124
+          }
+        }
+      },
+      "knownFormalDecisionCalls": 60,
+      "runtimeResources": {
+        "items": 120,
+        "modelCalls": {
+          "knownTotal": 60,
+          "unknownItems": 60
+        },
+        "inputTokens": {
+          "knownTotal": 1200,
+          "unknownItems": 60
+        },
+        "outputTokens": {
+          "knownTotal": 300,
+          "unknownItems": 60
+        },
+        "unknownCostItems": 120,
+        "digest": "ef8b33c2fe7b72aa7841cda1592409d78fd16b559586d7ec65fe67bc0d331ec4"
+      },
+      "developmentResources": {
+        "modelCalls": {
+          "knownTotal": 7,
+          "unknownUnits": 3
+        },
+        "inputTokens": {
+          "knownTotal": 110,
+          "unknownUnits": 3
+        },
+        "outputTokens": {
+          "knownTotal": 26,
+          "unknownUnits": 3
+        },
+        "unknownCostUnits": 10,
+        "knownCosts": []
+      },
+      "unsettledResources": {
+        "items": 0,
+        "modelCalls": {
+          "knownTotal": null,
+          "unknownItems": 0
+        },
+        "inputTokens": {
+          "knownTotal": null,
+          "unknownItems": 0
+        },
+        "outputTokens": {
+          "knownTotal": null,
+          "unknownItems": 0
+        },
+        "unknownCostItems": 0,
+        "digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "verification": "ledger-subtotals-only"
+      },
+      "completedReceipts": 36,
+      "missingUnits": 0,
+      "criticalFailures": 6,
+      "failure": null,
+      "cleanReopenReplay": "passed",
+      "noAutomaticResend": "passed",
+      "activeUnchanged": true,
+      "formalValidationUsage": 0
+    },
+    {
+      "scenario": "interrupted",
+      "experimentId": "01a17e63-bdd6-7433-abc0-892bf7904c74",
+      "instanceRoot": "/var/folders/t4/c013c4kx2mx55szjf79wy7v40000gn/T/proteus-adaptive-stage-cPQfPt/interrupted/instance",
+      "reportDigest": "9e8f4b2c0755c2705a53baa58067e9d3a08a68e357fa3f181646853209fdeea8",
+      "manifestDigest": "f245720b5e312ffe0821733769d86cdf6a6a523c4c96b153992ebd8faedafc3f",
+      "engineering": "incomplete",
+      "evidenceVerification": "partial-persisted-runtime-records",
+      "realModel": "not_run",
+      "benefit": "not_evaluated",
+      "numericalQualityGate": false,
+      "arms": {
+        "single": {
+          "formal": {
+            "planned": 6,
+            "families": 2,
+            "successRate": 0,
+            "misrouteRate": 0.3333333333333333,
+            "failureRate": 1,
+            "p95Ms": null
+          },
+          "regression": {
+            "planned": 6,
+            "families": 2,
+            "successRate": 0,
+            "misrouteRate": 0,
+            "failureRate": 1,
+            "p95Ms": null
+          }
+        },
+        "budget-matched": {
+          "formal": {
+            "planned": 6,
+            "families": 2,
+            "successRate": 0,
+            "misrouteRate": 0.16666666666666666,
+            "failureRate": 1,
+            "p95Ms": null
+          },
+          "regression": {
+            "planned": 6,
+            "families": 2,
+            "successRate": 0,
+            "misrouteRate": 0,
+            "failureRate": 1,
+            "p95Ms": null
+          }
+        },
+        "compiled": {
+          "formal": {
+            "planned": 6,
+            "families": 2,
+            "successRate": 0.16666666666666666,
+            "misrouteRate": 0,
+            "failureRate": 0.8333333333333334,
+            "p95Ms": null
+          },
+          "regression": {
+            "planned": 6,
+            "families": 2,
+            "successRate": 0,
+            "misrouteRate": 0,
+            "failureRate": 1,
+            "p95Ms": null
+          }
+        }
+      },
+      "knownFormalDecisionCalls": 7,
+      "runtimeResources": {
+        "items": 14,
+        "modelCalls": {
+          "knownTotal": 7,
+          "unknownItems": 7
+        },
+        "inputTokens": {
+          "knownTotal": 140,
+          "unknownItems": 7
+        },
+        "outputTokens": {
+          "knownTotal": 35,
+          "unknownItems": 7
+        },
+        "unknownCostItems": 14,
+        "digest": "6dddfb3a09f02f796f3abd65de41f1f3a53aec355e42127b367f6508b54b7eb8"
+      },
+      "developmentResources": {
+        "modelCalls": {
+          "knownTotal": 7,
+          "unknownUnits": 3
+        },
+        "inputTokens": {
+          "knownTotal": 110,
+          "unknownUnits": 3
+        },
+        "outputTokens": {
+          "knownTotal": 26,
+          "unknownUnits": 3
+        },
+        "unknownCostUnits": 10,
+        "knownCosts": []
+      },
+      "unsettledResources": {
+        "items": 2,
+        "modelCalls": {
+          "knownTotal": 1,
+          "unknownItems": 1
+        },
+        "inputTokens": {
+          "knownTotal": 20,
+          "unknownItems": 1
+        },
+        "outputTokens": {
+          "knownTotal": 5,
+          "unknownItems": 1
+        },
+        "unknownCostItems": 2,
+        "digest": "54841d783363d4a2d8e5ee15b1e4255ba7e8f3e37e24a15a5044daed3e30f61b",
+        "verification": "ledger-subtotals-only"
+      },
+      "completedReceipts": 4,
+      "missingUnits": 31,
+      "criticalFailures": 6,
+      "failure": "fixture host interrupted before eighth dispatch",
+      "cleanReopenReplay": "passed",
+      "noAutomaticResend": "passed",
+      "activeUnchanged": true,
+      "formalValidationUsage": 0
+    }
+  ],
+  "realModelCompatibility": "not_run",
+  "realBenefit": "not_evaluated",
+  "adoption": "not_run"
+}

@@ -33,6 +33,7 @@
 | [策略臂与选择器核验](./adaptive-arm-evidence.md) | 固定快照、原始决策、无标签选择及全部已知/未知开销 |
 | [Journal Run 槽位绑定](./adaptive-run-slots.md) | 预派发槽位、原子准入、单次启动、顺序与崩溃恢复 |
 | [原始收据与完整三臂运行](./adaptive-receipts.md) | 冻结路由标签、证据结案、串行运行与清理后复算 |
+| [完整阶段验证结果](./experiments/results/adaptive-stage-v1.md) | 改善、无改善、关键回归与中断场景的实测记录和复现命令 |
 | [本体决策实验](./experiments/organism-decision-v1.md) | 规则/LLM 对照协议、指标和运行命令 |
 
 ## 架构决策
