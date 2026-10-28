@@ -42,6 +42,28 @@ beforeEach(() => {
 });
 
 describe("LLM Adapter：保持 v1，消费 v2 的冻结正文", () => {
+  it("缓存读/建输入计入总量，非法服务用量保持未知", async () => {
+    const p = new LlmDecisionProvider({ apiKey: "NEVER_PERSIST_API_KEY" });
+    sdk.create.mockResolvedValueOnce({
+      content: [{ type: "text", text: '{"kind":"value","value":"local-process"}' }],
+      usage: {
+        input_tokens: 20,
+        cache_read_input_tokens: 30,
+        cache_creation_input_tokens: 40,
+        output_tokens: 5,
+      },
+    });
+    expect(await p.decide(llmDemosRequest())).toMatchObject({
+      evidence: { inputTokens: 90, outputTokens: 5 },
+    });
+    sdk.create.mockResolvedValueOnce({
+      content: [],
+      usage: { input_tokens: 20, cache_read_input_tokens: -1, output_tokens: NaN },
+    });
+    expect(await p.decide(llmDemosRequest())).toMatchObject({
+      evidence: { inputTokens: null, outputTokens: null },
+    });
+  });
   it("计数使用同一冻结消息且不生成；无效计数或服务失败不回退估算", async () => {
     const p = new LlmDecisionProvider({ apiKey: "NEVER_PERSIST_API_KEY" });
     const r = llmDemosRequest();

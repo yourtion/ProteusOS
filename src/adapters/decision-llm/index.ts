@@ -263,18 +263,19 @@ function readUsage(response: unknown, servedModel: string | null) {
     typeof response === "object" && response !== null
       ? (response as { usage?: unknown }).usage
       : undefined;
+  const record = usage && typeof usage === "object" ? (usage as Record<string, unknown>) : {};
+  const tokens = (v: unknown): number | null =>
+    typeof v === "number" && Number.isSafeInteger(v) && v >= 0 ? v : null;
+  // Anthropic 的 input_tokens 不包括缓存读/建输入；不能把命中缓存当成未消费输入。
+  const inputs = [
+    tokens(record.input_tokens),
+    tokens(record.cache_read_input_tokens ?? 0),
+    tokens(record.cache_creation_input_tokens ?? 0),
+  ];
+  const inputSum = inputs.reduce<number>((sum, v) => sum + (v ?? 0), 0);
   const inputTokens =
-    usage &&
-    typeof usage === "object" &&
-    typeof (usage as { input_tokens?: unknown }).input_tokens === "number"
-      ? (usage as { input_tokens: number }).input_tokens
-      : null;
-  const outputTokens =
-    usage &&
-    typeof usage === "object" &&
-    typeof (usage as { output_tokens?: unknown }).output_tokens === "number"
-      ? (usage as { output_tokens: number }).output_tokens
-      : null;
+    inputs.some((v) => v === null) || !Number.isSafeInteger(inputSum) ? null : inputSum;
+  const outputTokens = tokens(record.output_tokens);
   // 费用未知：不虚构金额，未知不按零计（实验规范 §4.2/§7.1）
   return { inputTokens, outputTokens, servedModel };
 }

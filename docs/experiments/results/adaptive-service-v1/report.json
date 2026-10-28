@@ -1,0 +1,30 @@
+{
+  "version": "adaptive-service-probe-v1",
+  "sourceCommit": "9c02244c2ef9b8f3d65c0f3d0dcf840de689ba4c",
+  "sourceTreeDirty": false,
+  "configurationSource": "explicit-claude-settings",
+  "serviceId": "https://open.bigmodel.cn/api/anthropic",
+  "requestedModel": "GLM-5.3-Flash",
+  "requestDigest": "151f073cb6388fdf8d6d1aaacd6fee2e7bb4e9b3bed8e2c7f200f93b40fc0f97",
+  "maximumGeneratedCalls": 1,
+  "inputThreshold": 2048,
+  "outputLimit": 256,
+  "retries": 0,
+  "formalEvaluation": "not_run",
+  "independentBenefit": "not_evaluated",
+  "realExperimentAdmission": "blocked",
+  "inputHardBound": "unverified",
+  "countedInputTokens": 265,
+  "status": "completed",
+  "resultKind": "value",
+  "actualUsage": {
+    "inputTokens": 265,
+    "outputTokens": 82,
+    "servedModel": "GLM-5.3-Flash"
+  },
+  "countMatchesUsage": true,
+  "choice": "local-process",
+  "responseDigest": "33d77b6c77638b31db2d4cc766229f9b915ae8b5d41a76dce8ca3c4e2b43b0db",
+  "sentGenerationCalls": 1,
+  "finishedAt": "2026-10-28T01:12:35.719Z"
+}

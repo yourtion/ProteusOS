@@ -1,0 +1,1 @@
+{"evidence":{"inputTokens":265,"outputTokens":82,"servedModel":"GLM-5.3-Flash"},"kind":"value","provenance":{"policyVersion":"compatibility-probe-v1","provider":"decision-llm"},"raw":"{\"kind\":\"value\",\"value\":\"local-process\"}","value":"local-process"}

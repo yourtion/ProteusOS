@@ -1,11 +1,8 @@
-import { readFileSync, mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { resolve, join } from "node:path";
-import {
-  LlmDecisionProvider,
-  llmConfigFromEnv,
-  type LlmAdapterConfig,
-} from "../../src/adapters/decision-llm/index.ts";
+import { LlmDecisionProvider } from "../../src/adapters/decision-llm/index.ts";
+import { experimentServiceConfig } from "../../src/app/experiment/service-config.ts";
 import { buildLlmChoiceBody } from "../../src/adapters/decision-llm/request.ts";
 import { FROZEN_LLM_POLICY, type DecisionRequest } from "../../src/decision/index.ts";
 import { canonicalJson, digestOf } from "../../src/storage/blobs.ts";
@@ -20,23 +17,7 @@ if (args[0] !== "--output" || (args.length === 4 && args[2] !== "--claude-settin
   throw new Error("Invalid probe arguments");
 const out = resolve(args[1]!);
 mkdirSync(out);
-let config: LlmAdapterConfig | null = llmConfigFromEnv();
-let configurationSource = "PROTEUS_LLM_*";
-if (args[3]) {
-  const settings = JSON.parse(readFileSync(resolve(args[3]), "utf8")) as {
-    env?: Record<string, string>;
-  };
-  const env = settings.env;
-  if (!env?.ANTHROPIC_AUTH_TOKEN || !env.ANTHROPIC_BASE_URL)
-    throw new Error("Selected settings have no Anthropic credential/endpoint");
-  config = {
-    apiKey: env.ANTHROPIC_AUTH_TOKEN,
-    baseUrl: env.ANTHROPIC_BASE_URL,
-    requestTimeoutMs: 15_000,
-  };
-  configurationSource = "explicit-claude-settings";
-}
-if (!config) throw new Error("PROTEUS_LLM_API_KEY required");
+const { config, source: configurationSource } = experimentServiceConfig(args[3]);
 const provider = new LlmDecisionProvider(config);
 const options = ["local-process", "capability/changed-file-summary"];
 const request: DecisionRequest = {
@@ -105,3 +86,4 @@ record.sentGenerationCalls = sent ? 1 : 0;
 record.finishedAt = new Date().toISOString();
 writeFileSync(join(out, "report.json"), `${JSON.stringify(record, null, 2)}\n`);
 process.stdout.write(`${JSON.stringify(record, null, 2)}\nEvidence saved to ${out}\n`);
+process.exitCode = record.status === "completed" ? 0 : 1;
