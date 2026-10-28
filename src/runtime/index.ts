@@ -1625,6 +1625,13 @@ export class Runtime {
       if (outcome.type === "result") {
         const result = outcome.result;
         const usage = evidenceUsage(result);
+        if (result.evidence?.serviceResponse) {
+          this.appendDecisionEvent(run.id, node, "decision.response_evidence", {
+            decisionId,
+            serviceResponse: result.evidence.serviceResponse,
+            servedModel: result.evidence.servedModel ?? null,
+          });
+        }
         if (result.kind === "abstain") {
           finish({
             state: "abstain",

@@ -42,6 +42,56 @@ beforeEach(() => {
 });
 
 describe("LLM Adapter：保持 v1，消费 v2 的冻结正文", () => {
+  it.each([
+    { stop: "end_turn", text: '{"kind":"value","value":"local-process"}', kind: "value" },
+    { stop: "max_tokens", text: "", kind: "invalid_output" },
+    { stop: "max_tokens", text: '{"kind":"value","value":', kind: "invalid_output" },
+    { stop: "end_turn", text: '{"kind":"abstain","reason":"需要任务信息"}', kind: "abstain" },
+    { stop: "refusal", text: "", kind: "abstain" },
+  ])("保留结束元数据：$kind / $stop / $text", async ({ stop, text, kind }) => {
+    const p = new LlmDecisionProvider({ apiKey: "NEVER_PERSIST_API_KEY" });
+    sdk.create.mockResolvedValueOnce({
+      model: "served-fixed-model",
+      stop_reason: stop,
+      content: [
+        { type: "thinking", thinking: "PRIVATE_HIDDEN_REASONING" },
+        { type: "text", text },
+      ],
+      usage: { input_tokens: 20, output_tokens: 256 },
+    });
+    const result = await p.decide(llmDemosRequest());
+    expect(result).toMatchObject({
+      kind,
+      evidence: {
+        servedModel: "served-fixed-model",
+        serviceResponse: {
+          version: "llm-service-response-v1",
+          stopReason: stop,
+          contentBlockTypes: ["thinking", "text"],
+          textBytes: Buffer.byteLength(text, "utf8"),
+        },
+      },
+    });
+    expect(JSON.stringify(result)).not.toMatch(/PRIVATE_HIDDEN|NEVER_PERSIST/);
+  });
+
+  it("缺失或非法服务字段保持未知，不根据空正文或 token 上限推断结束原因", async () => {
+    const p = new LlmDecisionProvider({ apiKey: "unused" });
+    sdk.create.mockResolvedValueOnce({ usage: { input_tokens: 20, output_tokens: 256 } });
+    expect(await p.decide(llmDemosRequest())).toMatchObject({
+      kind: "invalid_output",
+      evidence: {
+        serviceResponse: { stopReason: null, contentBlockTypes: null, textBytes: 0 },
+      },
+    });
+    sdk.create.mockResolvedValueOnce({ stop_reason: 1, content: [{ type: 5 }, null] });
+    expect(await p.decide(llmDemosRequest())).toMatchObject({
+      evidence: {
+        serviceResponse: { stopReason: null, contentBlockTypes: [null, null], textBytes: 0 },
+      },
+    });
+  });
+
   it("缓存读/建输入计入总量，非法服务用量保持未知", async () => {
     const p = new LlmDecisionProvider({ apiKey: "NEVER_PERSIST_API_KEY" });
     sdk.create.mockResolvedValueOnce({

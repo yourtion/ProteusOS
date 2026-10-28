@@ -43,7 +43,7 @@ P0-01/02/03/04、M6a-01/02 和 M6a-03-02 的 fixture 工程闭环均已完成工
 | M6a-03-02b3b2 | [策略臂、选择与 Journal 收据](./adaptive-arm-evidence.md) | M6a-03-02b3b1 | 已完成 | fixture 工程闭环验收通过：冻结标签、原始结案、完整三臂及清理复算；真实预算和资料门另行推进 |
 | V1 | [完整阶段验证](./experiments/results/adaptive-stage-v1.md) | M6a-03-02 工程闭环 | 已完成 | 从干净提交独立运行改善、无改善、回归退化和中断场景，保存报告并复算 |
 | O1 | [单独注册真实观测轮](./experiments/results/adaptive-observed-v3.md) | 用户明确选择新协议，M6a-03-03b1 | 已结案 | 830/830 Run、790 次生成尝试（含准备 793）；三臂完整测量及解包复算完成。示例 formal 1.67% / regression 6.67%，质量门未过；历史未知 1 次，计量 incomplete，收益 inconclusive |
-| O2-00 | [服务结束证据](./experiments/observed-iteration-plan.md) | O1 结案 | 待执行 | 保留 stop_reason、block 类型、文本字节数及模型身份，缺失不可推断；零新增生成的合同/回放验证后提交 |
+| O2-00 | [服务结束证据](./experiments/observed-iteration-plan.md) | O1 结案 | 已完成 | 保留 stop_reason、block 类型、文本字节数及模型身份，缺失不可推断；零新增生成的合同/回放验证后提交 |
 | O2-01 | [版本化修正当前任务呈现](./experiments/observed-iteration-plan.md) | O2-00 | 待执行 | 新策略格式末条 user 包含当前视图；旧格式、prepared 摘要与恢复语义兼容，单独提交验证 |
 | O2-02 | [开发诊断矩阵](./experiments/observed-iteration-plan.md) | O2-01，新登记限额和开发任务 | 待前置 | 旧/新布局 ×256/512 输出 ×0/2 示例，10 开发任务、2 repeats，最多 160 次；失败、分层及结束证据完整保留 |
 | O2-03 | [冻结开发确认](./experiments/observed-iteration-plan.md) | O2-02 通过，固定候选/对照 | 待前置 | 新 20 任务 ×2 配置 ×3 repeats，最多 120 次；仅无示例改善时不冒充示例收益 |
@@ -175,6 +175,7 @@ env -u PROTEUS_E2E -u PROTEUS_SANDBOX PATH="/opt/homebrew/bin:$PATH" \
 | 2026-10-28 | O1 v2 时间截止与 v3 延续 | v2 在 60 分钟截止，完成 517 Run / 477 次生成尝试，历史 1 次用量未知。冻结参数和选择不变，v3 复制原始实例、保留全部旧收据及预留，只执行剩余 313 槽位；增加一段 60 分钟，明确为观测性时间修订 | v2 报告复算不变；9 个定向用例、静态及全量 426 passed / 5 skipped。原协议与既有停止记录不变；全部调度完成仍须如实保留计量 incomplete，收益 inconclusive |
 | 2026-10-28 | O1 完整真实三臂结案 | 从干净 d0132df 延续剩余 313 Run，累计 830/830、790 次生成尝试，含准备 793；formal 单次 57.50%、三次 60.00%、固定示例 1.67%，regression 63.33% / 63.33% / 6.67% | [完整报告与原始证据包](./experiments/results/adaptive-observed-v3.md)已归档；解包复算逐字段一致，2,425 blob 摘要通过，父轮 3,462 事件未改写。历史未知 1 次不重发，计量 incomplete、收益 inconclusive、active 未改；下一步 O2 开发验证，暂不扩展 M6b/M6c |
 | 2026-10-28 | O1 离线失败评估与 O2 细化 | 核对全部测量响应：349 格式失败均达 256 输出，317 空/32 非空；49 弃权都自述当前任务信息缺失。formal 三次对照救回 15、损失 12，净增 3；按 family 保存诊断 | [O2 分阶段计划](./experiments/observed-iteration-plan.md)明确先结束证据和新布局，再 160 次诊断矩阵及 120 次确认；没有新增真实调用、改写 O1 或执行 O2。新链开发成本与测量累计登记 |
+| 2026-10-28 | O2-00 服务结束证据 | Adapter 保留 stop_reason、block 类型和文本 UTF-8 字节数，不保存隐藏推理；Runtime 同事务追加 response_evidence，编译原始证据兼容可选新字段 | 26 个定向用例通过，静态检查与全量 435 passed / 5 skipped；清理后的 O1 报告复算逐字段不变。没有新增真实调用；继续 O2-01 新布局 |
 
 P0-01 的最小复现与回归命令：
 

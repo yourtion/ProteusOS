@@ -43,6 +43,14 @@ const resultFields = {
       costCurrency: z.string().nullable().optional(),
       priceRef: z.string().nullable().optional(),
       servedModel: z.string().nullable().optional(),
+      serviceResponse: z
+        .strictObject({
+          version: z.literal("llm-service-response-v1"),
+          stopReason: z.string().max(128).nullable(),
+          contentBlockTypes: z.array(z.string().max(128).nullable()).max(128).nullable(),
+          textBytes: z.number().int().nonnegative(),
+        })
+        .optional(),
     })
     .optional(),
 };

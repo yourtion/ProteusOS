@@ -5,6 +5,7 @@ import type {
   DecisionRequest,
   DecisionResult,
   DecisionView,
+  DecisionServiceResponseEvidence,
 } from "../../decision/index.ts";
 import { parseChoiceResponse, parseLlmPolicy, isLlmDemosPolicy } from "../../decision/index.ts";
 import {
@@ -128,7 +129,10 @@ export class LlmDecisionProvider implements DecisionProvider {
 
     const text: string = extractText(response);
     const stopReason = readStopReason(response);
-    const usageHint = readUsage(response, readServedModel(response));
+    const usageHint = {
+      ...readUsage(response, readServedModel(response)),
+      serviceResponse: readServiceResponse(response, text),
+    };
     // 服务 refusal 单独保存原始类型，映射为带明确来源的 abstain；
     // 网络错误/429/超时不在此路径（它们经异常抛出，绝不映射为 abstain）
     if (stopReason === "refusal" || (text.length === 0 && hasRefusalBlock(response))) {
@@ -249,7 +253,29 @@ function hasRefusalBlock(response: unknown): boolean {
 function readStopReason(response: unknown): string | null {
   if (typeof response !== "object" || response === null) return null;
   const reason = (response as { stop_reason?: unknown }).stop_reason;
-  return typeof reason === "string" ? reason : null;
+  return typeof reason === "string" && reason.length <= 128 ? reason : null;
+}
+
+function readServiceResponse(response: unknown, text: string): DecisionServiceResponseEvidence {
+  const content =
+    typeof response === "object" && response !== null
+      ? (response as { content?: unknown }).content
+      : undefined;
+  return {
+    version: "llm-service-response-v1",
+    stopReason: readStopReason(response),
+    contentBlockTypes:
+      Array.isArray(content) && content.length <= 128
+        ? content.map((block: unknown) => {
+            const type =
+              typeof block === "object" && block !== null
+                ? (block as { type?: unknown }).type
+                : null;
+            return typeof type === "string" && type.length <= 128 ? type : null;
+          })
+        : null,
+    textBytes: Buffer.byteLength(text, "utf8"),
+  };
 }
 
 function readServedModel(response: unknown): string | null {

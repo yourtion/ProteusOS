@@ -126,6 +126,50 @@ function reopen(root: string, baseUrl = "https://fixture.invalid") {
 }
 
 describe("可编译策略：持久化、重启和旧快照兼容", () => {
+  it.each(["value", "abstain", "invalid_output"] as const)(
+    "%s 的服务结束证据与结案原子持久化，重开不推断或重发",
+    async (kind) => {
+      const h = fixture();
+      const raw =
+        kind === "value"
+          ? '{"kind":"value","value":"local-process"}'
+          : kind === "abstain"
+            ? "null"
+            : "{bad";
+      const serviceResponse = {
+        version: "llm-service-response-v1" as const,
+        stopReason: kind === "invalid_output" ? "max_tokens" : "end_turn",
+        contentBlockTypes: ["text"],
+        textBytes: Buffer.byteLength(raw, "utf8"),
+      };
+      h.provider.decide = async (request) => {
+        const common = {
+          raw,
+          provenance: { provider: "decision-llm", policyVersion: request.policy.versionId },
+          evidence: { servedModel: "served-model", serviceResponse },
+        };
+        if (kind === "value") return { ...common, kind, value: "local-process" };
+        if (kind === "abstain") return { ...common, kind, reason: "no task", raw: "null" };
+        return { ...common, kind, detail: "incomplete", raw: "{bad" };
+      };
+      const run = await h.submit();
+      const call = h.app.storage.listDecisionCalls(run.runId)[0]!;
+      const events = h.app.storage.runEventsByType(run.runId, "decision.response_evidence");
+      expect(events).toHaveLength(1);
+      expect(events[0]!.payload).toMatchObject({
+        decisionId: call.id,
+        serviceResponse,
+        servedModel: "served-model",
+      });
+      const fresh = reopen(h.root);
+      expect(fresh.app.storage.runEventsByType(run.runId, "decision.response_evidence")).toEqual(
+        events,
+      );
+      expect(fresh.app.runtime.getRunSummary(run.runId).state).toBe(run.state);
+      expect(fresh.provider.bodies).toHaveLength(0);
+    },
+  );
+
   it("真实策略版本/依赖/快照闭环；保存完整模型正文且不改变 active", async () => {
     const h = fixture();
     const active = h.app.kernel.getOrganism("organism-default")!.activeGenomeId;

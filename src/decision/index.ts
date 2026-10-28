@@ -49,6 +49,13 @@ export interface DecisionRequest {
  * 调用级证据提示：由受信 Adapter 从服务响应提取（模型自报的不作门槛）。
  * 缺失字段最终落 null，不按零费用/零 token 计入比较。
  */
+export interface DecisionServiceResponseEvidence {
+  version: "llm-service-response-v1";
+  stopReason: string | null;
+  contentBlockTypes: Array<string | null> | null;
+  textBytes: number;
+}
+
 export interface DecisionEvidenceHint {
   inputTokens?: number | null;
   outputTokens?: number | null;
@@ -57,6 +64,8 @@ export interface DecisionEvidenceHint {
   priceRef?: string | null;
   /** 服务报告的模型版本（缺省 null） */
   servedModel?: string | null;
+  /** 受信服务元数据；不包含隐藏推理正文，旧结果缺失时不推断。 */
+  serviceResponse?: DecisionServiceResponseEvidence;
 }
 
 export type DecisionResult =
