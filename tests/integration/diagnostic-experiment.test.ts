@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync, writeFileSync, rmSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
@@ -18,7 +18,8 @@ import type { DecisionRequest, DecisionResult } from "../../src/decision/index.t
 class Model extends LlmDecisionProvider {
   count = 100;
   calls = 0;
-  fault: "none" | "drift" | "lost" | "budget" | "all-empty" | "service5xx" = "none";
+  decisionDeadlines: number[] = [];
+  fault: "none" | "drift" | "lost" | "budget" | "all-empty" | "service5xx" | "budget1024" = "none";
   constructor() {
     super({ apiKey: "NO_NETWORK", baseUrl: "https://open.bigmodel.cn/api/anthropic" });
   }
@@ -27,6 +28,7 @@ class Model extends LlmDecisionProvider {
   }
   override async decide(r: DecisionRequest): Promise<DecisionResult> {
     this.calls++;
+    this.decisionDeadlines.push(r.deadlineMs);
     if (this.fault === "service5xx")
       throw Object.assign(new Error("503 overloaded"), { status: 503 });
     if (this.fault === "lost") throw new Error("lost service response");
@@ -34,7 +36,10 @@ class Model extends LlmDecisionProvider {
       (c) => c.task.goal === r.view!.goal,
     )!;
     const output = resolveLlmDemosRequest(r).max_tokens;
-    const truncated = this.fault === "all-empty" || (this.fault === "budget" && output === 256);
+    const truncated =
+      this.fault === "all-empty" ||
+      (this.fault === "budget" && output === 256) ||
+      (this.fault === "budget1024" && output === 1024);
     const raw = truncated ? "" : canonicalJson({ kind: "value", value: c.expectedChoice });
     const common = {
       raw,
@@ -57,6 +62,7 @@ class Model extends LlmDecisionProvider {
   }
 }
 let parent: string;
+let fixedParent: string;
 const opened = new Set<AppInstance>();
 const roots: string[] = [];
 beforeAll(() => {
@@ -73,10 +79,26 @@ afterEach(() => {
   opened.clear();
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
-afterAll(() => rmSync(parent, { recursive: true, force: true }));
+beforeAll(() => {
+  fixedParent = mkdtempSync(join(tmpdir(), "proteus-cap-parent-"));
+  execFileSync("tar", [
+    "-xzf",
+    "docs/experiments/results/routing-fixed-output-v1/evidence.tar.gz",
+    "-C",
+    fixedParent,
+  ]);
+});
+afterAll(() => {
+  rmSync(parent, { recursive: true, force: true });
+  rmSync(fixedParent, { recursive: true, force: true });
+});
 function fixture(
   mode: Model["fault"] = "none",
-  opts?: { parent?: string; stage?: "confirmation" | "fixed-output"; small?: boolean },
+  opts?: {
+    parent?: string;
+    stage?: "confirmation" | "fixed-output" | "output-cap";
+    small?: boolean;
+  },
 ) {
   const out = mkdtempSync(join(tmpdir(), "proteus-diagnostic-test-"));
   roots.push(out);
@@ -117,6 +139,78 @@ async function stoppedServiceParent() {
 }
 
 describe("O2 原始诊断：冻结额度、同正文计数和受约束执行", () => {
+  it("1024/2048 独立协议复用冻结任务、放宽共同时间窗，旧协议限额保持", async () => {
+    const h = fixture("none", { parent: fixedParent, stage: "output-cap" });
+    const p = h.frozen.plan;
+    expect(p).toMatchObject({ protocol: "routing-output-cap-v1", runMs: 90000, decisionMs: 85000 });
+    expect(p.conditions.map((c) => [c.layout, c.demos, c.output])).toEqual([
+      [1, 0, 1024],
+      [1, 0, 2048],
+    ]);
+    const parentPlan = JSON.parse(readFileSync(join(fixedParent, "manifest.json"), "utf8"));
+    expect(p.cases).toEqual([parentPlan.cases[0], parentPlan.cases[2]]);
+    expect(() => freezeDiagnosticPlan({ ...p, protocol: "routing-fixed-output-v1" })).toThrow(
+      /bounds drift/,
+    );
+    expect(() => freezeDiagnosticPlan({ ...p, runMs: 30000 })).toThrow(/bounds drift/);
+    expect(() =>
+      freezeDiagnosticPlan({
+        ...p,
+        conditions: [p.conditions[0], { ...p.conditions[1], layout: 2 }],
+      }),
+    ).toThrow(/conditions drift/);
+    const r = await finish(h);
+    expect(r).toMatchObject({
+      completedRuns: 4,
+      engineering: "passed",
+      confirmationPassed: false,
+      selected: null,
+      totalModelCallsIncludingHistory: 1059,
+      totalUnknownUsageCallsIncludingHistory: 2,
+      developmentRecommendation: "v1-t1024-d0",
+      qualityGates: [
+        { conditionId: "v1-t1024-d0", passed: true },
+        { conditionId: "v1-t2048-d0", passed: true },
+      ],
+    });
+    const run = h.app.storage.getRun(r.receipts[0]!.runId)!;
+    expect(run.budget.maxWallClockSeconds).toBe(90);
+    expect(h.transport.decisionDeadlines.every((ms) => ms > 28000 && ms <= 85000)).toBe(true);
+    close(h.app);
+    const fresh = openDiagnosticRunner(join(h.out, "instance"), h.id, h.transport, 85000);
+    opened.add(fresh.app);
+    expect(fresh.experiment.report()).toEqual(r);
+    expect(await fresh.experiment.runNext()).toBeNull();
+    expect(h.transport.calls).toBe(4);
+  });
+  it("1024 截断计为失败，仅 2048 达门时才推荐 2048；不伪称旧确认通过", async () => {
+    const h = fixture("budget1024", { parent: fixedParent, stage: "output-cap" });
+    const r = await finish(h);
+    expect(r).toMatchObject({
+      confirmationPassed: false,
+      developmentRecommendation: "v1-t2048-d0",
+      qualityGates: [
+        { conditionId: "v1-t1024-d0", passed: false },
+        { conditionId: "v1-t2048-d0", passed: true },
+      ],
+    });
+    expect(r.metrics[0]!.stopReasons).toEqual({ max_tokens: 2 });
+  });
+  it("1024/2048 的未知仍占分母与额度，不重发且不能推荐配置", async () => {
+    const h = fixture("service5xx", { parent: fixedParent, stage: "output-cap" });
+    await h.experiment.runNext();
+    h.transport.fault = "none";
+    const r = await finish(h);
+    expect(r).toMatchObject({
+      dispatchComplete: true,
+      engineering: "incomplete",
+      unknownUsageCalls: 1,
+      totalUnknownUsageCallsIncludingHistory: 3,
+      developmentRecommendation: null,
+    });
+    expect(r.qualityGates?.every((g) => !g.passed)).toBe(true);
+    expect(h.transport.calls).toBe(4);
+  });
   it("独立固定额度轮可保留两次 5xx 后完成其他槽位，旧矩阵保持失败且不重发", async () => {
     const parent = await stoppedServiceParent();
     const h = fixture("service5xx", { parent: parent.out, stage: "fixed-output" });

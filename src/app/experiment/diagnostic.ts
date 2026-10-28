@@ -28,13 +28,13 @@ const blobSchema = z.strictObject({ ref: id, digest: sha });
 const conditionSchema = z.strictObject({
   id,
   layout: z.union([z.literal(1), z.literal(2)]),
-  output: z.union([z.literal(256), z.literal(512)]),
+  output: z.union([z.literal(256), z.literal(512), z.literal(1024), z.literal(2048)]),
   demos: z.union([z.literal(0), z.literal(2)]),
   snapshotId: id,
   snapshotDigest: sha,
 });
 const planSchema = z.strictObject({
-  protocol: z.enum(["routing-diagnostic-v1", "routing-fixed-output-v1"]),
+  protocol: z.enum(["routing-diagnostic-v1", "routing-fixed-output-v1", "routing-output-cap-v1"]),
   maxService5xx: z.literal(2).optional(),
   stage: z.enum(["matrix", "confirmation"]),
   mode: z.enum(["real", "fixture"]),
@@ -57,8 +57,8 @@ const planSchema = z.strictObject({
     instanceModelReservations: z.number().int().nonnegative(),
   }),
   inputPerCall: z.literal(2048),
-  runMs: z.literal(30000),
-  decisionMs: z.literal(28000),
+  runMs: z.union([z.literal(30000), z.literal(90000)]),
+  decisionMs: z.union([z.literal(28000), z.literal(85000)]),
   visibility: z.literal("developer-visible"),
   semanticIndependence: z.literal("unverified"),
 });
@@ -131,10 +131,19 @@ export function diagnosticSlots(plan: DiagnosticPlan) {
 export function freezeDiagnosticPlan(input: unknown) {
   const plan = planSchema.parse(input);
   check(
-    (plan.protocol === "routing-fixed-output-v1") === (plan.maxService5xx === 2),
+    (plan.protocol !== "routing-diagnostic-v1") === (plan.maxService5xx === 2),
     "explicit fixed-output failure policy required",
   );
-  if (plan.protocol === "routing-fixed-output-v1") {
+  const capComparison = plan.protocol === "routing-output-cap-v1";
+  check(
+    capComparison
+      ? plan.runMs === 90000 && plan.decisionMs === 85000
+      : plan.runMs === 30000 &&
+          plan.decisionMs === 28000 &&
+          plan.conditions.every((c) => c.output === 256 || c.output === 512),
+    "protocol output/time bounds drift",
+  );
+  if (plan.protocol !== "routing-diagnostic-v1") {
     check(
       plan.stage === "confirmation" &&
         same(
@@ -144,10 +153,12 @@ export function freezeDiagnosticPlan(input: unknown) {
             output: c.output,
             demos: c.demos,
           })),
-          [
-            { id: "v1-t512-d0", layout: 1, output: 512, demos: 0 },
-            { id: "v1-t256-d0", layout: 1, output: 256, demos: 0 },
-          ],
+          (capComparison ? [1024, 2048] : [512, 256]).map((output) => ({
+            id: `v1-t${output}-d0`,
+            layout: 1,
+            output,
+            demos: 0,
+          })),
         ),
       "fixed output comparison conditions drift",
     );
@@ -254,7 +265,7 @@ export function guardDiagnosticRun(
   check(
     run.purpose === "normal" &&
       run.budget.maxAttempts === 1 &&
-      run.budget.maxWallClockSeconds === 30 &&
+      run.budget.maxWallClockSeconds * 1000 === s.frozen.plan.runMs &&
       run.deadlineAt <= s.deadlineAt,
     "Run bounds drift",
   );
@@ -494,7 +505,7 @@ export class DiagnosticExperiment {
         familyId: c.familyId,
         inputs: c.task.inputs.map((f) => join(root, f.name)),
         requires: ["changed-file-summary"],
-        budget: { maxAttempts: 1, maxWallClockSeconds: 30 },
+        budget: { maxAttempts: 1, maxWallClockSeconds: s.frozen.plan.runMs / 1000 },
         acceptance: {
           verifier: "experiment-acceptance",
           outputSchema: join(root, "private-schema.json"),
@@ -538,7 +549,7 @@ export class DiagnosticExperiment {
             [500, 502, 503, 504].includes(e.payload.httpStatus as number),
         );
         const tolerated =
-          current.frozen.plan.protocol === "routing-fixed-output-v1" &&
+          current.frozen.plan.protocol !== "routing-diagnostic-v1" &&
           receipt.decision === "transport_error" &&
           errors.some((e) => e.runId === receipt.runId) &&
           errors.length <= 2 &&
@@ -825,6 +836,7 @@ export class DiagnosticExperiment {
     const selected = p.stage === "matrix" ? (eligible[0] ?? null) : null;
     const confirmationPassed =
       p.stage === "confirmation" &&
+      p.protocol !== "routing-output-cap-v1" &&
       complete &&
       metrics[0]!.jsonValidRate >= 0.95 - 1e-12 &&
       metrics[0]!.successRate >= 0.9 - 1e-12 &&
@@ -886,6 +898,33 @@ export class DiagnosticExperiment {
               metrics[0]!.successRate >= 0.9 - 1e-12 &&
               metrics[0]!.criticalFailures === 0 &&
               metrics[0]!.successRate - metrics[1]!.successRate >= 0.05 - 1e-12,
+          }
+        : {}),
+      ...(p.protocol === "routing-output-cap-v1"
+        ? {
+            selectionSource: "prespecified-output-cap-calibration",
+            service5xxPolicy: "up-to-two-failed-slots-counted-unknown-no-retry",
+            historical512: "reference-only-different-time-window",
+            qualityGates: metrics.map((c) => ({
+              conditionId: c.id,
+              passed:
+                !!complete &&
+                c.jsonValidRate >= 0.95 - 1e-12 &&
+                c.successRate >= 0.9 - 1e-12 &&
+                c.misrouteRate <= 0.05 + 1e-12 &&
+                c.criticalFailures === 0,
+            })),
+            developmentRecommendation: complete
+              ? ([...metrics]
+                  .sort((a, b) => a.output - b.output)
+                  .find(
+                    (c) =>
+                      c.jsonValidRate >= 0.95 - 1e-12 &&
+                      c.successRate >= 0.9 - 1e-12 &&
+                      c.misrouteRate <= 0.05 + 1e-12 &&
+                      c.criticalFailures === 0,
+                  )?.id ?? null)
+              : null,
           }
         : {}),
       receipts,

@@ -20,7 +20,12 @@ import { auditRunVerification } from "./run-verification.ts";
 import { DiagnosticExperiment, type DiagnosticCondition } from "./diagnostic.ts";
 import { diagnosticDataset } from "./diagnostic-data.ts";
 
-export function openDiagnosticRunner(root: string, id: string, transport: ObservedTransport) {
+export function openDiagnosticRunner(
+  root: string,
+  id: string,
+  transport: ObservedTransport,
+  decisionTimeoutMs: 28000 | 85000 = 28000,
+) {
   let experiment: DiagnosticExperiment;
   const provider: DecisionProvider = {
     name: "decision-llm",
@@ -32,7 +37,7 @@ export function openDiagnosticRunner(root: string, id: string, transport: Observ
   };
   const app = openInstance(root, {
     decisions: new Map([[provider.name, provider]]),
-    decisionCallTimeoutMs: 28000,
+    decisionCallTimeoutMs: decisionTimeoutMs,
     capabilitySandbox: new ModelFreeNodeSandbox(),
     executors: new Map([
       [
@@ -58,7 +63,7 @@ export function prepareDiagnosticRunner(
   transport: ObservedTransport,
   opts: {
     parent: string;
-    stage: "matrix" | "confirmation" | "fixed-output";
+    stage: "matrix" | "confirmation" | "fixed-output" | "output-cap";
     mode: "real" | "fixture";
     sourceCommit: string;
     small?: boolean;
@@ -71,6 +76,7 @@ export function prepareDiagnosticRunner(
   check(digestOf(parentRaw) === parentSummary.reportDigest, "parent report digest mismatch");
   const prior = JSON.parse(parentRaw) as {
     protocol: string;
+    manifestDigest?: string;
     stage?: string;
     mode: string;
     dispatchComplete: boolean;
@@ -98,6 +104,7 @@ export function prepareDiagnosticRunner(
     serviceId: string;
     adapter: string;
     model: string;
+    cases: ReturnType<typeof diagnosticDataset>;
   };
   check(
     (opts.stage === "fixed-output"
@@ -118,6 +125,14 @@ export function prepareDiagnosticRunner(
         !prior.dispatchComplete,
       "fixed comparison requires sealed incomplete matrix",
     );
+  else if (opts.stage === "output-cap")
+    check(
+      prior.protocol === "routing-fixed-output-v1" &&
+        prior.stage === "confirmation" &&
+        prior.dispatchComplete &&
+        prior.engineering === "passed",
+      "output cap calibration requires complete metered fixed-output parent",
+    );
   else
     check(
       prior.protocol === "routing-diagnostic-v1" &&
@@ -131,14 +146,22 @@ export function prepareDiagnosticRunner(
   mkdirSync(root);
   cpSync(join(opts.parent, "instance", "metadata.sqlite"), join(root, "metadata.sqlite"));
   cpSync(join(opts.parent, "instance", "blobs"), join(root, "blobs"), { recursive: true });
-  const h = openDiagnosticRunner(root, id, transport);
+  const capComparison = opts.stage === "output-cap";
+  if (capComparison)
+    check(
+      digestOf(canonicalJson(parentManifest)) === prior.manifestDigest,
+      "parent manifest drift",
+    );
+  const h = openDiagnosticRunner(root, id, transport, capComparison ? 85000 : 28000);
   try {
     const { app, experiment } = h;
-    if (opts.stage === "fixed-output") {
+    if (opts.stage === "fixed-output" || capComparison) {
       check(
         same(new DiagnosticExperiment(app, meta.id).report(), prior),
         "sealed parent report replay drift",
       );
+    }
+    if (opts.stage === "fixed-output") {
       const last = prior.receipts?.at(-1);
       const call = last && app.storage.listDecisionCalls(last.runId)[0];
       check(
@@ -152,7 +175,7 @@ export function prepareDiagnosticRunner(
       );
     }
     const parentSnapshot =
-      opts.stage === "fixed-output"
+      opts.stage === "fixed-output" || capComparison
         ? prior.metrics!.find((c) => c.id === "v1-t512-d0")!.snapshotId
         : (prior.selection?.snapshotId ?? prior.selected!.snapshotId);
     const base = app.kernel.resolveSnapshot(parentSnapshot);
@@ -195,7 +218,7 @@ export function prepareDiagnosticRunner(
       );
     }
     const conditions: DiagnosticCondition[] = [];
-    for (const output of [256, 512] as const) {
+    for (const output of capComparison ? ([1024, 2048] as const) : ([256, 512] as const)) {
       const original = app.storage.getArtifactVersion(old.fixed.basePolicy.versionId)!;
       const content = {
         ...old.fixed.basePolicy.content,
@@ -212,8 +235,8 @@ export function prepareDiagnosticRunner(
         scope: "organism:organism-default",
         createdBy: "principal-local",
       });
-      for (const layout of [1, 2] as const)
-        for (const demos of [0, 2] as const) {
+      for (const layout of capComparison ? ([1] as const) : ([1, 2] as const))
+        for (const demos of capComparison ? ([0] as const) : ([0, 2] as const)) {
           const policy = createLlmDemosPolicy({
             basePolicy: { versionId: baseVersion.id, contentDigest: raw.digest, content },
             decisionView: old.fixed.decisionView,
@@ -284,7 +307,7 @@ export function prepareDiagnosticRunner(
         versionId: old.fixed.decisionView.versionId,
         contentDigest: old.fixed.decisionView.contentDigest,
       },
-      deadlineMs: 28000,
+      deadlineMs: capComparison ? 85000 : 28000,
       remainingAttempts: 1,
     };
     const prov = transport.callProvenance!(request);
@@ -294,11 +317,18 @@ export function prepareDiagnosticRunner(
         old.fixed.basePolicy.content.model === parentManifest.model,
       "parent service/model changed",
     );
-    const stage = opts.stage === "fixed-output" ? "confirmation" : opts.stage;
-    const data = diagnosticDataset(stage);
+    const stage =
+      opts.stage === "fixed-output" || opts.stage === "output-cap" ? "confirmation" : opts.stage;
+    // Reuse the parent's frozen tasks and judges; do not regenerate a post-observation cohort.
+    const data = capComparison ? parentManifest.cases : diagnosticDataset(stage);
+    if (capComparison) check(Array.isArray(data) && data.length >= 2, "parent cases missing");
     const frozen = experiment.register({
-      protocol: opts.stage === "fixed-output" ? "routing-fixed-output-v1" : "routing-diagnostic-v1",
-      ...(opts.stage === "fixed-output" ? { maxService5xx: 2 } : {}),
+      protocol: capComparison
+        ? "routing-output-cap-v1"
+        : opts.stage === "fixed-output"
+          ? "routing-fixed-output-v1"
+          : "routing-diagnostic-v1",
+      ...(opts.stage === "fixed-output" || capComparison ? { maxService5xx: 2 } : {}),
       stage,
       mode: opts.mode,
       sourceCommit: opts.sourceCommit,
@@ -325,8 +355,8 @@ export function prepareDiagnosticRunner(
         }),
       },
       inputPerCall: 2048,
-      runMs: 30000,
-      decisionMs: 28000,
+      runMs: capComparison ? 90000 : 30000,
+      decisionMs: capComparison ? 85000 : 28000,
       visibility: "developer-visible",
       semanticIndependence: "unverified",
     });
