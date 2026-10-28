@@ -1,0 +1,22 @@
+{
+  "archive": "evidence.tar.gz",
+  "bytes": 2972665,
+  "sha256": "9b5730c6dc26c81e99d087f5d4fa524158c46ecd69b05a371205ad9a44fa7df3",
+  "contains": [
+    "run.json",
+    "manifest.json",
+    "report.json",
+    "summary.json",
+    "diagnostic-examples.json",
+    "independent-audit.json",
+    "audit.py",
+    "instance/metadata.sqlite",
+    "instance/blobs"
+  ],
+  "extractedReportReplay": "passed-deep-equal",
+  "extractedIndependentAudit": "passed-deep-equal",
+  "parentObservedEventsUnchanged": 3462,
+  "sourceCommit": "d0132df269fed9aeb5fffb6bdde3988800fabb42",
+  "credentialsIncluded": false,
+  "workspaceOrTaskMaterialPathsRequired": false
+}

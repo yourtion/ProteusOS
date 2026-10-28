@@ -31,3 +31,8 @@ env PATH="/opt/homebrew/bin:$PATH" /opt/homebrew/bin/node \
 ```
 
 入口只允许已封闭、选择已冻结的 v2 父轮；拒绝改变测量参数、重置开发或复用在途 Run。原始未知和全部开销跨段累计。九个定向测试覆盖完整延续、父报告不变、参数变更拒绝、历史未知保留、不重发及离线复算；全量 426 passed / 5 skipped。
+
+
+## 实际结案
+
+从干净 `d0132df` 执行后，本段 313 槽位全部完成，累计 830/830 Run、790 次生成尝试，含准备 793 次。`dispatchComplete=true`，父轮未知 1 次保留，因此 `engineering=incomplete`；质量门未过，收益 `inconclusive`。清理重开与证据包解压复算均一致，父观测事件逐条不变。[三臂结果、失败证据与 O2 计划](./results/adaptive-observed-v3.md)已归档，本次不再追加调用。

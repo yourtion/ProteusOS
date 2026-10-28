@@ -1,0 +1,10 @@
+{
+  "id": "obs:8a50bba9-008e-4cc1-afe2-92d2a29512a7",
+  "mode": "real",
+  "sourceCommit": "d0132df269fed9aeb5fffb6bdde3988800fabb42",
+  "sourceTreeDirty": false,
+  "registeredAt": "2026-10-28T04:22:48.843Z",
+  "inputHardBound": "unverified",
+  "semanticIndependence": "unverified",
+  "independentBenefit": "inconclusive"
+}

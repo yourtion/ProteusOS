@@ -1,0 +1,585 @@
+{
+  "scope": "post-hoc-offline-diagnosis-no-new-model-calls",
+  "reportDigest": "5e743b9d6573b55eb58fac5cd4296feb14be7d2dc033096cb8b2e60ef7aadaac",
+  "measurementRuns": 750,
+  "receivedResponses": 749,
+  "unknownUsageCalls": 1,
+  "invalidOutput": {
+    "total": 349,
+    "at256TokenCap": 349,
+    "empty": 317,
+    "nonemptyInvalidJson": 32
+  },
+  "responsesAt256ByKind": {
+    "invalid_output": 349,
+    "value": 3,
+    "abstain": 1
+  },
+  "modelAbstainCount": 49,
+  "abstainReasonReview": "All 49 reasons describe missing current task information; this is model self-report, not proof the request omitted the task.",
+  "formalPairedSingleVersusMatched": {
+    "bothSucceeded": 57,
+    "singleOnly": 12,
+    "matchedOnly": 15,
+    "bothFailed": 36
+  },
+  "formalFamilies": [
+    {
+      "familyId": "template-formal-0",
+      "goal": "For release notes, report text totals for words, lines, bytes and headings.（资料批次 41）",
+      "perArmPlanned": 12,
+      "accepted": {
+        "single": 5,
+        "budget-matched": 7,
+        "compiled": 0
+      }
+    },
+    {
+      "familyId": "template-formal-1",
+      "goal": "发布审计需要将变更清单的每条文件路径归类，正文不用统计。（资料批次 45）",
+      "perArmPlanned": 12,
+      "accepted": {
+        "single": 12,
+        "budget-matched": 11,
+        "compiled": 0
+      }
+    },
+    {
+      "familyId": "template-formal-2",
+      "goal": "请数所附正文有多少行与词，并附字节及标题概况；忽略文件变更列表。（资料批次 49）",
+      "perArmPlanned": 12,
+      "accepted": {
+        "single": 12,
+        "budget-matched": 10,
+        "compiled": 0
+      }
+    },
+    {
+      "familyId": "template-formal-3",
+      "goal": "What source, test, documentation, configuration or other files were touched?（资料批次 53）",
+      "perArmPlanned": 12,
+      "accepted": {
+        "single": 9,
+        "budget-matched": 10,
+        "compiled": 0
+      }
+    },
+    {
+      "familyId": "template-formal-4",
+      "goal": "The document discusses changed files; measure the document text itself.（资料批次 57）",
+      "perArmPlanned": 12,
+      "accepted": {
+        "single": 0,
+        "budget-matched": 0,
+        "compiled": 0
+      }
+    },
+    {
+      "familyId": "template-formal-5",
+      "goal": "Count and classify changed-file paths; include the category of each entry.（资料批次 61）",
+      "perArmPlanned": 12,
+      "accepted": {
+        "single": 3,
+        "budget-matched": 2,
+        "compiled": 0
+      }
+    },
+    {
+      "familyId": "template-formal-6",
+      "goal": "请检查多语言笔记的字节、文本行、空白分词和 Markdown 标题统计。（资料批次 65）",
+      "perArmPlanned": 12,
+      "accepted": {
+        "single": 12,
+        "budget-matched": 12,
+        "compiled": 1
+      }
+    },
+    {
+      "familyId": "template-formal-7",
+      "goal": "Disregard the narrative attachment and categorize the paths in the manifest.（资料批次 69）",
+      "perArmPlanned": 12,
+      "accepted": {
+        "single": 3,
+        "budget-matched": 2,
+        "compiled": 0
+      }
+    },
+    {
+      "familyId": "template-formal-8",
+      "goal": "给出附带文本文件的逐文件统计和总计，不处理变更路径分类。（资料批次 73）",
+      "perArmPlanned": 12,
+      "accepted": {
+        "single": 4,
+        "budget-matched": 7,
+        "compiled": 0
+      }
+    },
+    {
+      "familyId": "template-formal-9",
+      "goal": "请为提交的路径清单生成文件类别摘要，而不是测量文档篇幅。（资料批次 77）",
+      "perArmPlanned": 12,
+      "accepted": {
+        "single": 9,
+        "budget-matched": 11,
+        "compiled": 1
+      }
+    }
+  ],
+  "nonemptyInvalidExamples": [
+    {
+      "runId": "01a18075-ad79-779d-b822-8ff30ea022ea",
+      "callId": "01a18075-ad8b-7292-8f1e-b1049fa48616",
+      "outputTokens": 256,
+      "empty": false,
+      "detail": "响应不是合法 JSON",
+      "raw": "{\"kind\":\""
+    },
+    {
+      "runId": "01a18075-f334-7332-ab6d-5bfb693e25d3",
+      "callId": "01a18075-f346-7627-9595-e33e93fe3757",
+      "outputTokens": 256,
+      "empty": false,
+      "detail": "响应不是合法 JSON",
+      "raw": "{\"kind\":\"value\",\""
+    },
+    {
+      "runId": "01a18076-9cdd-7042-9963-eec60dffec3f",
+      "callId": "01a18076-9cf0-73db-a571-cb676f85601e",
+      "outputTokens": 256,
+      "empty": false,
+      "detail": "响应不是合法 JSON",
+      "raw": "{\"kind\":\"abstain\",\"reason\":\"本次请求未提供任何任务信息（缺少 decision-view 中的目标、输入清单与公开特征），无法判断任务属于文本统计还是变更文件"
+    },
+    {
+      "runId": "01a18077-a4d4-74f7-ac5c-6642c39f1cf7",
+      "callId": "01a18077-a4e1-73b5-b835-9211b9ac6278",
+      "outputTokens": 256,
+      "empty": false,
+      "detail": "响应不是合法 JSON",
+      "raw": "{\"kind\":\"value\",\"value"
+    },
+    {
+      "runId": "01a1807b-418d-705a-ae3d-ec55aa12cf4b",
+      "callId": "01a1807b-419c-73ae-aef7-a308d38506a4",
+      "outputTokens": 256,
+      "empty": false,
+      "detail": "响应不是合法 JSON",
+      "raw": "{\"kind\":\"value\",\""
+    },
+    {
+      "runId": "01a1807b-5c58-7093-ad0f-d7eb42ba97e1",
+      "callId": "01a1807b-5c6b-7688-a8c8-eb4faecfb654",
+      "outputTokens": 256,
+      "empty": false,
+      "detail": "响应不是合法 JSON",
+      "raw": "{\"kind\":\"value\",\"value"
+    },
+    {
+      "runId": "01a1807e-3f8e-7712-b76e-c5b36fdd81dd",
+      "callId": "01a1807e-3f9e-7396-9c82-bf9fab0ba249",
+      "outputTokens": 256,
+      "empty": false,
+      "detail": "响应不是合法 JSON",
+      "raw": "{\"kind\":\"value\",\"value"
+    },
+    {
+      "runId": "01a1807f-640b-777a-8d6f-2457628f4059",
+      "callId": "01a1807f-641d-733e-9d15-62ad721a3b04",
+      "outputTokens": 256,
+      "empty": false,
+      "detail": "响应不是合法 JSON",
+      "raw": "{\"kind\":\"value\",\"value\":\"capability"
+    },
+    {
+      "runId": "01a18080-84e6-7205-ab24-66a67f479c76",
+      "callId": "01a18080-84f8-70c5-ada1-24963eceff83",
+      "outputTokens": 256,
+      "empty": false,
+      "detail": "响应不是合法 JSON",
+      "raw": "{\"kind\":\"abstain\",\"reason\":\"本次请求未附带任何任务信息（缺少 goal、inputs、features、options 等"
+    },
+    {
+      "runId": "01a18083-7a89-7368-8bc3-5d097ec61ae4",
+      "callId": "01a18083-7a9c-766e-9350-b700b9c93f91",
+      "outputTokens": 256,
+      "empty": false,
+      "detail": "响应不是合法 JSON",
+      "raw": "{\"kind\":\"value\",\""
+    },
+    {
+      "runId": "01a18086-4714-75e1-8872-c121765e73ed",
+      "callId": "01a18086-472a-7556-9468-a2eeab1c6d29",
+      "outputTokens": 256,
+      "empty": false,
+      "detail": "响应不是合法 JSON",
+      "raw": "{\"kind\":\"value\",\""
+    },
+    {
+      "runId": "01a18088-0666-74fc-871a-d40b961f6845",
+      "callId": "01a18088-067d-7540-894b-ccdd812ee50c",
+      "outputTokens": 256,
+      "empty": false,
+      "detail": "响应不是合法 JSON",
+      "raw": "{\"kind\":\"value"
+    },
+    {
+      "runId": "01a1808b-5e7f-72e8-b266-93f821a4d8c2",
+      "callId": "01a1808b-5e99-72a9-8323-d6bb11203628",
+      "outputTokens": 256,
+      "empty": false,
+      "detail": "响应不是合法 JSON",
+      "raw": "{\"kind\":\"value"
+    },
+    {
+      "runId": "01a18096-7499-71b6-856f-b3abadc94467",
+      "callId": "01a18096-74b9-74ed-87fb-e91d7eb6a2d7",
+      "outputTokens": 256,
+      "empty": false,
+      "detail": "响应不是合法 JSON",
+      "raw": "{\"kind\":\"abstain\",\"reason\":\"本次请求未附带任何任务信息（缺少 goal、inputs、features、options 等 decision-view 内容），无法判断任务目标，也没有依据从候选"
+    },
+    {
+      "runId": "01a18096-eaff-7604-8ce6-bbf33da290a0",
+      "callId": "01a18096-eb1f-7264-a274-d0d0502e50a6",
+      "outputTokens": 256,
+      "empty": false,
+      "detail": "响应不是合法 JSON",
+      "raw": "{\"kind\":\"abstain\",\"reason\":\"未提供新的任务决策信息（缺少"
+    },
+    {
+      "runId": "01a18098-b3dd-7674-be55-127366d442d9",
+      "callId": "01a18098-b3fc-719e-93c7-123c20c1530f",
+      "outputTokens": 256,
+      "empty": false,
+      "detail": "响应不是合法 JSON",
+      "raw": "{\"kind\":\"abstain\",\"reason\":\"未提供新的任务信息（缺少任务目标"
+    },
+    {
+      "runId": "01a18099-112b-7033-aad6-16f0d5e081c0",
+      "callId": "01a18099-114d-757e-855f-2fccc39befe1",
+      "outputTokens": 256,
+      "empty": false,
+      "detail": "响应不是合法 JSON",
+      "raw": "{\"kind\":\"value"
+    },
+    {
+      "runId": "01a1809e-0dbe-7453-bc9f-14ebfbc64203",
+      "callId": "01a1809e-0de0-7234-a35c-0547dd658a24",
+      "outputTokens": 256,
+      "empty": false,
+      "detail": "响应不是合法 JSON",
+      "raw": "{\"kind\":\"abstain\",\"reason\":\"本次请求未附带任何任务信息（缺少 goal、features 与 inputs 等 decision-view 内容），无法判断任务意图属于文本统计还是变更文件分类，因此无法可靠地在 local-process 与"
+    },
+    {
+      "runId": "01a180a5-f5a3-7395-8eb0-5b5cbeb7294b",
+      "callId": "01a180a5-f5cc-7133-a284-dcac223c179e",
+      "outputTokens": 256,
+      "empty": false,
+      "detail": "响应不是合法 JSON",
+      "raw": "{\"kind\":\"abstain\",\"reason\":\"本轮未提供任何任务信息（缺少目标、输入清单"
+    },
+    {
+      "runId": "01a180c0-b852-757f-a58c-01f7cccab8c4",
+      "callId": "01a180c0-b884-7529-9cb2-88840aef7efc",
+      "outputTokens": 256,
+      "empty": false,
+      "detail": "响应不是合法 JSON",
+      "raw": "{\"kind\":\"value"
+    },
+    {
+      "runId": "01a180c3-be9b-744f-ad46-6d988e1881f3",
+      "callId": "01a180c3-bed2-7181-a0fc-c43fff4a739c",
+      "outputTokens": 256,
+      "empty": false,
+      "detail": "响应不是合法 JSON",
+      "raw": "{\"kind\":\"value\",\"value\":\""
+    },
+    {
+      "runId": "01a180c6-5d17-757b-b222-bd03cdca64b5",
+      "callId": "01a180c6-5d4c-74ce-9726-b8ae432138ce",
+      "outputTokens": 256,
+      "empty": false,
+      "detail": "响应不是合法 JSON",
+      "raw": "{\"kind"
+    },
+    {
+      "runId": "01a180c9-00a5-71fa-867d-9d6209311cb6",
+      "callId": "01a180c9-00e0-73ad-878a-e0145dc2a206",
+      "outputTokens": 256,
+      "empty": false,
+      "detail": "响应不是合法 JSON",
+      "raw": "{\"kind\":\""
+    },
+    {
+      "runId": "01a180cd-0a54-73a2-8c88-1e7a0f8cc3cb",
+      "callId": "01a180cd-0a8d-712d-828e-7624e765170f",
+      "outputTokens": 256,
+      "empty": false,
+      "detail": "响应不是合法 JSON",
+      "raw": "{\"kind\":\""
+    },
+    {
+      "runId": "01a180ce-3f61-761e-8e6e-b137bb6b9fd4",
+      "callId": "01a180ce-3f9b-7001-9080-84f91bdff972",
+      "outputTokens": 256,
+      "empty": false,
+      "detail": "响应不是合法 JSON",
+      "raw": "{\"kind\":\"value\",\"value\":\"capability/"
+    },
+    {
+      "runId": "01a180d0-5efd-7604-ac98-f25cbd11de15",
+      "callId": "01a180d0-5f3a-7531-96f0-0140a6b9afdd",
+      "outputTokens": 256,
+      "empty": false,
+      "detail": "响应不是合法 JSON",
+      "raw": "{\"kind\":\""
+    },
+    {
+      "runId": "01a180d3-1dc2-73dd-ab92-c38a8714bc3e",
+      "callId": "01a180d3-1e01-7601-9436-9cb73b0665b0",
+      "outputTokens": 256,
+      "empty": false,
+      "detail": "响应不是合法 JSON",
+      "raw": "{\"kind\":\"value\",\"value\":\"capability/changed-file-summary"
+    },
+    {
+      "runId": "01a180d4-32a4-76b3-ac10-3dce3d23d593",
+      "callId": "01a180d4-32e5-7791-b92c-162f7b6c4d3c",
+      "outputTokens": 256,
+      "empty": false,
+      "detail": "响应不是合法 JSON",
+      "raw": "{\""
+    },
+    {
+      "runId": "01a180d4-7c9d-70f7-b93a-61dc26f0d552",
+      "callId": "01a180d4-7cdb-7688-9277-9df05b90c965",
+      "outputTokens": 256,
+      "empty": false,
+      "detail": "响应不是合法 JSON",
+      "raw": "{\"kind"
+    },
+    {
+      "runId": "01a180d9-197b-7638-b076-6b5f79ef1fc1",
+      "callId": "01a180d9-19c2-7304-90b2-8dca903233ba",
+      "outputTokens": 256,
+      "empty": false,
+      "detail": "响应不是合法 JSON",
+      "raw": "{\"kind\":\"abstain\",\"reason\":\"本轮未提供任何任务信息（decision-view 缺失），无法判断任务目标与输入特征，也就无法在候选能力 local-process 与 capability/changed-file-summary 之间做出可靠选择。请提供包含 goal、inputs、features 与 options 的任务信息后重新发起"
+    },
+    {
+      "runId": "01a180db-7032-7600-b766-d70529981d46",
+      "callId": "01a180db-7078-7247-9186-0afa8ed38e41",
+      "outputTokens": 256,
+      "empty": false,
+      "detail": "响应不是合法 JSON",
+      "raw": "{\"kind\":\"value"
+    },
+    {
+      "runId": "01a180dd-e722-760e-bb8c-63b495ae0411",
+      "callId": "01a180dd-e769-74e2-adc1-c02111eb7078",
+      "outputTokens": 256,
+      "empty": false,
+      "detail": "响应不是合法 JSON",
+      "raw": "{\"kind\":\"value"
+    }
+  ],
+  "modelAbstainReasons": [
+    {
+      "runId": "01a18078-511d-7659-90d8-fefe9e1f2057",
+      "reason": "本次请求未提供任何任务信息（如 goal、inputs、features、options 等 decision-view 内容），无法判断任务目标与所需能力，因此不能可靠地在候选能力中作出选择。"
+    },
+    {
+      "runId": "01a1807b-c5a8-7618-a080-9206a9cbb2f5",
+      "reason": "本次消息未提供新的任务信息（缺少 decision-view，包括任务目标、输入清单与特征），无法基于有效依据在候选能力之间进行可靠路由，故弃权。"
+    },
+    {
+      "runId": "01a1807e-f8ce-76ec-a516-4d3aaf7af2f9",
+      "reason": "本次请求未提供任何任务信息（缺少 decision-view 中的任务目标、输入清单与特征字段），无法判断任务意图是变更文件归类还是文本统计，因此不能可靠地在这两个候选能力之间作出选择。"
+    },
+    {
+      "runId": "01a18080-1bd2-734c-8984-ad09cf96a744",
+      "reason": "本次请求未提供任何任务信息（缺少 goal、inputs、features、options 等 decision-view 内容），无法判断任务目标是变更清单分类还是文本统计，也无法验证候选能力是否匹配，因此无法可靠作答。"
+    },
+    {
+      "runId": "01a18080-d782-7457-a95d-c67f78d7be52",
+      "reason": "本次请求未提供任务信息（缺少 goal、features、inputs 等决策视图内容），无法判断任务目标属于变更分类还是文本统计，因此无法可靠选择候选能力。"
+    },
+    {
+      "runId": "01a18082-23ca-7193-a791-3a4a4a7c64c1",
+      "reason": "本次未提供任何任务信息（缺少目标、输入清单、特征与候选选项），无法判断应路由到 local-process 还是 capability/changed-file-summary，故弃权。"
+    },
+    {
+      "runId": "01a18082-4ea0-700a-9a80-e7d3222b5318",
+      "reason": "本轮未提供任何任务信息（features、goal、inputs、options 均缺失），无法判断应路由到 local-process 还是 capability/changed-file-summary，需要补充任务描述后才能可靠决策。"
+    },
+    {
+      "runId": "01a18083-2a72-72bf-bd17-55abccbd5974",
+      "reason": "本次请求未附任何任务信息（缺少目标、输入清单与特征等 decision-view 数据），无法判断应路由到 local-process 还是 capability/changed-file-summary，故弃权。"
+    },
+    {
+      "runId": "01a18086-a1ff-71c9-91cd-06d81920ecfa",
+      "reason": "本次请求未附带任何任务信息（缺少 goal、inputs、features 或 options 的 decision-view），无法在候选能力 local-process 与 capability/changed-file-summary 之间作出可靠判断，故弃权。"
+    },
+    {
+      "runId": "01a18088-bccf-73cf-ad62-0a0dd06538d4",
+      "reason": "本轮未附带任何任务信息（decision-view），缺少任务目标、输入清单与公开特征，无法在候选能力之间进行可靠路由，因此弃权。"
+    },
+    {
+      "runId": "01a18089-c673-74b9-857a-537c7f582322",
+      "reason": "本轮未提供任何任务信息（decision-view 缺失），无法判断任务目标、输入特征或意图标志，因此不能可靠地在 local-process 与 capability/changed-file-summary 之间做出路由决策。"
+    },
+    {
+      "runId": "01a1808a-46ed-761b-af9f-dd5d7c80dd29",
+      "reason": "本次请求未提供任务信息（decision-view 缺失），没有任务目标、输入清单或特征可供判断，无法在候选能力之间做出可靠路由决策。"
+    },
+    {
+      "runId": "01a1808a-7680-758b-b1b7-a0b0d407cc6b",
+      "reason": "本轮请求未附带任何任务信息（缺少 goal、features、inputs 与候选选项等决策视图内容），无法判断任务意图，也无法在 local-process 与 capability/changed-file-summary 之间做出可靠选择，故弃权。"
+    },
+    {
+      "runId": "01a1808b-826b-735b-9f44-558fbbd4de29",
+      "reason": "本轮未提供任何任务信息（缺少 goal、features、inputs 等决策所需字段），无法判断任务目标对应文本统计能力还是变更文件分类能力，因此无法可靠选择候选能力。"
+    },
+    {
+      "runId": "01a1808d-c120-7335-9187-eb4462a76b1b",
+      "reason": "本次请求未提供任何任务信息（缺少 decision-view 中的目标、输入清单与特征），无法判断应路由到 local-process 还是 capability/changed-file-summary，因此弃权。"
+    },
+    {
+      "runId": "01a1808f-e321-7012-bbb0-d84398390d08",
+      "reason": "本轮未提供任何任务目标、输入清单或公开特征（decision-view），缺少可依据的决策信息，无法在 local-process 与 capability/changed-file-summary 之间可靠选择。"
+    },
+    {
+      "runId": "01a18091-b690-7487-a326-226690db2fd1",
+      "reason": "本次请求未提供任何任务信息（decision-view，含任务目标、输入清单与公开特征），无法判断任务意图是统计文本指标还是分类变更文件，因此无法在候选能力中可靠地选择一个。"
+    },
+    {
+      "runId": "01a18094-9a4f-7611-b5c5-693a1dc60f84",
+      "reason": "本次请求未提供任何任务信息（缺少 goal、inputs、features 与 options 等 decision-view 内容），无法判断应路由到 local-process 还是 capability/changed-file-summary，需补充任务信息后才能作答。"
+    },
+    {
+      "runId": "01a18098-f52b-7321-848e-022000aeebed",
+      "reason": "本次请求未提供任何任务信息（缺少 goal、inputs、features、options 等决策所需数据），无法可靠地在 local-process 与 capability/changed-file-summary 之间进行路由，故弃权。"
+    },
+    {
+      "runId": "01a1809a-304c-7523-ae17-4818842b53ee",
+      "reason": "本次请求未提供任务信息（decision-view 缺失），没有任务目标、输入清单或公开特征可供判断，无法可靠地选择候选能力或弃权依据，因此不能作答。"
+    },
+    {
+      "runId": "01a1809e-bd93-7531-ae83-1d575d9feaaf",
+      "reason": "本轮未提供任何任务信息（如 goal、inputs、features 等），无法判断任务目标是变更文件分类还是文本统计，缺乏可靠选择依据，故弃权。"
+    },
+    {
+      "runId": "01a180a0-259e-7396-9a7f-fe11bd2d4066",
+      "reason": "本轮未提供任何任务信息（缺少目标、输入清单与特征字段），无法判断任务属于文本统计还是变更文件分类，故无法可靠选择候选能力。"
+    },
+    {
+      "runId": "01a180a0-582c-7732-aac5-0328a8a0f1b3",
+      "reason": "本次请求未提供任何任务信息（缺少 goal、features、inputs 等决策依据），无法判断任务目标是统计类还是变更文件分类类，因此无法可靠地在候选能力中作出选择。"
+    },
+    {
+      "runId": "01a180a1-8437-7015-821c-363848220f58",
+      "reason": "当前请求未提供任何任务信息（缺少 goal、features、inputs、options 等 decision-view 内容），无法判断任务意图是统计文本指标还是变更文件分类，因此无法可靠地在候选能力中选择。"
+    },
+    {
+      "runId": "01a180a2-a6ba-7320-b0ef-f09ada0cc45b",
+      "reason": "本轮未提供任何任务信息（缺少目标、输入清单与公开特征），无法判断应选择 local-process 还是 capability/changed-file-summary，因此弃权。"
+    },
+    {
+      "runId": "01a180a3-1149-7664-a8ba-880c130ce131",
+      "reason": "本轮未提供任何任务信息（缺少目标、输入清单与特征），无法在候选能力之间做出可靠路由决策。"
+    },
+    {
+      "runId": "01a180a3-55a5-721d-96f4-418aec3644b8",
+      "reason": "本轮未提供任何任务信息（缺少任务目标、输入清单与公开特征），无法判断应路由到 local-process 还是 capability/changed-file-summary，故弃权。"
+    },
+    {
+      "runId": "01a180a6-b53d-723d-806d-c839547ec20c",
+      "reason": "本轮未提供任何任务信息（缺少任务目标、输入清单与公开特征），无法在候选能力 local-process 与 capability/changed-file-summary 之间进行可靠判断，故弃权。"
+    },
+    {
+      "runId": "01a180c0-d49b-73f3-b1ad-246ee50c6c0f",
+      "reason": "本次请求未附带任何任务信息（缺少 goal、inputs、features 等决策所需字段），无法判断任务意图是文本统计还是变更文件分类，因此无法可靠地在候选能力中选择。"
+    },
+    {
+      "runId": "01a180c1-3fc6-75f6-8980-7413e6cf0d8d",
+      "reason": "本次请求未提供任何任务信息（如目标、输入清单、公开特征或候选能力说明），无法可靠判断应路由到哪个候选能力，故弃权。"
+    },
+    {
+      "runId": "01a180c2-88e5-763c-a162-c5b0b976411c",
+      "reason": "本轮请求未附带任何任务信息（缺失 goal、features、inputs 与 options 的 decision-view），无法判断任务目标是统计类还是变更文件分类类，也没有可供选择的候选能力依据，故无法可靠作答。"
+    },
+    {
+      "runId": "01a180c3-35f1-77df-ac89-8bdbc9f19e04",
+      "reason": "未收到任何任务信息（decision-view 缺失），无法判断任务目标与输入特征，不能可靠地从候选能力中选择，因此弃权。"
+    },
+    {
+      "runId": "01a180ca-ef3d-7086-a4c8-e8323193f96f",
+      "reason": "本轮未提供任务信息（decision-view，包含任务目标、输入清单与公开特征），无法判断该任务属于文本统计还是变更文件分类，因此无法可靠地从候选能力中作出选择。"
+    },
+    {
+      "runId": "01a180ce-b06a-77ae-a8a4-1dbcdaa8ff9a",
+      "reason": "本轮未提供任何任务信息（decision-view 缺失），无法判断目标意图与输入特征，因此不能可靠地在 local-process 与 capability/changed-file-summary 之间做出路由决策。"
+    },
+    {
+      "runId": "01a180cf-40b3-711f-90df-f1557442a92d",
+      "reason": "本次请求未附带任何任务信息（缺少目标、输入清单与决策视图），无法判断任务意图属于文本统计还是变更文件分类，故无法可靠选择候选能力。"
+    },
+    {
+      "runId": "01a180d0-04d8-70df-b534-e87b74995f19",
+      "reason": "本次请求未附带任务信息（decision-view），缺少任务目标、输入清单与公开特征等必要决策依据，无法可靠地从候选能力中选择，故弃权。"
+    },
+    {
+      "runId": "01a180d1-b53a-76ab-8fcb-60006ec40a52",
+      "reason": "本次未提供任何任务信息（decision-view 缺失），无法判断任务目标与输入特征，不能可靠地在候选能力之间作答。"
+    },
+    {
+      "runId": "01a180d2-cd96-71d1-b42d-39c81c8028e6",
+      "reason": "本轮未提供 decision-view 任务信息（任务目标、输入清单、特征或候选选项描述均缺失），无法在候选能力 local-process 与 capability/changed-file-summary 之间做出可靠路由决策。"
+    },
+    {
+      "runId": "01a180d3-3b74-7408-a3c3-d02ae17e2725",
+      "reason": "本轮未提供任何任务信息（缺少目标、特征、输入清单与候选能力描述），无法可靠判断应选择哪个执行能力，故弃权。"
+    },
+    {
+      "runId": "01a180d3-6afd-7483-a8ec-336900d21d8f",
+      "reason": "本轮未提供任何任务信息（缺少 goal、inputs、features 与 options 的决策视图），无法判断任务目标对应哪个候选能力，为避免误路由而弃权。"
+    },
+    {
+      "runId": "01a180d4-cb39-7393-bdb7-2f32b68ac405",
+      "reason": "本轮未提供任务信息（缺少任务目标、输入清单与特征视图 decision-view），无法判断应路由到 local-process 还是 capability/changed-file-summary，因此弃权。"
+    },
+    {
+      "runId": "01a180d4-fa09-737b-a3b0-ddfc4e68a2d3",
+      "reason": "本轮未提供任何任务信息（缺少 features、goal、inputs、options 等决策视图内容），无法判断应路由到 local-process 还是 capability/changed-file-summary，故弃权。"
+    },
+    {
+      "runId": "01a180d5-c611-7296-a156-95dd1de40c9e",
+      "reason": "本次请求未提供任务信息（缺少 goal、features、inputs 与 options 等 decision-view 内容），无法基于任务目标可靠判断应选择哪个候选能力，故弃权。"
+    },
+    {
+      "runId": "01a180d6-4a91-716e-8f8a-84c43d6ddd77",
+      "reason": "本轮请求未提供任何任务信息（缺少 goal、inputs、features、options 等 decision-view 内容），无法判断任务目标，也无法在候选能力中可靠地选择，故弃权。"
+    },
+    {
+      "runId": "01a180d6-7c50-724e-af48-48bbaac3fc10",
+      "reason": "本轮未提供任何任务信息（decision-view），缺少任务目标、输入清单与特征，无法可靠地从候选能力中选择，故弃权。"
+    },
+    {
+      "runId": "01a180d7-48dd-708a-a605-2666f448eac1",
+      "reason": "本轮未提供任何任务信息（目标、输入清单或特征标记均缺失），无法判断应路由到 local-process 还是 capability/changed-file-summary，故弃权。"
+    },
+    {
+      "runId": "01a180d9-50da-73f3-a775-d59098b2e00f",
+      "reason": "本次请求未提供任何任务信息（缺少 goal、inputs、features 等 decision-view 内容），无法判断任务目标属于文本统计还是变更文件分类，也无法确认任务本身是否成立，因此无法可靠地从候选能力中选择，只能弃权。"
+    },
+    {
+      "runId": "01a180dc-7e30-71f4-a97d-08c5e8613602",
+      "reason": "本轮请求未附带任何任务信息（缺少 goal、inputs、features 等 decision-view 内容），无法判断任务意图属于文本统计还是变更文件分类，信息不足，故弃权。"
+    },
+    {
+      "runId": "01a180dd-d337-7341-b5fe-49e51e6769b5",
+      "reason": "本轮未提供任何任务信息（缺少 goal、inputs 与 features 等决策视图内容），无法判断任务目标是文本统计还是变更文件分类，无法可靠地在 local-process 与 capability/changed-file-summary 之间作出选择。"
+    }
+  ],
+  "causalStatus": "unproven; served stop_reason was not retained and layout/budget interventions were not run"
+}

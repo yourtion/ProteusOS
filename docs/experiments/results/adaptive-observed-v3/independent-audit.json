@@ -1,0 +1,94 @@
+{
+  "scope": "post-hoc-independent-read-only-audit",
+  "sqliteIntegrity": "ok",
+  "foreignKeyViolations": 0,
+  "sha256VerifiedBlobs": 2425,
+  "closedUniqueRuns": 830,
+  "uniqueDecisionCalls": 830,
+  "modelGenerationAttempts": 790,
+  "receivedServiceResults": 789,
+  "historicalUnknownUsageCalls": 1,
+  "totalGenerationAttemptsIncludingSetup": 793,
+  "plannedMeasurementUnits": 450,
+  "reconstructedMeasurementUnits": 450,
+  "newRuns": 313,
+  "importedRuns": 517,
+  "unitCounts": {
+    "budget-matched": {
+      "formal": {
+        "accepted": 72,
+        "planned": 120,
+        "families": 10
+      },
+      "regression": {
+        "accepted": 19,
+        "planned": 30,
+        "families": 5
+      }
+    },
+    "compiled": {
+      "formal": {
+        "accepted": 2,
+        "planned": 120,
+        "families": 10
+      },
+      "regression": {
+        "accepted": 2,
+        "planned": 30,
+        "families": 5
+      }
+    },
+    "single": {
+      "formal": {
+        "accepted": 69,
+        "planned": 120,
+        "families": 10
+      },
+      "regression": {
+        "accepted": 19,
+        "planned": 30,
+        "families": 5
+      }
+    }
+  },
+  "measurementDecisionKinds": {
+    "single": {
+      "invalid_output": 62,
+      "value": 88
+    },
+    "budget-matched": {
+      "invalid_output": 190,
+      "value": 259,
+      "timeout": 1
+    },
+    "compiled": {
+      "invalid_output": 97,
+      "abstain": 49,
+      "value": 4
+    }
+  },
+  "measurementEmptyInvalidAt256Tokens": {
+    "single": 58,
+    "budget-matched": 173,
+    "compiled": 86
+  },
+  "observedEvents": {
+    "observed.registered": 2,
+    "observed.admitted": 830,
+    "observed.started": 830,
+    "observed.closed": 830,
+    "observed.configurations": 1,
+    "observed.counting": 790,
+    "observed.counted": 790,
+    "observed.sending": 790,
+    "observed.received": 789,
+    "observed.selection": 1,
+    "observed.stopped": 1,
+    "observed.imported-prefix": 1,
+    "observed.finished": 1
+  },
+  "manifestDigest": "574cf09c7e2018bb9e4a061d6df03236667be8038fd984a993232c62a6ad8d97",
+  "reportDigest": "5e743b9d6573b55eb58fac5cd4296feb14be7d2dc033096cb8b2e60ef7aadaac",
+  "noCandidatesEvaluationsPromotions": true,
+  "noRegistryCredentials": true
+}

@@ -1,0 +1,168 @@
+{
+  "protocol": "adaptive-observed-v3",
+  "sourceCommit": "d0132df269fed9aeb5fffb6bdde3988800fabb42",
+  "sourceTreeDirty": false,
+  "mode": "real",
+  "id": "obs:8a50bba9-008e-4cc1-afe2-92d2a29512a7",
+  "manifestDigest": "574cf09c7e2018bb9e4a061d6df03236667be8038fd984a993232c62a6ad8d97",
+  "reportDigest": "5e743b9d6573b55eb58fac5cd4296feb14be7d2dc033096cb8b2e60ef7aadaac",
+  "engineering": "incomplete",
+  "dispatchComplete": true,
+  "continuation": {
+    "parent": {
+      "experimentId": "obs:725a819a-1ed8-4df3-b811-5033b6ef4035",
+      "manifestDigest": "51e8fd6b478dec787f61ad2548437022fcae5076dfb2af19bf30282112daba2b",
+      "report": {
+        "ref": "32/32be31080fcb0025fdabcd46fc474c71ee026a0a8d7a791c4185a9a16cd0da3f",
+        "digest": "32be31080fcb0025fdabcd46fc474c71ee026a0a8d7a791c4185a9a16cd0da3f"
+      },
+      "configurationDigest": "585c0ae97259df3e762b8e64c7792b44e36b294fef4f1b7a83cfc7400dc84178",
+      "selectionDigest": "d488e5247ea06e8097c7ff4648b672dca7841ce5731e3fed75fd05b066cbb85a",
+      "prefixLength": 517
+    },
+    "importedRuns": 517,
+    "newRuns": 313,
+    "totalActiveElapsedMs": 5663671,
+    "latencyScope": "sum-active-run-times-excludes-continuation-pause"
+  },
+  "realModel": "ran",
+  "benefit": "inconclusive",
+  "selection": {
+    "snapshotId": "01a18070-936d-706f-879e-22bf7636a1f6",
+    "kind": "prespecified-fixed-demo-ablation"
+  },
+  "qualityGate": false,
+  "arms": {
+    "single": {
+      "formal": {
+        "planned": 120,
+        "completed": 120,
+        "cases": 40,
+        "families": 10,
+        "successRate": 0.575,
+        "misrouteRate": 0,
+        "failureRate": 0.425,
+        "p95Ms": 9232
+      },
+      "regression": {
+        "planned": 30,
+        "completed": 30,
+        "cases": 10,
+        "families": 5,
+        "successRate": 0.6333333333333333,
+        "misrouteRate": 0,
+        "failureRate": 0.3666666666666667,
+        "p95Ms": 8013
+      }
+    },
+    "budget-matched": {
+      "formal": {
+        "planned": 120,
+        "completed": 120,
+        "cases": 40,
+        "families": 10,
+        "successRate": 0.6000000000000001,
+        "misrouteRate": 0,
+        "failureRate": 0.4,
+        "p95Ms": 28978
+      },
+      "regression": {
+        "planned": 30,
+        "completed": 30,
+        "cases": 10,
+        "families": 5,
+        "successRate": 0.6333333333333333,
+        "misrouteRate": 0,
+        "failureRate": 0.36666666666666664,
+        "p95Ms": 25722
+      }
+    },
+    "compiled": {
+      "formal": {
+        "planned": 120,
+        "completed": 120,
+        "cases": 40,
+        "families": 10,
+        "successRate": 0.016666666666666666,
+        "misrouteRate": 0,
+        "failureRate": 0.9833333333333334,
+        "p95Ms": 12148
+      },
+      "regression": {
+        "planned": 30,
+        "completed": 30,
+        "cases": 10,
+        "families": 5,
+        "successRate": 0.06666666666666667,
+        "misrouteRate": 0,
+        "failureRate": 0.9333333333333333,
+        "p95Ms": 9257
+      }
+    }
+  },
+  "armResources": {
+    "single": {
+      "modelCalls": 150,
+      "knownInputTokens": 48240,
+      "knownOutputTokens": 32628,
+      "executionAttempts": 88,
+      "cumulativeRunMs": 995575
+    },
+    "budget-matched": {
+      "modelCalls": 450,
+      "knownInputTokens": 144399,
+      "knownOutputTokens": 98397,
+      "executionAttempts": 259,
+      "cumulativeRunMs": 3057307
+    },
+    "compiled": {
+      "modelCalls": 190,
+      "knownInputTokens": 110528,
+      "knownOutputTokens": 43473,
+      "executionAttempts": 59,
+      "cumulativeRunMs": 1547170
+    }
+  },
+  "completedRuns": 830,
+  "plannedRuns": 830,
+  "sentModelCalls": 790,
+  "setup": {
+    "modelCalls": 3,
+    "inputTokens": 878,
+    "outputTokens": 343,
+    "unknownCostItems": 48,
+    "evidence": [
+      {
+        "ref": "a2/a274b56392419b9043f0d30a518accc8f4c7aa886852ed9e8cdd537d2b82ce91",
+        "digest": "a274b56392419b9043f0d30a518accc8f4c7aa886852ed9e8cdd537d2b82ce91"
+      },
+      {
+        "ref": "6c/6cb15d703a62e0091e7d08c5e3cc5317182c926548d20e48303aa1536feddf4f",
+        "digest": "6cb15d703a62e0091e7d08c5e3cc5317182c926548d20e48303aa1536feddf4f"
+      },
+      {
+        "ref": "1c/1c58ce8dd2e1b651cfe7b3a83143f34b696506037fd6d5e4121b0f0a38bfba15",
+        "digest": "1c58ce8dd2e1b651cfe7b3a83143f34b696506037fd6d5e4121b0f0a38bfba15"
+      }
+    ]
+  },
+  "totalModelCallsIncludingSetup": 793,
+  "totalKnownInputTokensIncludingSetup": 304045,
+  "totalKnownOutputTokensIncludingSetup": 174841,
+  "reservedModelCalls": 790,
+  "countRequests": 790,
+  "knownInputTokens": 303167,
+  "knownOutputTokens": 174498,
+  "unknownUsageCalls": 1,
+  "unverifiedUsageCalls": 1,
+  "unknownCostItems": 2034,
+  "criticalFailures": 28,
+  "criticalMissing": 0,
+  "elapsedMs": 2063551,
+  "cleanReopenReplay": "passed",
+  "activeUnchanged": true,
+  "formalEvaluation": "not_run",
+  "adoption": "not_run",
+  "originalProtocolEligible": false,
+  "failure": null
+}

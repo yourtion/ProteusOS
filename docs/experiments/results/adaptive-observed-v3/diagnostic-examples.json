@@ -1,0 +1,76 @@
+{
+  "scope": "post-hoc-illustrative-examples-no-configuration-change",
+  "examples": [
+    {
+      "kind": "empty-invalid-output",
+      "runId": "01a18075-d2cd-7015-a004-70918800f3db",
+      "callId": "01a18075-d2df-7774-bbff-262b8c29dc20",
+      "caseId": "formal-0-0",
+      "goal": "For release notes, report text totals for words, lines, bytes and headings.（资料批次 41）",
+      "requestDigest": "80260a879a1448300aed1643d89deb995b6d39183e3b0c220d8ff4828949bfb2",
+      "serviceResultDigest": "1d1ed4aa6b31039e1dc61cb69c484e9a1456be67d8e868b9e71b5c35eab07f9c",
+      "currentGoalPresentInSystem": true,
+      "messageRoles": [
+        "user",
+        "assistant",
+        "user",
+        "assistant",
+        "user"
+      ],
+      "lastUserMessage": {
+        "content": "请给出决策 JSON。",
+        "role": "user"
+      },
+      "result": {
+        "detail": "响应为空",
+        "evidence": {
+          "inputTokens": 613,
+          "outputTokens": 256,
+          "servedModel": "GLM-5.3-Flash"
+        },
+        "kind": "invalid_output",
+        "provenance": {
+          "policyVersion": "01a18070-936d-706f-879e-1e2843e33cf9",
+          "provider": "decision-llm"
+        },
+        "raw": ""
+      }
+    },
+    {
+      "kind": "model-abstain",
+      "runId": "01a18078-511d-7659-90d8-fefe9e1f2057",
+      "callId": "01a18078-5130-74c9-a781-1575c2f867ea",
+      "caseId": "formal-0-1",
+      "goal": "For release notes, report text totals for words, lines, bytes and headings.（资料批次 42）",
+      "requestDigest": "310bdceef58bda49e9919d551b8cd91db8be9abbe32fb372819eeaabde0ab22c",
+      "serviceResultDigest": "3bc46b2ee3c53b1740e74ed46ab0627a18142a507d962a3ca51d65fa64c9db8f",
+      "currentGoalPresentInSystem": true,
+      "messageRoles": [
+        "user",
+        "assistant",
+        "user",
+        "assistant",
+        "user"
+      ],
+      "lastUserMessage": {
+        "content": "请给出决策 JSON。",
+        "role": "user"
+      },
+      "result": {
+        "evidence": {
+          "inputTokens": 613,
+          "outputTokens": 190,
+          "servedModel": "GLM-5.3-Flash"
+        },
+        "kind": "abstain",
+        "origin": "model",
+        "provenance": {
+          "policyVersion": "01a18070-936d-706f-879e-1e2843e33cf9",
+          "provider": "decision-llm"
+        },
+        "raw": "{\"kind\":\"abstain\",\"reason\":\"本次请求未提供任何任务信息（如 goal、inputs、features、options 等 decision-view 内容），无法判断任务目标与所需能力，因此不能可靠地在候选能力中作出选择。\"}",
+        "reason": "本次请求未提供任何任务信息（如 goal、inputs、features、options 等 decision-view 内容），无法判断任务目标与所需能力，因此不能可靠地在候选能力中作出选择。"
+      }
+    }
+  ]
+}
