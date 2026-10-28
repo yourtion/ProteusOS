@@ -6,6 +6,7 @@ import { RESPONSE_SCHEMA_DIGEST_TARGET } from "./call.ts";
 import { computeViewFeatures, DECISION_VIEW_LIMIT_BYTES } from "./view.ts";
 
 export const LLM_DEMOS_POLICY_KIND = "llm-choice-demos-v1";
+export const LLM_DEMOS_POLICY_KIND_V2 = "llm-choice-demos-v2";
 export const LLM_DEMO_POOL_LIMIT = 32;
 export const LLM_SELECTED_DEMO_LIMIT = 8;
 export const LLM_REQUEST_LIMIT_BYTES = 64 * 1024;
@@ -60,9 +61,7 @@ const demonstrationSchema = z.strictObject({
     responseDigest: digest,
   }),
 });
-const policySchema = z.strictObject({
-  schemaVersion: z.literal(1),
-  kind: z.literal(LLM_DEMOS_POLICY_KIND),
+const policyFields = {
   fixed: z.strictObject({
     basePolicy: z.strictObject({ versionId: id, contentDigest: digest, content: baseSchema }),
     decisionView: z.strictObject({
@@ -78,7 +77,19 @@ const policySchema = z.strictObject({
     demonstrations: z.array(demonstrationSchema).max(LLM_DEMO_POOL_LIMIT),
   }),
   parameters: z.strictObject({ demoIds: z.array(id).max(LLM_SELECTED_DEMO_LIMIT) }),
-});
+};
+const policySchema = z.discriminatedUnion("kind", [
+  z.strictObject({
+    schemaVersion: z.literal(1),
+    kind: z.literal(LLM_DEMOS_POLICY_KIND),
+    ...policyFields,
+  }),
+  z.strictObject({
+    schemaVersion: z.literal(2),
+    kind: z.literal(LLM_DEMOS_POLICY_KIND_V2),
+    ...policyFields,
+  }),
+]);
 export type LlmDemonstration = z.infer<typeof demonstrationSchema>;
 export type LlmDemosPolicyContent = z.infer<typeof policySchema>;
 
@@ -88,7 +99,9 @@ export function isLlmDemosPolicy(content: unknown): boolean {
   return (
     typeof content === "object" &&
     content !== null &&
-    (content as { kind?: unknown }).kind === LLM_DEMOS_POLICY_KIND
+    [LLM_DEMOS_POLICY_KIND, LLM_DEMOS_POLICY_KIND_V2].includes(
+      (content as { kind?: unknown }).kind as string,
+    )
   );
 }
 
@@ -172,10 +185,13 @@ export function createLlmDemosPolicy(input: {
   options: string[];
   demonstrations: LlmDemonstration[];
   demoIds: string[];
+  /** 仅显式选择新策略时启用；默认保持 v1 的字节与身份。 */
+  requestFormat?: "current-user-v2";
 }): LlmDemosPolicyContent {
   return parseLlmDemosPolicy({
-    schemaVersion: 1,
-    kind: LLM_DEMOS_POLICY_KIND,
+    schemaVersion: input.requestFormat === "current-user-v2" ? 2 : 1,
+    kind:
+      input.requestFormat === "current-user-v2" ? LLM_DEMOS_POLICY_KIND_V2 : LLM_DEMOS_POLICY_KIND,
     fixed: {
       basePolicy: input.basePolicy,
       decisionView: input.decisionView,
@@ -200,8 +216,9 @@ export function assertLlmDemoParametersOnly(before: unknown, after: unknown): vo
   const a = parseLlmDemosPolicy(before);
   const b = parseLlmDemosPolicy(after);
   if (
+    a.kind !== b.kind ||
     canonicalJson({ fixed: a.fixed, pool: a.pool }) !==
-    canonicalJson({ fixed: b.fixed, pool: b.pool })
+      canonicalJson({ fixed: b.fixed, pool: b.pool })
   )
     throw new LlmDemosPolicyError("优化只允许选择与重排冻结示例");
 }

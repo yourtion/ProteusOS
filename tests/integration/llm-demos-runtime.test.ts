@@ -43,7 +43,7 @@ afterEach(() => {
   for (const app of opened.splice(0)) app.close();
 });
 
-function fixture() {
+function fixture(requestFormat?: "current-user-v2") {
   const h = bootExperimentHarness();
   h.inst.close();
   const provider = new PreparedFixtureProvider({
@@ -55,6 +55,7 @@ function fixture() {
   const policy = llmDemosFixture({
     base: h.genomes.llm.policyVersionId,
     view: h.genomes.decisionViewVersionId,
+    ...(requestFormat ? { requestFormat } : {}),
   });
   const install = (content: unknown) => {
     const blob = app.blobs.write(canonicalJson(content));
@@ -126,6 +127,23 @@ function reopen(root: string, baseUrl = "https://fixture.invalid") {
 }
 
 describe("可编译策略：持久化、重启和旧快照兼容", () => {
+  it("v2 prepared 在重开后沿用完整正文、调用 ID 和额度", async () => {
+    const h = fixture("current-user-v2");
+    const run = await h.submit();
+    expect(run.state).toBe("succeeded");
+    const call = rewind(h.app, run, "prepared");
+    const stored = JSON.parse(h.app.blobs.read(call.requestRef!)) as DecisionRequest;
+    expect(stored.prepared!.format).toBe("anthropic-choice-demos-request-v2");
+    expect(h.provider.bodies[0]!.messages.at(-1)!.content).toContain(h.submission.input.goal);
+    const fresh = reopen(h.root);
+    expect((await fresh.app.runtime.executeRun(run.runId)).state).toBe("succeeded");
+    expect(fresh.provider.bodies).toEqual(h.provider.bodies);
+    expect(fresh.app.storage.listDecisionCalls(run.runId)).toMatchObject([
+      { id: call.id, requestDigest: call.requestDigest, state: "value" },
+    ]);
+    expect(fresh.app.storage.countDecisionQuotaCalls({ organismId: "organism-default" })).toBe(1);
+  });
+
   it.each(["value", "abstain", "invalid_output"] as const)(
     "%s 的服务结束证据与结案原子持久化，重开不推断或重发",
     async (kind) => {

@@ -6,10 +6,12 @@ import {
   LLM_REQUEST_LIMIT_BYTES,
   parseLlmDemosPolicy,
   LlmDemosPolicyError,
+  LLM_DEMOS_POLICY_KIND_V2,
 } from "../../decision/llm-demos-policy.ts";
 import type { DecisionView } from "../../decision/view.ts";
 
 export const LLM_DEMOS_REQUEST_FORMAT = "anthropic-choice-demos-request-v1";
+export const LLM_DEMOS_REQUEST_FORMAT_V2 = "anthropic-choice-demos-request-v2";
 
 /** v1 保持原有逐字替换及消息布局，历史快照不受新格式影响。 */
 export function buildLlmChoiceBody(
@@ -44,6 +46,11 @@ export function prepareLlmDemosRequest(request: DecisionRequest): PreparedDecisi
     throw new LlmDemosPolicyError("快照 decision-view 版本或摘要不一致");
   assertLlmDemoView(policy, request.view);
   const body = buildLlmChoiceBody(policy.fixed.basePolicy.content, request.view!, request.options);
+  if (policy.kind === LLM_DEMOS_POLICY_KIND_V2) {
+    body.messages = [
+      { role: "user", content: `${canonicalJson(request.view)}\n请给出决策 JSON。` },
+    ];
+  }
   body.messages = [
     ...policy.parameters.demoIds.flatMap((selected) => {
       const demo = policy.pool.demonstrations.find((item) => item.id === selected)!;
@@ -56,7 +63,13 @@ export function prepareLlmDemosRequest(request: DecisionRequest): PreparedDecisi
   ];
   if (Buffer.byteLength(canonicalJson(body), "utf8") > LLM_REQUEST_LIMIT_BYTES)
     throw new LlmDemosPolicyError("完整模型请求超过 64 KiB，不允许截断");
-  return { format: LLM_DEMOS_REQUEST_FORMAT, body };
+  return {
+    format:
+      policy.kind === LLM_DEMOS_POLICY_KIND_V2
+        ? LLM_DEMOS_REQUEST_FORMAT_V2
+        : LLM_DEMOS_REQUEST_FORMAT,
+    body,
+  };
 }
 
 /** 已冻结请求可直接重放；若渲染实现或输入漂移，拒绝静默换请求。 */

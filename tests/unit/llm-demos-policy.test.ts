@@ -22,6 +22,43 @@ function rehash(policy: ReturnType<typeof llmDemosFixture>) {
 }
 
 describe("llm-choice-demos-v1：受控策略参数", () => {
+  it.each([{ demoIds: [] }, { demoIds: ["stats", "changes"] }])(
+    "v2 在最后 user 呈现当前视图，v1 的正文保持原样：$demoIds",
+    ({ demoIds }) => {
+      const request = llmDemosRequest();
+      const old = withLlmDemoParameters(llmDemosFixture(), demoIds);
+      request.policy.content = old;
+      const legacy = prepareLlmDemosRequest(request);
+      const legacyBody = legacy.body as ReturnType<typeof buildLlmChoiceBody>;
+      const modern = withLlmDemoParameters(
+        llmDemosFixture({ requestFormat: "current-user-v2" }),
+        demoIds,
+      );
+      request.policy.content = modern;
+      const prepared = prepareLlmDemosRequest(request);
+      const preparedBody = prepared.body as ReturnType<typeof buildLlmChoiceBody>;
+      expect(prepared.format).toBe("anthropic-choice-demos-request-v2");
+      expect(legacy.format).toBe("anthropic-choice-demos-request-v1");
+      expect(prepared.body.system).toBe(legacy.body.system);
+      expect(preparedBody.messages.at(-1)).toEqual({
+        role: "user",
+        content: `${canonicalJson(request.view)}\n请给出决策 JSON。`,
+      });
+      expect(legacyBody.messages.at(-1)).toEqual({ role: "user", content: "请给出决策 JSON。" });
+      expect(preparedBody.messages.slice(0, -1)).toEqual(legacyBody.messages.slice(0, -1));
+      expect(modern.fixed).toEqual(old.fixed);
+      expect(modern.pool).toEqual(old.pool);
+      expect(isLlmDemosPolicy(modern)).toBe(true);
+      expect(parseLlmDemosPolicy(JSON.parse(canonicalJson(modern)))).toEqual(modern);
+      expect(() => assertLlmDemoParametersOnly(old, modern)).toThrow(/只允许/);
+      expect(() =>
+        assertLlmDemoParametersOnly(modern, withLlmDemoParameters(modern, [])),
+      ).not.toThrow();
+      expect(() => parseLlmDemosPolicy({ ...modern, schemaVersion: 1 })).toThrow(/格式/);
+      expect(canonicalJson(prepared)).not.toMatch(/PRIVATE_|source-run|source-decision/);
+    },
+  );
+
   it("选择/顺序改变内容身份，固定组件和池不变；独立解析不会共享可变引用", () => {
     const base = llmDemosFixture();
     const reversed = withLlmDemoParameters(base, ["changes", "stats"]);

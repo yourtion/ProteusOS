@@ -14,7 +14,7 @@ import {
   withLlmDemoParameters,
 } from "../../src/decision/index.ts";
 import { canonicalJson, digestOf } from "../../src/storage/blobs.ts";
-import { llmDemosRequest } from "../fixtures/decision/llm-demos.ts";
+import { llmDemosFixture, llmDemosRequest } from "../fixtures/decision/llm-demos.ts";
 
 const sdk = vi.hoisted(() => ({
   create: vi.fn(),
@@ -42,6 +42,31 @@ beforeEach(() => {
 });
 
 describe("LLM Adapter：保持 v1，消费 v2 的冻结正文", () => {
+  it("v2 计数、实际发送与 prepared 正文一致；格式或当前视图漂移不发送", async () => {
+    const p = new LlmDecisionProvider({ apiKey: "unused" });
+    const request = llmDemosRequest();
+    request.policy.content = llmDemosFixture({ requestFormat: "current-user-v2" });
+    request.prepared = p.prepareRequest(request);
+    const body = structuredClone(request.prepared!.body);
+    sdk.countTokens.mockResolvedValueOnce({ input_tokens: 20 });
+    expect(await p.countInputTokens(request)).toBe(20);
+    expect(await p.decide(request)).toMatchObject({ kind: "value" });
+    expect(sdk.create).toHaveBeenCalledWith(body, { signal: undefined });
+    expect(sdk.countTokens).toHaveBeenCalledWith(
+      { model: body.model, system: body.system, messages: body.messages },
+      { signal: undefined },
+    );
+    expect(p.callProvenance(request).promptDigest).toBe(
+      llmPromptDigest(body as ReturnType<typeof buildLlmChoiceBody>),
+    );
+    request.prepared!.format = "anthropic-choice-demos-request-v1";
+    expect(await p.decide(request)).toMatchObject({ kind: "invalid_output" });
+    request.prepared = p.prepareRequest({ ...request, prepared: undefined });
+    request.view!.goal += " changed";
+    expect(await p.decide(request)).toMatchObject({ kind: "invalid_output" });
+    expect(sdk.create).toHaveBeenCalledTimes(1);
+  });
+
   it.each([
     { stop: "end_turn", text: '{"kind":"value","value":"local-process"}', kind: "value" },
     { stop: "max_tokens", text: "", kind: "invalid_output" },

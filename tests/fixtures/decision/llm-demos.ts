@@ -9,7 +9,9 @@ import {
 import { DECISION_VIEW_CONTENT } from "../../../src/app/experiment/assets.ts";
 import { canonicalJson, digestOf } from "../../../src/storage/blobs.ts";
 
-export function llmDemosFixture(ids: { base?: string; view?: string } = {}) {
+export function llmDemosFixture(
+  ids: { base?: string; view?: string; requestFormat?: "current-user-v2" } = {},
+) {
   const base = {
     schemaVersion: 1 as const,
     ...structuredClone(FROZEN_LLM_POLICY),
@@ -69,6 +71,7 @@ export function llmDemosFixture(ids: { base?: string; view?: string } = {}) {
     options,
     demonstrations: demos,
     demoIds: ["stats", "changes"],
+    ...(ids.requestFormat ? { requestFormat: ids.requestFormat } : {}),
   });
   return policy;
 }

@@ -74,3 +74,8 @@ env -u PROTEUS_E2E -u PROTEUS_SANDBOX PATH="/opt/homebrew/bin:$PATH" \
 - [Runtime 集成](../tests/integration/llm-demos-runtime.test.ts)：真实 SQLite、ArtifactVersion 依赖、快照、本地 worker、完整请求持久化；重启时 prepared 原 ID/额度/正文恢复、unknown 不重发、完成证据不重复执行；旧 v1 快照和缺少新字段可用；正文与端点漂移被拒绝。
 
 这些是工程验证；远端 SDK/服务兼容与真实收益均未运行。M6a-02 已接入受许可经验、有限搜索、持久化累计预算、CompileTrial/CompileReport、唯一候选，以及取消/unknown/零候选路径。正式采用继续要求独立 Evaluation 与 operator Promotion。
+
+
+## 显式当前任务请求 v2
+
+O2 新增 `llm-choice-demos-v2`（schemaVersion 2）和 `anthropic-choice-demos-request-v2`。仅显式构造时启用，最后 user 消息包含当前 decision-view 和决策 JSON 指令；system 与示例顺序沿旧合同。格式身份属于固定策略，不能作为示例选择参数优化。旧 v1 默认构造、正文、摘要和 prepared 回放不升级。当前尚无 v2 真实效果结论，后续按 [O2 开发对照](./experiments/observed-iteration-plan.md)验证。
