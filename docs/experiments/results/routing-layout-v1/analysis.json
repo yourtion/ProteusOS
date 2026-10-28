@@ -1,0 +1,42 @@
+{
+  "scope": "developer-visible descriptive observation",
+  "metrics": {
+    "v1-t1024-d0": {
+      "completed": 60,
+      "accepted": 59,
+      "jsonValid": 59,
+      "inputTokens": 18876,
+      "outputTokens": 15999,
+      "medianMs": 5861.5,
+      "p95Ms": 17074,
+      "stopReasons": {
+        "end_turn": 59,
+        "max_tokens": 1
+      }
+    },
+    "v2-t1024-d0": {
+      "completed": 60,
+      "accepted": 60,
+      "jsonValid": 60,
+      "inputTokens": 26292,
+      "outputTokens": 12270,
+      "medianMs": 5153.5,
+      "p95Ms": 12789,
+      "stopReasons": {
+        "end_turn": 60
+      }
+    }
+  },
+  "paired": {
+    "bothSuccess": 59,
+    "onlyFirst": 0,
+    "onlySecond": 1,
+    "bothFailed": 0
+  },
+  "blobsVerified": 4468,
+  "sqliteIntegrity": "ok",
+  "foreignKeys": "ok",
+  "parentEventsUnchanged": 842,
+  "receiptsVerified": 120,
+  "reportDigest": "a3ef7ff32f6b75fbd2e9d5652cc76c5c64b43c11e566cb2fc17dfabc81cfe2ad"
+}
