@@ -2,6 +2,7 @@ import type { CompileBackend } from "../evolution/compile-types.ts";
 import { AdaptiveJournal } from "./experiment/journal.ts";
 import { AdaptiveRunSlots } from "./experiment/run-slots.ts";
 import { guardObservedRun } from "./experiment/observed.ts";
+import { guardDiagnosticRun } from "./experiment/diagnostic.ts";
 import { bindCompileDevelopment } from "./experiment/development.ts";
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
@@ -163,6 +164,7 @@ export function openInstance(
     runGuard: (run, phase) => {
       adaptiveRuns.guard(run, phase);
       guardObservedRun({ storage, kernel, blobs }, run, phase);
+      guardDiagnosticRun({ storage, kernel, blobs }, run, phase);
     },
     storage,
     kernel,

@@ -45,7 +45,7 @@ P0-01/02/03/04、M6a-01/02 和 M6a-03-02 的 fixture 工程闭环均已完成工
 | O1 | [单独注册真实观测轮](./experiments/results/adaptive-observed-v3.md) | 用户明确选择新协议，M6a-03-03b1 | 已结案 | 830/830 Run、790 次生成尝试（含准备 793）；三臂完整测量及解包复算完成。示例 formal 1.67% / regression 6.67%，质量门未过；历史未知 1 次，计量 incomplete，收益 inconclusive |
 | O2-00 | [服务结束证据](./experiments/observed-iteration-plan.md) | O1 结案 | 已完成 | 保留 stop_reason、block 类型、文本字节数及模型身份，缺失不可推断；零新增生成的合同/回放验证后提交 |
 | O2-01 | [版本化修正当前任务呈现](./experiments/observed-iteration-plan.md) | O2-00 | 已完成 | 新策略格式末条 user 包含当前视图；旧格式、prepared 摘要与恢复语义兼容，单独提交验证 |
-| O2-02 | [开发诊断矩阵](./experiments/observed-iteration-plan.md) | O2-01，新登记限额和开发任务 | 待前置 | 旧/新布局 ×256/512 输出 ×0/2 示例，10 开发任务、2 repeats，最多 160 次；失败、分层及结束证据完整保留 |
+| O2-02 | [开发诊断矩阵](./experiments/routing-diagnostic-v1.md) | O2-01，新登记限额和开发任务 | 进行中 | 旧/新布局 ×256/512 输出 ×0/2 示例，10 开发任务、2 repeats，最多 160 次；失败、分层及结束证据完整保留 |
 | O2-03 | [冻结开发确认](./experiments/observed-iteration-plan.md) | O2-02 通过，固定候选/对照 | 待前置 | 新 20 任务 ×2 配置 ×3 repeats，最多 120 次；仅无示例改善时不冒充示例收益 |
 | O2-04 | [新资料完整三臂复测](./experiments/observed-iteration-plan.md) | O2 示例开发门通过，新清单/资料 | 待前置 | 750 次测量；此前开发 280 次计入新链 1,030 次预算草案，原 O1 800 上限不改；正式条件不足仍只做观测 |
 | M6a-03-03 | 受信 runner 与正式 Evaluation | M6a-03-02，预算后端 | 待前置 | 实际调用受约束，正式集一次领用，三臂完整执行与新版 Evaluation；采用仍显式授权 |
@@ -177,6 +177,7 @@ env -u PROTEUS_E2E -u PROTEUS_SANDBOX PATH="/opt/homebrew/bin:$PATH" \
 | 2026-10-28 | O1 离线失败评估与 O2 细化 | 核对全部测量响应：349 格式失败均达 256 输出，317 空/32 非空；49 弃权都自述当前任务信息缺失。formal 三次对照救回 15、损失 12，净增 3；按 family 保存诊断 | [O2 分阶段计划](./experiments/observed-iteration-plan.md)明确先结束证据和新布局，再 160 次诊断矩阵及 120 次确认；没有新增真实调用、改写 O1 或执行 O2。新链开发成本与测量累计登记 |
 | 2026-10-28 | O2-00 服务结束证据 | Adapter 保留 stop_reason、block 类型和文本 UTF-8 字节数，不保存隐藏推理；Runtime 同事务追加 response_evidence，编译原始证据兼容可选新字段 | 26 个定向用例通过，静态检查与全量 435 passed / 5 skipped；清理后的 O1 报告复算逐字段不变。没有新增真实调用；继续 O2-01 新布局 |
 | 2026-10-28 | O2-01 版本化当前任务布局 | 新 llm-choice-demos-v2 / request-v2 明确在最后 user 放入当前视图，原 system、示例池及 v1 字节保持；格式变化不能伪装成示例参数搜索 | 32 个定向用例、静态检查和全量 439 passed / 5 skipped；新格式 prepared 重开沿原 ID/正文/额度，O1 报告逐字段复算不变。没有新增真实调用；继续 O2-02 的 256/512 对照 |
+| 2026-10-28 | O2-02 开发诊断工程验收 | 新 diag 事件流绑定八条件、来源、Run、同正文计数与全部成本；支持 256/512 及固定确认对照，父轮未知不重发，首 16 次及完整时间窗口规则冻结 | 完整 160 槽位 fixture / 真实本地 worker 验收与清理回放通过；11 个集成反例、静态与全量 450 passed / 5 skipped。提交后从新目录启动真实矩阵 |
 
 P0-01 的最小复现与回归命令：
 
