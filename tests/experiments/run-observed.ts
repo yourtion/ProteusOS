@@ -1,0 +1,164 @@
+import { execFileSync } from "node:child_process";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { join, resolve } from "node:path";
+import { randomUUID } from "node:crypto";
+import assert from "node:assert/strict";
+import { LlmDecisionProvider } from "../../src/adapters/decision-llm/index.ts";
+import { experimentServiceConfig } from "../../src/app/experiment/service-config.ts";
+import { prepareObservedRunner } from "../../src/app/experiment/observed-runner.ts";
+import { ObservedExperiment } from "../../src/app/experiment/observed.ts";
+import { observedDataset } from "../../src/app/experiment/observed-data.ts";
+import { canonicalJson, digestOf } from "../../src/storage/blobs.ts";
+import { openInstance } from "../../src/app/instance.ts";
+import type { DecisionRequest, DecisionResult } from "../../src/decision/index.ts";
+
+const args = process.argv.slice(2);
+if (args[0] === "--report" && args.length === 2) {
+  const out = resolve(args[1]!);
+  const meta = JSON.parse(readFileSync(join(out, "run.json"), "utf8")) as { id: string };
+  const app = openInstance(join(out, "instance"));
+  try {
+    process.stdout.write(
+      `${JSON.stringify(new ObservedExperiment(app, meta.id).report(), null, 2)}\n`,
+    );
+  } finally {
+    app.close();
+  }
+} else {
+  if (
+    !["--fixture", "--real"].includes(args[0] ?? "") ||
+    args[1] !== "--output" ||
+    ![3, 5].includes(args.length) ||
+    (args.length === 5 && args[3] !== "--claude-settings")
+  )
+    throw new Error(
+      "Usage: run-observed.ts (--fixture|--real) --output NEW_DIRECTORY [--claude-settings FILE] | --report DIRECTORY",
+    );
+  const mode = args[0] === "--real" ? "real" : "fixture";
+  const output = resolve(args[2]!);
+  const sourceCommit = execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim();
+  const sourceTreeDirty = !!execFileSync("git", ["status", "--porcelain"], {
+    encoding: "utf8",
+  }).trim();
+  if (mode === "real" && sourceTreeDirty)
+    throw new Error("Commit source changes before starting a real observed round");
+  mkdirSync(output);
+  class Fixture extends LlmDecisionProvider {
+    readonly goals = new Map(observedDataset().map((c) => [c.task.goal, c.expectedChoice]));
+    constructor() {
+      super({ apiKey: "FIXTURE_NO_NETWORK", baseUrl: "https://observed.invalid" });
+    }
+    override countInputTokens() {
+      return Promise.resolve(100);
+    }
+    override async decide(r: DecisionRequest): Promise<DecisionResult> {
+      const value = this.goals.get(r.view!.goal)!;
+      return {
+        kind: "value",
+        value,
+        raw: canonicalJson({ kind: "value", value }),
+        provenance: { provider: this.name, policyVersion: r.policy.versionId },
+        evidence: { inputTokens: 100, outputTokens: 5, servedModel: "fixture" },
+      };
+    }
+  }
+  const transport =
+    mode === "real"
+      ? new LlmDecisionProvider({
+          ...experimentServiceConfig(args[4]).config,
+          requestTimeoutMs: 28_000,
+        })
+      : new Fixture();
+  const id = `obs:${randomUUID()}`;
+  const h = prepareObservedRunner(join(output, "instance"), id, transport, { mode, sourceCommit });
+  writeFileSync(
+    join(output, "run.json"),
+    JSON.stringify(
+      {
+        id,
+        mode,
+        sourceCommit,
+        sourceTreeDirty,
+        registeredAt: new Date().toISOString(),
+        inputHardBound: "unverified",
+        semanticIndependence: "unverified",
+        independentBenefit: "inconclusive",
+      },
+      null,
+      2,
+    ),
+  );
+  writeFileSync(join(output, "manifest.json"), canonicalJson(h.frozen.plan));
+  process.stdout.write(
+    `Frozen ${h.frozen.digest}: ${h.frozen.slots.length} Runs / ${h.frozen.plannedCalls} planned model calls, mode=${mode}\n`,
+  );
+  let failure: string | null = null;
+  try {
+    let count = 0;
+    for (;;) {
+      const receipt = await h.experiment.runNext();
+      if (!receipt) break;
+      count++;
+      if (count % 10 === 0 || count === h.frozen.slots.length)
+        process.stdout.write(`${count}/${h.frozen.slots.length} ${receipt.phase}\n`);
+    }
+  } catch (error) {
+    failure = error instanceof Error ? error.message : "UnknownError";
+    h.experiment.stop(failure);
+  }
+  try {
+    const report = h.experiment.report();
+    writeFileSync(join(output, "report.json"), canonicalJson(report));
+    rmSync(join(h.app.root, "workspaces"), { recursive: true, force: true });
+    rmSync(join(h.app.root, "observed-materials"), { recursive: true, force: true });
+    const reopened = openInstance(h.app.root);
+    try {
+      assert.deepEqual(new ObservedExperiment(reopened, id).report(), report);
+    } finally {
+      reopened.close();
+    }
+    const summary = {
+      protocol: report.protocol,
+      sourceCommit,
+      sourceTreeDirty,
+      mode,
+      id,
+      manifestDigest: h.frozen.digest,
+      reportDigest: digestOf(canonicalJson(report)),
+      engineering: report.engineering,
+      realModel: report.realModel,
+      benefit: report.benefit,
+      selection: report.selection,
+      qualityGate: report.qualityGate,
+      arms: report.arms,
+      armResources: report.armResources,
+      completedRuns: report.completedRuns,
+      plannedRuns: report.plannedRuns,
+      sentModelCalls: report.sentModelCalls,
+      setup: report.setup,
+      totalModelCallsIncludingSetup: report.totalModelCallsIncludingSetup,
+      totalKnownInputTokensIncludingSetup: report.totalKnownInputTokensIncludingSetup,
+      totalKnownOutputTokensIncludingSetup: report.totalKnownOutputTokensIncludingSetup,
+      reservedModelCalls: report.reservedModelCalls,
+      countRequests: report.countRequests,
+      knownInputTokens: report.knownInputTokens,
+      knownOutputTokens: report.knownOutputTokens,
+      unknownUsageCalls: report.unknownUsageCalls,
+      unverifiedUsageCalls: report.unverifiedUsageCalls,
+      unknownCostItems: report.unknownCostItems,
+      criticalFailures: report.criticalFailures.length,
+      elapsedMs: report.elapsedMs,
+      cleanReopenReplay: "passed",
+      activeUnchanged: report.activeUnchanged,
+      formalEvaluation: report.formalEvaluation,
+      adoption: report.adoption,
+      originalProtocolEligible: false,
+      failure,
+    };
+    writeFileSync(join(output, "summary.json"), `${JSON.stringify(summary, null, 2)}\n`);
+    process.stdout.write(`${JSON.stringify(summary, null, 2)}\nEvidence saved to ${output}\n`);
+    process.exitCode = report.engineering === "passed" ? 0 : 1;
+  } finally {
+    h.app.close();
+  }
+}

@@ -42,9 +42,10 @@ P0-01/02/03/04、M6a-01/02 和 M6a-03-02 的 fixture 工程闭环均已完成工
 | M6a-03-02b3b1 | [冻结任务输入与裁判资料绑定](./verification-evidence.md) | M6a-03-02b3a | 已完成 | 同一读事务内核对实际输入、目标/修订与独立裁判摘要；清理后可复算，所有 Attempt 与缺测不遗漏 |
 | M6a-03-02b3b2 | [策略臂、选择与 Journal 收据](./adaptive-arm-evidence.md) | M6a-03-02b3b1 | 已完成 | fixture 工程闭环验收通过：冻结标签、原始结案、完整三臂及清理复算；真实预算和资料门另行推进 |
 | V1 | [完整阶段验证](./experiments/results/adaptive-stage-v1.md) | M6a-03-02 工程闭环 | 已完成 | 从干净提交独立运行改善、无改善、回归退化和中断场景，保存报告并复算 |
+| O1 | [独立真实观测轮](./experiments/adaptive-observed-v1.md) | 用户明确选择新协议，M6a-03-03b1 | 进行中 | 完整 830 Run / 790 次生成，独立持久化槽位、计数预检及原始验收，报告 inconclusive，不改变旧正式门 |
 | M6a-03-03 | 受信 runner 与正式 Evaluation | M6a-03-02，预算后端 | 待前置 | 实际调用受约束，正式集一次领用，三臂完整执行与新版 Evaluation；采用仍显式授权 |
 | M6a-03-03a | [本地执行模型用量约束](./model-free-execution.md) | M6a-03-02 | 已完成 | 显式禁网/子进程/Worker/凭据继承，原始 trace 核验后才计零；历史未知不升级 |
-| M6a-03-03b | [真实服务兼容及输入预算证明](./experiments/real-run-readiness.md) | M6a-03-03a，现有模型配置 | 待前置 | 服务与 Runtime 实测通过；输入硬限额证明仍缺，等待后端证明或另注册观测协议的明确选择 |
+| M6a-03-03b | [真实服务兼容及输入预算证明](./experiments/real-run-readiness.md) | M6a-03-03a，现有模型配置 | 待前置 | 服务与 Runtime 实测通过；原协议输入硬限额证明仍缺。用户已选择独立 O1 观测协议，保留原门 |
 | M6a-03-03b1 | [真实开发兼容验证](./experiments/results/adaptive-real-compatibility-v1.md) | M6a-03-03a，现有模型配置 | 已完成 | 两次真实开发调用，Runtime/受约束 worker/原始 JSON 验收/清理复算均通过；不作为收益证据 |
 | M6a-03-04 | 独立真实轮 | M6a-03-03，独立数据 | 待前置 | 全轮冻结后真实执行，按原协议记录 supported / not_demonstrated / inconclusive |
 | M6b-01 | 单步任务内适应会话 | M6a-03 通过，P0-03 | 待效果门 | 独立快照试跑、会话累计预算、组合后实测、不改变 active、不重复副作用 |
@@ -164,6 +165,7 @@ env -u PROTEUS_E2E -u PROTEUS_SANDBOX PATH="/opt/homebrew/bin:$PATH" \
 | 2026-10-28 | 真实运行前置：本地约束与服务探针 | 新增显式 Node >=26 禁网进程执行及可持久化的零模型调用证明；计数 API 使用同一冻结正文且禁止估算回退；新增最多一次生成、开始前落盘的开发兼容探针 | 定向执行证据/收据 20/20；静态检查、68 文件全量检查通过，416 passed / 5 skipped；继续从干净提交运行真实探针，尚未解除真实绑定门 |
 | 2026-10-28 | 真实服务调用与 Runtime 探针准备 | 从干净提交 9c02244 完成一次真实调用，265 input / 82 output，计数一致且路由正确；保留请求/响应正文和摘要。补齐真实 Runtime 探针，并修复缓存读/建 token 漏计 | 定向 14/14，静态检查和全量 417 passed / 5 skipped；[实测报告](./experiments/results/adaptive-real-compatibility-v1.md)已保存。真实计量通过，输入硬上界未证明。完整三臂仍未运行，未改变原协议或候选门 |
 | 2026-10-28 | 真实 Runtime 实测 | 从干净提交 0b08bad 运行一次真实开发 Run：293 input / 151 output，受约束 worker 模型用量 0，JSON 原始验收 verified；清理重开逐字段复算一致，active 不变 | 原始报告/请求/响应/验收摘要核对后保存；两次开发调用合计 558 input / 233 output。完整三臂尚未执行：输入硬上界与协议路径选择未落实，原协议拒绝门不变 |
+| 2026-10-28 | O1 观测协议与完整运行器 | 用户选择单独注册真实观测轮；固定 90 任务、3 repeats、1/3/1、40 次开发搜索与 750 次测量。独立事件账本约束计数/发送/Run 启动，原始正文、worker 用量及 JSON 裁判复算；无改善时按预注册标注固定示例消融 | 开发工作区完成 830 Run / 790 fixture 调用的完整演练及清理复算。最终 6 个集成反例、静态检查和 69 文件全量检查通过：423 passed / 5 skipped。准备成本 2 次也固定纳入 800 次上限；提交后开始真实执行 |
 
 P0-01 的最小复现与回归命令：
 
