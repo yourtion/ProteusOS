@@ -7,6 +7,7 @@
 - 原始编译来源、1/3/1 预派发槽位、冻结裁判、真实本地 worker、原始收据与离线复算已经完成 fixture 工程验收。
 - [本地执行约束](../model-free-execution.md) 已实现并验证：显式装配的受信 worker 无网络/子进程/Worker 权限，不继承宿主凭据。原始 trace 完整时可以核验零模型调用/零 tokens；CPU 等成本仍未知。
 - 指定的本机服务配置可访问智谱 Anthropic 兼容端点。开发探针已真实发送一次 GLM-5.3-Flash 请求，预计数/实际输入均为 265 tokens，输出 82，路由正确，没有重试、正式集领用或晋升。
+- 真实 Runtime 开发探针已通过：输入 293 / 输出 151，受约束 worker 完成、JSON 原始验收 verified、删除原资料及工作区后重开复算一致，active 不变。[实测与原始证据](./results/adaptive-real-compatibility-v1.md)已保存。
 
 ## 尚缺的正式条件
 

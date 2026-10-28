@@ -44,7 +44,8 @@ P0-01/02/03/04、M6a-01/02 和 M6a-03-02 的 fixture 工程闭环均已完成工
 | V1 | [完整阶段验证](./experiments/results/adaptive-stage-v1.md) | M6a-03-02 工程闭环 | 已完成 | 从干净提交独立运行改善、无改善、回归退化和中断场景，保存报告并复算 |
 | M6a-03-03 | 受信 runner 与正式 Evaluation | M6a-03-02，预算后端 | 待前置 | 实际调用受约束，正式集一次领用，三臂完整执行与新版 Evaluation；采用仍显式授权 |
 | M6a-03-03a | [本地执行模型用量约束](./model-free-execution.md) | M6a-03-02 | 已完成 | 显式禁网/子进程/Worker/凭据继承，原始 trace 核验后才计零；历史未知不升级 |
-| M6a-03-03b | [真实服务兼容及输入预算证明](./experiments/real-run-readiness.md) | M6a-03-03a，现有模型配置 | 进行中 | 服务实测已通过；继续 Runtime 实测。输入硬限额证明仍缺，不因一次匹配解除真实门 |
+| M6a-03-03b | [真实服务兼容及输入预算证明](./experiments/real-run-readiness.md) | M6a-03-03a，现有模型配置 | 待前置 | 服务与 Runtime 实测通过；输入硬限额证明仍缺，等待后端证明或另注册观测协议的明确选择 |
+| M6a-03-03b1 | [真实开发兼容验证](./experiments/results/adaptive-real-compatibility-v1.md) | M6a-03-03a，现有模型配置 | 已完成 | 两次真实开发调用，Runtime/受约束 worker/原始 JSON 验收/清理复算均通过；不作为收益证据 |
 | M6a-03-04 | 独立真实轮 | M6a-03-03，独立数据 | 待前置 | 全轮冻结后真实执行，按原协议记录 supported / not_demonstrated / inconclusive |
 | M6b-01 | 单步任务内适应会话 | M6a-03 通过，P0-03 | 待效果门 | 独立快照试跑、会话累计预算、组合后实测、不改变 active、不重复副作用 |
 | M6b-02 | 同预算适应实验 | M6b-01 | 待效果门 | 与原方案多次执行对照，证明额外编排的质量或成本价值 |
@@ -162,6 +163,7 @@ env -u PROTEUS_E2E -u PROTEUS_SANDBOX PATH="/opt/homebrew/bin:$PATH" \
 | 2026-10-28 | V1 大阶段独立验证 | 从干净提交 167b67a 运行完整验证命令；改善、无改善、回归退化和中断场景均按预期判定；所有场景清理重开后逐字段复算一致，active 与正式次数不变 | [阶段结果](./experiments/results/adaptive-stage-v1.md) 已保存；完整场景各 36 张原始收据/60 次脚本决策，中断保留 7 次且不补跑；工程阶段完成，真实效果仍未运行 |
 | 2026-10-28 | 真实运行前置：本地约束与服务探针 | 新增显式 Node >=26 禁网进程执行及可持久化的零模型调用证明；计数 API 使用同一冻结正文且禁止估算回退；新增最多一次生成、开始前落盘的开发兼容探针 | 定向执行证据/收据 20/20；静态检查、68 文件全量检查通过，416 passed / 5 skipped；继续从干净提交运行真实探针，尚未解除真实绑定门 |
 | 2026-10-28 | 真实服务调用与 Runtime 探针准备 | 从干净提交 9c02244 完成一次真实调用，265 input / 82 output，计数一致且路由正确；保留请求/响应正文和摘要。补齐真实 Runtime 探针，并修复缓存读/建 token 漏计 | 定向 14/14，静态检查和全量 417 passed / 5 skipped；[实测报告](./experiments/results/adaptive-real-compatibility-v1.md)已保存。真实计量通过，输入硬上界未证明。完整三臂仍未运行，未改变原协议或候选门 |
+| 2026-10-28 | 真实 Runtime 实测 | 从干净提交 0b08bad 运行一次真实开发 Run：293 input / 151 output，受约束 worker 模型用量 0，JSON 原始验收 verified；清理重开逐字段复算一致，active 不变 | 原始报告/请求/响应/验收摘要核对后保存；两次开发调用合计 558 input / 233 output。完整三臂尚未执行：输入硬上界与协议路径选择未落实，原协议拒绝门不变 |
 
 P0-01 的最小复现与回归命令：
 
