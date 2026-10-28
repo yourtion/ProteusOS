@@ -1,6 +1,6 @@
 # O2：真实观测后的迭代与验证计划
 
-2026-10-28。依据 [O1 完整结果](./results/adaptive-observed-v3.md)及本次[离线诊断](./results/adaptive-observed-v3-diagnosis.json)。当前状态是 **O2-00 / O2-01 已提交，O2-02 工程验收中**。用户已要求提高上限并按顺序迭代验证；输出 256/512 对照沿下述新协议执行，未修改 O1 清单。
+2026-10-28。依据 [O1 完整结果](./results/adaptive-observed-v3.md)及本次[离线诊断](./results/adaptive-observed-v3-diagnosis.json)。当前状态是 **O2-00 / O2-01 已提交，O2-02 因服务 500 封闭，O2-R1 准备真实执行**。用户已要求提高上限并按顺序迭代验证；输出 256/512 对照沿下述新协议执行，未修改 O1 清单。
 
 ## 当前判断
 
@@ -92,3 +92,5 @@ O2-00：结束证据已在 Adapter 和 Runtime 结案事务保留，编译核验
 O2-01：新增明确 v2 策略与请求格式，末条 user 带当前视图，默认构造及旧 v1 仍保持原身份。32 个定向验证、静态检查及全量 439 passed / 5 skipped；O1 报告复算不变。尚无新增真实调用。
 
 O2-02：实现 [routing-diagnostic-v1](./routing-diagnostic-v1.md)；完整 160 槽位 fixture 与清理回放通过，11 个集成反例、静态检查及全量 450 passed / 5 skipped。真实执行将在干净提交后从新目录登记启动。
+
+O2-02 实际在 142/160 由服务 HTTP 500 中断，新增未知 1 次，不重发，原筛选未通过。[停止轮结果](./results/routing-diagnostic-matrix-v1.md)已保存。用户提高上限的目标改由单独登记的 [O2-R1 固定对照](./fixed-output-v1.md)直接验证，不冒充原 O2-03；最多 120 次，开发累计不超过 262/280。原门保持。共享测试资料的并发污染已隔离，14 个定向及全量 453 passed / 5 skipped，完整 120 槽位 fixture 回放通过。

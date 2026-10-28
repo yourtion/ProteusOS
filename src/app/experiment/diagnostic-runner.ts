@@ -58,7 +58,7 @@ export function prepareDiagnosticRunner(
   transport: ObservedTransport,
   opts: {
     parent: string;
-    stage: "matrix" | "confirmation";
+    stage: "matrix" | "confirmation" | "fixed-output";
     mode: "real" | "fixture";
     sourceCommit: string;
     small?: boolean;
@@ -75,6 +75,10 @@ export function prepareDiagnosticRunner(
     mode: string;
     dispatchComplete: boolean;
     engineering: string;
+    stopReason?: string | null;
+    partialRuns?: unknown[];
+    receipts?: Array<{ runId: string }>;
+    metrics?: DiagnosticCondition[];
     selection?: { snapshotId: string };
     selected?: DiagnosticCondition | null;
     prior?: { experimentId: string };
@@ -96,13 +100,23 @@ export function prepareDiagnosticRunner(
     model: string;
   };
   check(
-    prior.dispatchComplete && (opts.mode === "fixture" || prior.mode === "real"),
+    (opts.stage === "fixed-output"
+      ? !!prior.stopReason && prior.partialRuns?.length === 0
+      : prior.dispatchComplete) &&
+      (opts.mode === "fixture" || prior.mode === "real"),
     "closed parent of matching real mode required",
   );
   if (opts.stage === "matrix")
     check(
       prior.protocol === "adaptive-observed-v3" && !!prior.selection,
       "matrix requires completed O1",
+    );
+  else if (opts.stage === "fixed-output")
+    check(
+      prior.protocol === "routing-diagnostic-v1" &&
+        prior.stage === "matrix" &&
+        !prior.dispatchComplete,
+      "fixed comparison requires sealed incomplete matrix",
     );
   else
     check(
@@ -120,7 +134,27 @@ export function prepareDiagnosticRunner(
   const h = openDiagnosticRunner(root, id, transport);
   try {
     const { app, experiment } = h;
-    const parentSnapshot = prior.selection?.snapshotId ?? prior.selected!.snapshotId;
+    if (opts.stage === "fixed-output") {
+      check(
+        same(new DiagnosticExperiment(app, meta.id).report(), prior),
+        "sealed parent report replay drift",
+      );
+      const last = prior.receipts?.at(-1);
+      const call = last && app.storage.listDecisionCalls(last.runId)[0];
+      check(
+        call?.state === "transport_error" && !!call.responseRef,
+        "fixed comparison requires terminal service error",
+      );
+      const error = JSON.parse(app.blobs.read(call.responseRef)) as { message?: string };
+      check(
+        /^(500|502|503|504)\b/.test(error.message ?? ""),
+        "parent failure is not a service 5xx",
+      );
+    }
+    const parentSnapshot =
+      opts.stage === "fixed-output"
+        ? prior.metrics!.find((c) => c.id === "v1-t512-d0")!.snapshotId
+        : (prior.selection?.snapshotId ?? prior.selected!.snapshotId);
     const base = app.kernel.resolveSnapshot(parentSnapshot);
     const routing = base.versions.get("routing-policy")!;
     const old = parseLlmDemosPolicy(JSON.parse(app.blobs.read(routing.contentRef)));
@@ -214,7 +248,12 @@ export function prepareDiagnosticRunner(
         }
     }
     let selectedConditions = conditions;
-    if (opts.stage === "confirmation") {
+    if (opts.stage === "fixed-output") {
+      selectedConditions = [
+        conditions.find((c) => c.id === "v1-t512-d0")!,
+        conditions.find((c) => c.id === "v1-t256-d0")!,
+      ];
+    } else if (opts.stage === "confirmation") {
       const chosen = prior.selected!;
       const controlId = chosen.demos
         ? `v${chosen.layout}-t${chosen.output}-d0`
@@ -255,18 +294,20 @@ export function prepareDiagnosticRunner(
         old.fixed.basePolicy.content.model === parentManifest.model,
       "parent service/model changed",
     );
-    const data = diagnosticDataset(opts.stage);
+    const stage = opts.stage === "fixed-output" ? "confirmation" : opts.stage;
+    const data = diagnosticDataset(stage);
     const frozen = experiment.register({
-      protocol: "routing-diagnostic-v1",
-      stage: opts.stage,
+      protocol: opts.stage === "fixed-output" ? "routing-fixed-output-v1" : "routing-diagnostic-v1",
+      ...(opts.stage === "fixed-output" ? { maxService5xx: 2 } : {}),
+      stage,
       mode: opts.mode,
       sourceCommit: opts.sourceCommit,
       seed: 20261028,
       serviceId: prov.serviceId,
       adapter: prov.adapter,
       model: old.fixed.basePolicy.content.model,
-      repeats: opts.small ? 1 : opts.stage === "matrix" ? 2 : 3,
-      cases: opts.small ? [data[0]!, data[opts.stage === "confirmation" ? 2 : 1]!] : data,
+      repeats: opts.small ? 1 : stage === "matrix" ? 2 : 3,
+      cases: opts.small ? [data[0]!, data[stage === "confirmation" ? 2 : 1]!] : data,
       conditions: selectedConditions,
       prior: {
         experimentId: meta.id,

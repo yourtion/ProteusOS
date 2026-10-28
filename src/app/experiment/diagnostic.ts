@@ -34,7 +34,8 @@ const conditionSchema = z.strictObject({
   snapshotDigest: sha,
 });
 const planSchema = z.strictObject({
-  protocol: z.literal("routing-diagnostic-v1"),
+  protocol: z.enum(["routing-diagnostic-v1", "routing-fixed-output-v1"]),
+  maxService5xx: z.literal(2).optional(),
   stage: z.enum(["matrix", "confirmation"]),
   mode: z.enum(["real", "fixture"]),
   sourceCommit: id,
@@ -129,6 +130,28 @@ export function diagnosticSlots(plan: DiagnosticPlan) {
 }
 export function freezeDiagnosticPlan(input: unknown) {
   const plan = planSchema.parse(input);
+  check(
+    (plan.protocol === "routing-fixed-output-v1") === (plan.maxService5xx === 2),
+    "explicit fixed-output failure policy required",
+  );
+  if (plan.protocol === "routing-fixed-output-v1") {
+    check(
+      plan.stage === "confirmation" &&
+        same(
+          plan.conditions.map((c) => ({
+            id: c.id,
+            layout: c.layout,
+            output: c.output,
+            demos: c.demos,
+          })),
+          [
+            { id: "v1-t512-d0", layout: 1, output: 512, demos: 0 },
+            { id: "v1-t256-d0", layout: 1, output: 256, demos: 0 },
+          ],
+        ),
+      "fixed output comparison conditions drift",
+    );
+  }
   check(new Set(plan.cases.map((c) => c.id)).size === plan.cases.length, "duplicate case");
   check(
     new Set(plan.conditions.map((c) => c.id)).size === plan.conditions.length,
@@ -411,10 +434,23 @@ export class DiagnosticExperiment {
           );
           return result;
         } catch (error) {
+          const status =
+            typeof error === "object" && error !== null
+              ? (error as { status?: unknown }).status
+              : null;
           this.app.storage.tx(() =>
             this.append(
               "transport-unknown",
-              { errorType: error instanceof Error ? error.name : "UnknownError" },
+              {
+                errorType: error instanceof Error ? error.name : "UnknownError",
+                httpStatus:
+                  typeof status === "number" &&
+                  Number.isInteger(status) &&
+                  status >= 100 &&
+                  status <= 599
+                    ? status
+                    : null,
+              },
               lease.runId,
             ),
           );
@@ -494,10 +530,24 @@ export class DiagnosticExperiment {
           admitted.runId,
         );
       });
-      check(
-        receipt.meteringComplete && receipt.serviceEvidenceComplete,
-        "unknown/over-limit usage or missing service metadata; stop without retry",
-      );
+      if (!receipt.meteringComplete || !receipt.serviceEvidenceComplete) {
+        const current = state(this.app, this.id);
+        const errors = current.log.filter(
+          (e) =>
+            e.type === "diagnostic.transport-unknown" &&
+            [500, 502, 503, 504].includes(e.payload.httpStatus as number),
+        );
+        const tolerated =
+          current.frozen.plan.protocol === "routing-fixed-output-v1" &&
+          receipt.decision === "transport_error" &&
+          errors.some((e) => e.runId === receipt.runId) &&
+          errors.length <= 2 &&
+          current.log.some((e) => e.type === "diagnostic.sending" && e.runId === receipt.runId);
+        check(
+          tolerated,
+          "unknown/over-limit usage or missing service metadata; stop without retry",
+        );
+      }
       return receipt;
     } catch (error) {
       this.stop(error instanceof Error ? error.message : "unknown");
@@ -826,6 +876,18 @@ export class DiagnosticExperiment {
       metrics,
       selected,
       confirmationPassed,
+      ...(p.protocol === "routing-fixed-output-v1"
+        ? {
+            selectionSource: "prespecified-output-comparison",
+            service5xxPolicy: "up-to-two-failed-slots-counted-unknown-no-retry",
+            descriptiveQualityGate:
+              !!dispatchComplete &&
+              metrics[0]!.jsonValidRate >= 0.95 - 1e-12 &&
+              metrics[0]!.successRate >= 0.9 - 1e-12 &&
+              metrics[0]!.criticalFailures === 0 &&
+              metrics[0]!.successRate - metrics[1]!.successRate >= 0.05 - 1e-12,
+          }
+        : {}),
       receipts,
       partialRuns: s.admitted
         .filter((a) => !a.closed)

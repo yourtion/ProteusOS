@@ -1,0 +1,9 @@
+{
+  "sha256": "c46ba5b4e4a0c9f3a62cee82a202993ef19d7be9ee987e4b8b5aa5d621e9a8cc",
+  "bytes": 3620014,
+  "sourceCommit": "2e198f03c7e20b0b5c17e2f1846acfac494b514d",
+  "reportDigest": "097802ea5f01be6a21afcb97cd78e7aea36ba50c2d80877e62b17d727ca10314",
+  "cleanReopenReplay": "passed",
+  "parentUnchanged": true,
+  "parentObservedEventsUnchanged": 5656
+}

@@ -18,7 +18,7 @@ import type { DecisionRequest, DecisionResult } from "../../src/decision/index.t
 class Model extends LlmDecisionProvider {
   count = 100;
   calls = 0;
-  fault: "none" | "drift" | "lost" | "budget" | "all-empty" = "none";
+  fault: "none" | "drift" | "lost" | "budget" | "all-empty" | "service5xx" = "none";
   constructor() {
     super({ apiKey: "NO_NETWORK", baseUrl: "https://open.bigmodel.cn/api/anthropic" });
   }
@@ -27,6 +27,8 @@ class Model extends LlmDecisionProvider {
   }
   override async decide(r: DecisionRequest): Promise<DecisionResult> {
     this.calls++;
+    if (this.fault === "service5xx")
+      throw Object.assign(new Error("503 overloaded"), { status: 503 });
     if (this.fault === "lost") throw new Error("lost service response");
     const c = [...diagnosticDataset("matrix"), ...diagnosticDataset("confirmation")].find(
       (c) => c.task.goal === r.view!.goal,
@@ -74,7 +76,7 @@ afterEach(() => {
 afterAll(() => rmSync(parent, { recursive: true, force: true }));
 function fixture(
   mode: Model["fault"] = "none",
-  opts?: { parent?: string; stage?: "confirmation"; small?: boolean },
+  opts?: { parent?: string; stage?: "confirmation" | "fixed-output"; small?: boolean },
 ) {
   const out = mkdtempSync(join(tmpdir(), "proteus-diagnostic-test-"));
   roots.push(out);
@@ -99,8 +101,71 @@ function close(app: AppInstance) {
   opened.delete(app);
   app.close();
 }
+async function stoppedServiceParent() {
+  const h = fixture("service5xx");
+  await expect(h.experiment.runNext()).rejects.toThrow(/stop without retry/);
+  const report = h.experiment.report();
+  writeFileSync(join(h.out, "run.json"), JSON.stringify({ id: h.id }));
+  writeFileSync(join(h.out, "manifest.json"), canonicalJson(h.frozen.plan));
+  writeFileSync(join(h.out, "report.json"), canonicalJson(report));
+  writeFileSync(
+    join(h.out, "summary.json"),
+    JSON.stringify({ reportDigest: digestOf(canonicalJson(report)) }),
+  );
+  close(h.app);
+  return h;
+}
 
 describe("O2 原始诊断：冻结额度、同正文计数和受约束执行", () => {
+  it("独立固定额度轮可保留两次 5xx 后完成其他槽位，旧矩阵保持失败且不重发", async () => {
+    const parent = await stoppedServiceParent();
+    const h = fixture("service5xx", { parent: parent.out, stage: "fixed-output" });
+    expect((await h.experiment.runNext())!.decision).toBe("transport_error");
+    expect((await h.experiment.runNext())!.decision).toBe("transport_error");
+    h.transport.fault = "none";
+    const r = await finish(h);
+    expect(r).toMatchObject({
+      protocol: "routing-fixed-output-v1",
+      dispatchComplete: true,
+      engineering: "incomplete",
+      unknownUsageCalls: 2,
+      completedRuns: 4,
+      totalModelCallsIncludingHistory: 798,
+      totalUnknownUsageCallsIncludingHistory: 4,
+      confirmationPassed: false,
+    });
+    expect(r.metrics.map((c) => c.id)).toEqual(["v1-t512-d0", "v1-t256-d0"]);
+    expect(h.transport.calls).toBe(4);
+    expect(parent.transport.calls).toBe(1);
+  });
+  it("独立固定额度轮第三次 5xx 停止，不补齐或返还未知占用", async () => {
+    const parent = await stoppedServiceParent();
+    const h = fixture("service5xx", { parent: parent.out, stage: "fixed-output" });
+    await h.experiment.runNext();
+    await h.experiment.runNext();
+    await expect(h.experiment.runNext()).rejects.toThrow(/stop without retry/);
+    expect(h.experiment.report()).toMatchObject({
+      completedRuns: 3,
+      sentModelCalls: 3,
+      unknownUsageCalls: 3,
+      dispatchComplete: false,
+    });
+    expect(await h.experiment.runNext()).toBeNull();
+    expect(h.transport.calls).toBe(3);
+  });
+  it("计数阶段 5xx 不在容错范围，不能生成或重发", async () => {
+    const parent = await stoppedServiceParent();
+    const h = fixture("none", { parent: parent.out, stage: "fixed-output" });
+    h.transport.countInputTokens = () =>
+      Promise.reject(Object.assign(new Error("503 count failed"), { status: 503 }));
+    await expect(h.experiment.runNext()).rejects.toThrow(/stop without retry/);
+    expect(h.experiment.report()).toMatchObject({
+      reservedModelCalls: 1,
+      sentModelCalls: 0,
+      dispatchComplete: false,
+    });
+    expect(h.transport.calls).toBe(0);
+  });
   it("首十六次无有效 value 即停止，完整分母保留，不追加或重发", async () => {
     const h = fixture("all-empty", { small: false });
     while (await h.experiment.runNext()) {}

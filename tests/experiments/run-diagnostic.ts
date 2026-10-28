@@ -27,7 +27,7 @@ if (args[0] === "--report" && args.length === 2) {
 } else {
   if (!["--fixture", "--real"].includes(args[0] ?? ""))
     throw new Error(
-      "Use --real|--fixture --output NEW_DIR --parent SEALED_DIR --stage matrix|confirmation [--claude-settings FILE]",
+      "Use --real|--fixture --output NEW_DIR --parent SEALED_DIR --stage matrix|confirmation|fixed-output [--claude-settings FILE]",
     );
   const extra = new Map<string, string>();
   for (let i = 1; i < args.length; i += 2) {
@@ -43,7 +43,8 @@ if (args[0] === "--report" && args.length === 2) {
   const output = resolve(extra.get("--output")!);
   const parent = resolve(extra.get("--parent")!);
   const stage = extra.get("--stage");
-  if (stage !== "matrix" && stage !== "confirmation") throw new Error("invalid stage");
+  if (stage !== "matrix" && stage !== "confirmation" && stage !== "fixed-output")
+    throw new Error("invalid stage");
   const mode = args[0] === "--real" ? "real" : "fixture";
   const sourceCommit = execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim();
   const sourceTreeDirty = !!execFileSync("git", ["status", "--porcelain"], {
@@ -51,7 +52,7 @@ if (args[0] === "--report" && args.length === 2) {
   }).trim();
   if (mode === "real" && sourceTreeDirty)
     throw new Error("Commit implementation before real generation");
-  const fixtureDataset = diagnosticDataset(stage);
+  const fixtureDataset = diagnosticDataset(stage === "fixed-output" ? "confirmation" : stage);
   class Fixture extends LlmDecisionProvider {
     readonly labels = new Map(fixtureDataset.map((c) => [c.task.goal, c.expectedChoice]));
     constructor() {
