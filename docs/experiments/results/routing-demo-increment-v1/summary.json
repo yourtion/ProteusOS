@@ -1,0 +1,112 @@
+{
+  "protocol": "routing-demo-increment-v1",
+  "stage": "confirmation",
+  "mode": "real",
+  "manifestDigest": "25bc917533b216d4b1f1d4c9dd14b1dd1b8933011f99e1252a093e69cbe45165",
+  "sourceCommit": "42450cdd172bf8013a0e786def886d70851869ba",
+  "dispatchComplete": true,
+  "engineering": "passed",
+  "engineeringScope": "current-stage-only",
+  "benefit": "inconclusive",
+  "formalEvaluation": "not_run",
+  "adoption": "not_run",
+  "inputHardBound": "unverified",
+  "semanticIndependence": "unverified",
+  "plannedRuns": 120,
+  "completedRuns": 120,
+  "reservedModelCalls": 120,
+  "sentModelCalls": 120,
+  "countRequests": 120,
+  "reservedInputTokens": 245760,
+  "reservedOutputTokens": 122880,
+  "knownInputTokens": 70044,
+  "knownOutputTokens": 24942,
+  "unknownUsageCalls": 0,
+  "unverifiedUsageCalls": 0,
+  "unknownCostItems": 235,
+  "totalUnknownCostItemsIncludingHistory": 3202,
+  "fiatCost": "unknown",
+  "prior": {
+    "experimentId": "diag:fbbe77c5-6158-4537-9ec1-2a49a336476a",
+    "report": {
+      "ref": "a3/a3ef7ff32f6b75fbd2e9d5652cc76c5c64b43c11e566cb2fc17dfabc81cfe2ad",
+      "digest": "a3ef7ff32f6b75fbd2e9d5652cc76c5c64b43c11e566cb2fc17dfabc81cfe2ad"
+    },
+    "modelCalls": 1295,
+    "inputTokens": 497899,
+    "outputTokens": 290642,
+    "unknownUsageCalls": 2,
+    "unknownCostItems": 2967,
+    "instanceModelReservations": 1292
+  },
+  "totalModelCallsIncludingHistory": 1415,
+  "totalKnownInputTokensIncludingHistory": 567943,
+  "totalKnownOutputTokensIncludingHistory": 315584,
+  "totalUnknownUsageCallsIncludingHistory": 2,
+  "activeUnchanged": true,
+  "stopReason": null,
+  "elapsedMs": 784473,
+  "metrics": [
+    {
+      "id": "v2-t1024-d0",
+      "layout": 2,
+      "output": 1024,
+      "demos": 0,
+      "snapshotId": "01a182a4-2b18-7272-b3f7-665bb854dc3b",
+      "snapshotDigest": "5b481483aeffbf265e1262cc8267b7d62222d4d0818411a8995c0c9996e7c142",
+      "planned": 60,
+      "completed": 60,
+      "accepted": 60,
+      "successRate": 1,
+      "jsonValidRate": 1,
+      "misrouteRate": 0,
+      "knownInputTokens": 26292,
+      "knownOutputTokens": 11436,
+      "stopReasons": {
+        "end_turn": 60
+      },
+      "criticalFailures": 0
+    },
+    {
+      "id": "v2-t1024-d2",
+      "layout": 2,
+      "output": 1024,
+      "demos": 2,
+      "snapshotId": "01a182b1-f171-756b-8dcb-0a283ff7c87f",
+      "snapshotDigest": "9cc6baf7019c5911b608b3d498d5d545a80f9d3943a973d2fdecabd85cbf7c09",
+      "planned": 60,
+      "completed": 60,
+      "accepted": 55,
+      "successRate": 0.9166666666666666,
+      "jsonValidRate": 0.9666666666666666,
+      "misrouteRate": 0,
+      "knownInputTokens": 43752,
+      "knownOutputTokens": 13506,
+      "stopReasons": {
+        "end_turn": 58,
+        "max_tokens": 2
+      },
+      "criticalFailures": 0
+    }
+  ],
+  "selected": null,
+  "confirmationPassed": false,
+  "selectionSource": "prespecified-factor-comparison",
+  "qualityGates": [
+    {
+      "conditionId": "v2-t1024-d0",
+      "passed": true
+    },
+    {
+      "conditionId": "v2-t1024-d2",
+      "passed": true
+    }
+  ],
+  "developmentRecommendation": "v2-t1024-d0",
+  "service5xxPolicy": "up-to-two-failed-slots-counted-unknown-no-retry",
+  "id": "diag:7d4424d1-9030-44cd-8b62-3a0abe9022b9",
+  "sourceTreeDirty": false,
+  "reportDigest": "68c020d1b9c347c54531f8b4891e8aaafadf3aa1746a73d32ccae79d7eb0a77a",
+  "cleanReopenReplay": "passed",
+  "failure": null
+}
