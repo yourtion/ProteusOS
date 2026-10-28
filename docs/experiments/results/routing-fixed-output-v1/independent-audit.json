@@ -1,0 +1,44 @@
+{
+  "scope": "post-hoc-completed-fixed-output-observation",
+  "metrics": {
+    "v1-t512-d0": {
+      "accepted": 56,
+      "planned": 60,
+      "medianRunMs": 7020.5,
+      "p95RunMs": 14037,
+      "cumulativeRunMs": 474515,
+      "knownInputTokens": 18876,
+      "knownOutputTokens": 15841,
+      "invalidOutput": 4,
+      "criticalFailures": 0
+    },
+    "v1-t256-d0": {
+      "accepted": 40,
+      "planned": 60,
+      "medianRunMs": 6844.0,
+      "p95RunMs": 9155,
+      "cumulativeRunMs": 409769,
+      "knownInputTokens": 18876,
+      "knownOutputTokens": 12779,
+      "invalidOutput": 20,
+      "criticalFailures": 2
+    }
+  },
+  "sha256VerifiedBlobs": 3479,
+  "sqliteIntegrity": "ok",
+  "foreignKeyViolations": 0,
+  "uniqueCurrentRuns": 120,
+  "uniqueCurrentDecisionCalls": 120,
+  "currentUnknownUsageCalls": 0,
+  "historicalUnknownUsageCalls": 2,
+  "reportDigest": "a788e6b84c415b8f2e9bed25f9569c5aa0dab86d5f74207e16d700f43ef94ecd",
+  "manifestDigest": "c40b23fd0e0ae92a947908e87175651c59b987886e956ea238173b4fdcca80fb",
+  "effect": {
+    "successRateDeltaPercentagePoints": 26.666666666666668,
+    "maxTokenFailures256": 20,
+    "maxTokenFailures512": 4,
+    "failureReductionFraction": 0.8,
+    "additionalOutputTokens": 3062,
+    "outputTokenIncreaseFraction": 0.23961186321308398
+  }
+}

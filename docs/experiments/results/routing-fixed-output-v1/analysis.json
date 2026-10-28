@@ -1,0 +1,54 @@
+{
+  "scope": "post-hoc-descriptive-factorial-comparison",
+  "stage": "confirmation",
+  "completed": 120,
+  "planned": 120,
+  "metrics": {
+    "v1-t512-d0": {
+      "completed": 60,
+      "planned": 60,
+      "accepted": 56,
+      "jsonValid": 56,
+      "invalidOutput": 4,
+      "abstain": 0,
+      "knownInputTokens": 18876,
+      "knownOutputTokens": 15841,
+      "emptyOutput": 4,
+      "stopReasons": {
+        "end_turn": 56,
+        "max_tokens": 4
+      }
+    },
+    "v1-t256-d0": {
+      "completed": 60,
+      "planned": 60,
+      "accepted": 40,
+      "jsonValid": 40,
+      "invalidOutput": 20,
+      "abstain": 0,
+      "knownInputTokens": 18876,
+      "knownOutputTokens": 12779,
+      "emptyOutput": 18,
+      "stopReasons": {
+        "end_turn": 40,
+        "max_tokens": 20
+      }
+    }
+  },
+  "pairedComparisons": {
+    "layout": [],
+    "output": [
+      {
+        "from": "v1-t256-d0",
+        "to": "v1-t512-d0",
+        "paired": 60,
+        "bothSucceeded": 40,
+        "fromOnly": 0,
+        "toOnly": 16,
+        "bothFailed": 4
+      }
+    ],
+    "demos": []
+  },
+  "unknownUsageCalls": 0
+}
