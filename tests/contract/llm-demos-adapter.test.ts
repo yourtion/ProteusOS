@@ -16,10 +16,14 @@ import {
 import { canonicalJson, digestOf } from "../../src/storage/blobs.ts";
 import { llmDemosRequest } from "../fixtures/decision/llm-demos.ts";
 
-const sdk = vi.hoisted(() => ({ create: vi.fn(), options: {} as Record<string, unknown> }));
+const sdk = vi.hoisted(() => ({
+  create: vi.fn(),
+  countTokens: vi.fn(),
+  options: {} as Record<string, unknown>,
+}));
 vi.mock("@anthropic-ai/sdk", () => ({
   default: class {
-    messages = { create: sdk.create };
+    messages = { create: sdk.create, countTokens: sdk.countTokens };
     constructor(options: Record<string, unknown>) {
       sdk.options = options;
     }
@@ -28,6 +32,7 @@ vi.mock("@anthropic-ai/sdk", () => ({
 
 beforeEach(() => {
   sdk.create.mockReset();
+  sdk.countTokens.mockReset();
   sdk.create.mockResolvedValue({
     model: "served-fixed-model",
     stop_reason: "end_turn",
@@ -37,6 +42,24 @@ beforeEach(() => {
 });
 
 describe("LLM Adapter：保持 v1，消费 v2 的冻结正文", () => {
+  it("计数使用同一冻结消息且不生成；无效计数或服务失败不回退估算", async () => {
+    const p = new LlmDecisionProvider({ apiKey: "NEVER_PERSIST_API_KEY" });
+    const r = llmDemosRequest();
+    r.prepared = p.prepareRequest(r);
+    sdk.countTokens.mockResolvedValueOnce({ input_tokens: 123 });
+    expect(await p.countInputTokens(r)).toBe(123);
+    const b = r.prepared!.body;
+    expect(sdk.countTokens).toHaveBeenCalledWith(
+      { model: b.model, system: b.system, messages: b.messages },
+      { signal: r.signal },
+    );
+    expect(sdk.create).not.toHaveBeenCalled();
+    sdk.countTokens.mockResolvedValueOnce({ input_tokens: -1 });
+    await expect(p.countInputTokens(r)).rejects.toThrow(/invalid_service/);
+    sdk.countTokens.mockRejectedValueOnce(new Error("unsupported"));
+    await expect(p.countInputTokens(r)).rejects.toThrow("unsupported");
+    expect(sdk.create).not.toHaveBeenCalled();
+  });
   it("旧策略逐字段保持原请求和 promptDigest，关闭 SDK 重试并传递 signal", async () => {
     const provider = new LlmDecisionProvider({
       apiKey: "NEVER_PERSIST_API_KEY",

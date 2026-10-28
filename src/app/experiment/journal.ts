@@ -18,6 +18,7 @@ import {
   type AdaptiveRunReceipt,
 } from "./run-receipt.ts";
 import type { StoredExecutionEvidence } from "../../runtime/execution-evidence.ts";
+import { modelFreeUsage } from "../../runtime/model-free.ts";
 
 interface JournalDeps {
   /** 在调用者的读/写事务内推导，无网络或额外事务。 */
@@ -571,10 +572,11 @@ export class AdaptiveJournal {
           const matches = events.filter((event) => event.attemptId === attempt.id);
           if (matches.length > 1) throw new Error("未结 Attempt 计量证据重复");
           const evidence = matches[0]?.payload["evidence"] as StoredExecutionEvidence | undefined;
+          const bounded = modelFreeUsage(evidence, this.deps.blobs);
           unsettled.push({
             ref: `attempt:${attempt.id}`,
             kind: "execution",
-            modelCalls: null,
+            modelCalls: bounded?.modelCalls ?? null,
             usage: evidence?.usage ?? null,
           });
         }

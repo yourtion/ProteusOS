@@ -1,6 +1,7 @@
 import { lstatSync, readdirSync, readFileSync, readlinkSync } from "node:fs";
 import { join } from "node:path";
 import { canonicalJson, digestOf, type BlobStore } from "../storage/blobs.ts";
+import type { ModelFreeConstraint } from "./model-free.ts";
 
 export interface ExecutionUsage {
   inputTokens: number | null;
@@ -27,6 +28,7 @@ export interface ExecutionEvidence {
     detail: string | null;
   };
   usage: ExecutionUsage | null;
+  modelConstraint?: ModelFreeConstraint;
   stdoutTruncated: boolean;
   stderrTruncated: boolean;
 }
@@ -49,6 +51,7 @@ export interface StoredExecutionEvidence {
   droppedEvents: number;
   detail: string | null;
   usage: ExecutionUsage | null;
+  modelConstraint?: ModelFreeConstraint;
   stdoutTruncated: boolean;
   stderrTruncated: boolean;
 }
@@ -91,6 +94,7 @@ export class ExecutionTrace {
       stdoutTruncated?: boolean;
       stderrTruncated?: boolean;
       detail?: string | null;
+      modelConstraint?: ModelFreeConstraint;
     } = {},
   ): ExecutionEvidence {
     const partial =
@@ -110,6 +114,7 @@ export class ExecutionTrace {
         detail: options.detail ?? (this.clipped ? "event_text_truncated" : null),
       },
       usage: options.usage ?? null,
+      ...(options.modelConstraint ? { modelConstraint: options.modelConstraint } : {}),
       stdoutTruncated: options.stdoutTruncated ?? false,
       stderrTruncated: options.stderrTruncated ?? false,
     };

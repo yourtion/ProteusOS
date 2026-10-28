@@ -17,6 +17,7 @@ import type { CompileJobRecord } from "../../evolution/compile-types.ts";
 import type { DecisionCallUsage } from "../../decision/call.ts";
 import type { StoredExecutionEvidence } from "../../runtime/execution-evidence.ts";
 import { readExecutionTrace } from "../../runtime/execution-evidence.ts";
+import { modelFreeUsage } from "../../runtime/model-free.ts";
 import { normalizeDag, parseGraph, validateDag } from "../../runtime/graph.ts";
 import { canonicalJson, digestOf } from "../../storage/blobs.ts";
 import {
@@ -434,11 +435,12 @@ export function readAdaptiveArm(deps: RunVerificationDeps, input: ArmEvidenceInp
         | undefined;
       if (value !== null && evidence) equal(evidence.executor, value, "选择与实际执行器");
       if (evidence) readExecutionTrace(evidence, deps.blobs);
+      const bounded = modelFreeUsage(evidence, deps.blobs);
       metering.push({
         ref: `attempt:${attempt.id}`,
         kind: "execution",
-        modelCalls: null,
-        usage: evidence?.usage ?? null,
+        modelCalls: bounded?.modelCalls ?? null,
+        usage: bounded?.usage ?? evidence?.usage ?? null,
       });
     }
     // 投票只看决策与执行状态，不读取 JSON passed 或私有 gold。

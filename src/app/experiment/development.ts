@@ -3,6 +3,7 @@ import { basename, join, posix } from "node:path";
 import { evaluationPlanDigest } from "../../evolution/index.ts";
 import type { CompilePlan } from "../../evolution/compile-types.ts";
 import type { TaskRecord } from "../../runtime/types.ts";
+import { modelFreeUsage } from "../../runtime/model-free.ts";
 import { canonicalJson, digestOf } from "../../storage/blobs.ts";
 import { auditCompileEvidence, type CompileEvidenceDeps } from "./compile-evidence.ts";
 import {
@@ -227,7 +228,8 @@ export function prepareCompileDevelopment(deps: CompileEvidenceDeps, jobId: stri
       if (attempt.startedAt === null || attempt.endedAt === null)
         throw new Error("来源 Attempt 缺少完整时间");
       const id = `compile-execution:${attempt.id}`;
-      bundle.unknownBoundUnits.push(id);
+      const bounded = modelFreeUsage(evidence, deps.blobs);
+      if (!bounded) bundle.unknownBoundUnits.push(id);
       add(
         c.caseId,
         {
@@ -247,7 +249,7 @@ export function prepareCompileDevelopment(deps: CompileEvidenceDeps, jobId: stri
           decision: null,
           misrouted: null,
           evidenceRefs: [`attempt:${attempt.id}`],
-          usage: { ...unknownUsage, ...evidence.usage },
+          usage: { ...unknownUsage, ...evidence.usage, modelCalls: bounded?.modelCalls ?? null },
         },
         {
           modelCalls: 0,

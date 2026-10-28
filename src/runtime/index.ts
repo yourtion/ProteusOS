@@ -2134,6 +2134,7 @@ export class Runtime {
       droppedEvents: supplied?.trace.droppedEvents ?? 0,
       detail: supplied?.trace.detail ?? (supplied ? null : "adapter_did_not_report_evidence"),
       usage: supplied?.usage ?? null,
+      ...(supplied?.modelConstraint ? { modelConstraint: supplied.modelConstraint } : {}),
       stdoutTruncated: supplied?.stdoutTruncated ?? false,
       stderrTruncated: supplied?.stderrTruncated ?? false,
     };
@@ -2346,9 +2347,29 @@ export class Runtime {
           this.deps.capabilitySandbox,
         );
         trace.record("capability.completed", { exitCode: result.exitCode });
+        if (result.modelConstraint)
+          trace.record("model.constraint", {
+            digest: digestOf(canonicalJson(result.modelConstraint)),
+          });
         return {
           ...result,
-          evidence: trace.finish("capability-process-v1", "lifecycle", result.exitCode !== null),
+          evidence: trace.finish(
+            "capability-process-v1",
+            "lifecycle",
+            result.exitCode !== null,
+            result.modelConstraint
+              ? {
+                  modelConstraint: result.modelConstraint,
+                  usage: {
+                    inputTokens: 0,
+                    outputTokens: 0,
+                    costAmount: null,
+                    costCurrency: null,
+                    priceRef: null,
+                  },
+                }
+              : {},
+          ),
         };
       },
     };

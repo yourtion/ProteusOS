@@ -71,6 +71,24 @@ export class LlmDecisionProvider implements DecisionProvider {
     return { problems: ["choice"] };
   }
 
+  /** 服务计数是独立的无生成请求；兼容服务不支持时拒绝，不回退为字符估算。 */
+  async countInputTokens(request: DecisionRequest): Promise<number> {
+    const body = isLlmDemosPolicy(request.policy.content)
+      ? resolveLlmDemosRequest(request)
+      : buildLlmChoiceBody(parseLlmPolicy(request.policy.content)!, request.view!, request.options);
+    const result = await this.client.messages.countTokens(
+      {
+        model: body.model,
+        system: body.system,
+        messages: body.messages,
+      },
+      { signal: request.signal },
+    );
+    if (!Number.isSafeInteger(result.input_tokens) || result.input_tokens < 0)
+      throw new Error("invalid_service_input_token_count");
+    return result.input_tokens;
+  }
+
   async decide(request: DecisionRequest): Promise<DecisionResult> {
     const provenance = { provider: this.name, policyVersion: request.policy.versionId };
     const demos = isLlmDemosPolicy(request.policy.content);

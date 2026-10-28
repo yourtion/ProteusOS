@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { realpathSync } from "node:fs";
 import { randomUUID } from "node:crypto";
+import type { ModelFreeConstraint } from "./model-free.ts";
 
 /**
  * 沙箱后端（M3 前置①：真隔离，ADR 0006 挂账兑现）。
@@ -30,6 +31,7 @@ export interface SandboxResult {
   stdout: string;
   stderr: string;
   durationMs: number;
+  modelConstraint?: ModelFreeConstraint;
 }
 
 export interface SandboxBackend {

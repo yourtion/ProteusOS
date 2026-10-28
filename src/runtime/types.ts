@@ -1,5 +1,6 @@
 import type { DecisionCallRecord } from "../decision/call.ts";
 import type { ExecutionEvidence, StoredExecutionEvidence } from "./execution-evidence.ts";
+import type { ModelFreeConstraint } from "./model-free.ts";
 
 /**
  * Runtime 领域类型与持久化 port。
@@ -333,6 +334,7 @@ export interface ExecutionRequest {
 }
 
 export interface ExecutionResult {
+  modelConstraint?: ModelFreeConstraint;
   ok: boolean;
   exitCode: number | null;
   stdout: string;

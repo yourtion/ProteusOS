@@ -142,6 +142,7 @@ export function runCapabilityModule(
       stdout: result.stdout,
       stderr: result.stderr,
       durationMs: result.durationMs,
+      ...(result.modelConstraint ? { modelConstraint: result.modelConstraint } : {}),
       outputRef: result.exitCode === 0 ? outputRef : null,
     };
   }
