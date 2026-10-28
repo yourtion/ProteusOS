@@ -1,4 +1,4 @@
-import { cpSync, existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdtempSync, readFileSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
@@ -23,13 +23,17 @@ import { REPO_ROOT, tempInstanceRoot } from "../helpers.ts";
  * - D15 旧实例迁移（v4→v5）与旧 decision.recorded 恢复
  */
 
-const PLUMBING = join(REPO_ROOT, "tests/fixtures/decision/plumbing");
-const DEV = join(REPO_ROOT, "tests/fixtures/decision/dev");
+const dataset = mkdtempSync(join(tmpdir(), "proteus-decision-data-"));
+const PLUMBING = join(dataset, "plumbing");
+const DEV = join(dataset, "dev");
+cpSync(join(REPO_ROOT, "tests/fixtures/decision/plumbing"), PLUMBING, { recursive: true });
+cpSync(join(REPO_ROOT, "tests/fixtures/decision/dev"), DEV, { recursive: true });
 
 const home = tempInstanceRoot();
 const out = mkdtempSync(join(tmpdir(), "proteus-exp-out-"));
 
 afterAll(() => {
+  rmSync(dataset, { recursive: true, force: true });
   // 临时实例与输出目录由系统清理
 });
 
@@ -155,6 +159,9 @@ describe("D11：数据漂移与证据缺失 → 复算失败并指出漂移", ()
     const original = readFileSync(target, "utf8");
     writeFileSync(target, `${original}被篡改的内容\n`);
     try {
+      expect(
+        readFileSync(join(REPO_ROOT, "tests/fixtures/decision/dev/bundles/b01/file-a.md"), "utf8"),
+      ).toBe(original);
       const outcome = report();
       expect(outcome.engineering).toBe("failed");
       expect(outcome.problems.some((p) => p.includes("摘要漂移"))).toBe(true);
