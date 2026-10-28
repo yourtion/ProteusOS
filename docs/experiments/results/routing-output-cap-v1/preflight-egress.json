@@ -1,0 +1,11 @@
+{
+  "scope": "preflight-egress-comparison",
+  "all120RequestBodiesIdenticalToPriorRealExceptMaxTokens": true,
+  "all20TasksIdenticalToPriorReal": true,
+  "dataOrigin": "synthetic diagnosticDataset(confirmation) generated in repository",
+  "egress": "synthetic routing goal, fixed capability descriptions, synthetic input filenames and byte counts; no file bodies, labels, repository source, or personal data",
+  "endpointUnchanged": "https://open.bigmodel.cn/api/anthropic",
+  "credentialHandling": "explicit previously-authorized settings file; memory only; standard authorization header to same service",
+  "newGenerationLimit": 120,
+  "realProcessStarted": false
+}

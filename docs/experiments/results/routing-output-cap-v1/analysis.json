@@ -1,0 +1,52 @@
+{
+  "scope": "developer-visible-observation-no-independent-benefit",
+  "paired": {
+    "paired": 60,
+    "bothSucceeded": 59,
+    "only1024": 1,
+    "only2048": 0,
+    "bothFailed": 0
+  },
+  "difference2048Minus1024": {
+    "accepted": -1,
+    "outputTokens": -624,
+    "outputFraction": -0.0385732830561909,
+    "p95RunMs": 2206
+  },
+  "failedReceipts": [
+    {
+      "accepted": false,
+      "callId": "01a18297-eec7-77dd-bc3a-e21ddbb97761",
+      "caseId": "diagnostic-confirmation-5-0",
+      "choice": null,
+      "conditionId": "v1-t2048-d0",
+      "decision": "abstain",
+      "executionAttempts": 0,
+      "familyId": "diagnostic-template-confirmation-5",
+      "inputTokens": 317,
+      "jsonValid": true,
+      "latencyMs": 30071,
+      "meteringComplete": true,
+      "misrouted": false,
+      "ordinal": 101,
+      "outputTokens": 1074,
+      "repeat": 3,
+      "responseDigest": "9b35c95e3ac701ee5e91e908e2425d572d2e53402b7896852a850b5cd11f8b2f",
+      "runId": "01a18297-eeba-7180-98ba-f73152823208",
+      "serviceEvidenceComplete": true,
+      "serviceResponse": {
+        "contentBlockTypes": [
+          "thinking",
+          "text"
+        ],
+        "stopReason": "end_turn",
+        "textBytes": 582,
+        "version": "llm-service-response-v1"
+      },
+      "verificationDigest": "2dc2677707979680f91ada5e2f0bd3c55691a756bf61d75321e5037c6326c3bd"
+    }
+  ],
+  "historical512": "reference only; different registered timeout; no paired causal cap claim",
+  "developmentRecommendation": "v1-t1024-d0",
+  "benefit": "inconclusive"
+}

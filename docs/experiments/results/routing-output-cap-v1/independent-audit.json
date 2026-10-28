@@ -1,0 +1,81 @@
+{
+  "scope": "sealed-developer-visible-output-cap-calibration",
+  "metrics": {
+    "v1-t1024-d0": {
+      "completed": 60,
+      "planned": 60,
+      "accepted": 60,
+      "jsonValid": 60,
+      "criticalFailures": 0,
+      "misroutes": 0,
+      "knownInputTokens": 18876,
+      "knownOutputTokens": 16177,
+      "medianOutputTokens": 218.5,
+      "maxObservedOutputTokens": 974,
+      "medianRunMs": 6072.5,
+      "p95RunMs": 13132,
+      "stopReasons": {
+        "end_turn": 60
+      },
+      "familyAccepted": {
+        "diagnostic-template-confirmation-0": 6,
+        "diagnostic-template-confirmation-1": 6,
+        "diagnostic-template-confirmation-2": 6,
+        "diagnostic-template-confirmation-3": 6,
+        "diagnostic-template-confirmation-4": 6,
+        "diagnostic-template-confirmation-5": 6,
+        "diagnostic-template-confirmation-6": 6,
+        "diagnostic-template-confirmation-7": 6,
+        "diagnostic-template-confirmation-8": 6,
+        "diagnostic-template-confirmation-9": 6
+      }
+    },
+    "v1-t2048-d0": {
+      "completed": 60,
+      "planned": 60,
+      "accepted": 59,
+      "jsonValid": 60,
+      "criticalFailures": 0,
+      "misroutes": 0,
+      "knownInputTokens": 18876,
+      "knownOutputTokens": 15553,
+      "medianOutputTokens": 210.5,
+      "maxObservedOutputTokens": 1074,
+      "medianRunMs": 5985.5,
+      "p95RunMs": 15338,
+      "stopReasons": {
+        "end_turn": 60
+      },
+      "familyAccepted": {
+        "diagnostic-template-confirmation-0": 6,
+        "diagnostic-template-confirmation-1": 6,
+        "diagnostic-template-confirmation-2": 6,
+        "diagnostic-template-confirmation-3": 6,
+        "diagnostic-template-confirmation-4": 6,
+        "diagnostic-template-confirmation-5": 5,
+        "diagnostic-template-confirmation-6": 6,
+        "diagnostic-template-confirmation-7": 6,
+        "diagnostic-template-confirmation-8": 6,
+        "diagnostic-template-confirmation-9": 6
+      }
+    }
+  },
+  "paired": {
+    "paired": 60,
+    "bothSucceeded": 59,
+    "only1024": 1,
+    "only2048": 0,
+    "bothFailed": 0
+  },
+  "sha256VerifiedBlobs": 3983,
+  "sqliteIntegrity": "ok",
+  "foreignKeyViolations": 0,
+  "uniqueCurrentRuns": 120,
+  "uniqueCurrentDecisionCalls": 120,
+  "currentUnknownUsageCalls": 0,
+  "historicalUnknownUsageCalls": 2,
+  "parentEventsUnchanged": 842,
+  "allRequestBodiesEqualExceptOutputCap": true,
+  "reportDigest": "9aeaae7ff5b769743c1e63207a9e165ef61532e55d885a8544d83a1d8b6e16b2",
+  "manifestDigest": "ff0964471dd3ac6491e8cb6541a9ad4d3fbadcf06067b702b6aeffab8b979318"
+}

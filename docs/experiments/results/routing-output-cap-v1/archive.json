@@ -1,0 +1,11 @@
+{
+  "archive": "evidence.tar.gz",
+  "sha256": "f97c57a73c67271bb529abbee6cc983fe05a3c9c6e11f0f343b2329d5006f058",
+  "bytes": 4358574,
+  "sourceCommit": "0647295e8c93f1d24c6c387876f8350e39f49c83",
+  "reportDigest": "9aeaae7ff5b769743c1e63207a9e165ef61532e55d885a8544d83a1d8b6e16b2",
+  "parentFixedOutputEventsUnchanged": 842,
+  "credentialsIncluded": false,
+  "extractedReportReplay": "passed-deep-equal",
+  "extractedAuditReplay": "passed-deep-equal"
+}
