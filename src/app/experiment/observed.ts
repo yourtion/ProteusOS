@@ -28,6 +28,7 @@ import {
   OBSERVED_ARMS,
   type ObservedPlan,
   type ObservedSlot,
+  type FrozenObservedPlan,
 } from "./observed-plan.ts";
 
 type Deps = Pick<AppInstance, "storage" | "kernel" | "blobs">;
@@ -59,7 +60,19 @@ function events(deps: Deps, id: string) {
     .listEvents({ streamId: stream(id) }, Number.MAX_SAFE_INTEGER)
     .sort((a, b) => a.seq - b.seq);
 }
-function state(deps: Deps, id: string) {
+interface ObservedState {
+  log: EventRecord[];
+  callLog: EventRecord[];
+  frozen: FrozenObservedPlan;
+  slots: SlotState[];
+  configs: { base: string; demo: string; demoDigest: string } | undefined;
+  selection: { snapshotId: string; kind: string } | undefined;
+  terminal: EventRecord | undefined;
+  organismId: string;
+  deadlineAt: number;
+  importedCount: number;
+}
+function state(deps: Deps, id: string): ObservedState {
   const log = events(deps, id);
   check(log[0]?.type === "observed.registered", "unregistered experiment");
   const plan = read<ObservedPlan>(deps, log[0]!.payload.plan as Blob);
@@ -74,8 +87,36 @@ function state(deps: Deps, id: string) {
   let configs: { base: string; demo: string; demoDigest: string } | undefined;
   let selection: { snapshotId: string; kind: string } | undefined;
   let terminal: EventRecord | undefined;
+  let importedCount = 0;
+  let inheritedLog: EventRecord[] = [];
   for (const e of log.slice(1)) {
-    if (e.type === "observed.admitted") {
+    if (e.type === "observed.imported-prefix") {
+      const ref = plan.continuedFrom;
+      check(
+        ref && ref.experimentId !== id && !slots.length && e.payload.parentId === ref.experimentId,
+        "invalid continuation parent",
+      );
+      const parent = state(deps, ref.experimentId);
+      check(
+        parent.frozen.plan.protocol === "adaptive-observed-v2" &&
+          parent.frozen.digest === ref.manifestDigest &&
+          parent.terminal &&
+          parent.slots.every((r) => r.closed),
+        "parent must be a sealed v2 prefix",
+      );
+      check(e.payload.count === parent.slots.length, "parent prefix length drift");
+      check(
+        ref.prefixLength === parent.slots.length &&
+          ref.configurationDigest === digestOf(canonicalJson(parent.configs ?? null)) &&
+          ref.selectionDigest === digestOf(canonicalJson(parent.selection ?? null)),
+        "frozen continuation configuration drift",
+      );
+      slots.push(...parent.slots.map((r) => ({ ...r })));
+      configs = parent.configs;
+      selection = parent.selection;
+      importedCount = slots.length;
+      inheritedLog = parent.callLog;
+    } else if (e.type === "observed.admitted") {
       check(
         e.payload.ordinal === slots.length &&
           !terminal &&
@@ -120,6 +161,8 @@ function state(deps: Deps, id: string) {
   }
   return {
     log,
+    callLog: [...inheritedLog, ...log],
+    importedCount,
     frozen,
     slots,
     configs,
@@ -249,6 +292,30 @@ export class ObservedExperiment {
     this.access();
     const f = freezeObservedPlan(input);
     const blob = this.app.blobs.write(canonicalJson(f.plan));
+    const parent = f.plan.continuedFrom
+      ? state(this.app, f.plan.continuedFrom.experimentId)
+      : undefined;
+    if (parent) {
+      check(
+        parent.frozen.plan.protocol === "adaptive-observed-v2" &&
+          parent.terminal &&
+          parent.slots.every((s) => s.closed),
+        "continuation requires a closed prefix without in-flight Runs",
+      );
+      const { continuedFrom, ...plain } = f.plan;
+      check(
+        same(
+          {
+            ...plain,
+            protocol: parent.frozen.plan.protocol,
+            sourceCommit: parent.frozen.plan.sourceCommit,
+          },
+          parent.frozen.plan,
+        ),
+        "continuation cannot change model/data/policies/selector/limits",
+      );
+      check(continuedFrom!.manifestDigest === parent.frozen.digest, "continuation manifest drift");
+    }
     this.app.storage.tx(() => {
       check(events(this.app, this.id).length === 0, "already registered; never overwrite/restart");
       for (const snapshot of Object.values(f.plan.snapshots))
@@ -259,13 +326,59 @@ export class ObservedExperiment {
         manifestDigest: f.digest,
         active: this.app.kernel.getOrganism(this.organismId)!.activeGenomeId,
       });
+      if (parent)
+        this.append("imported-prefix", {
+          parentId: f.plan.continuedFrom!.experimentId,
+          count: parent.slots.length,
+        });
       this.app.storage.setDecisionCallLimit(
         { organismId: this.organismId, experimentId: this.id },
-        f.plan.limits.calls - f.plan.setup.modelCalls,
+        f.plan.limits.calls -
+          f.plan.setup.modelCalls -
+          (parent?.callLog.filter((e) => e.type === "observed.counting").length ?? 0),
         Date.now(),
       );
     });
     return f;
+  }
+  continueFrom(parentId: string, sourceCommit: string, expectedReportDigest?: string) {
+    this.access();
+    const p = state(this.app, parentId);
+    check(
+      p.frozen.plan.protocol === "adaptive-observed-v2" &&
+        p.terminal &&
+        p.slots.every((r) => r.closed),
+      "continuation parent must be sealed v2",
+    );
+    check(p.slots.length < p.frozen.slots.length, "parent has no unstarted slots");
+    const report = new ObservedExperiment(
+      this.app,
+      parentId,
+      this.actorId,
+      this.organismId,
+    ).report();
+    check(
+      p.configs && p.selection && report.development.every((r) => r.meteringComplete),
+      "continuation requires frozen selection and verified development",
+    );
+    const raw = canonicalJson(report);
+    if (expectedReportDigest)
+      check(digestOf(raw) === expectedReportDigest, "parent report differs from saved evidence");
+    const blob = this.app.blobs.write(raw);
+    const frozen = this.register({
+      ...p.frozen.plan,
+      protocol: "adaptive-observed-v3",
+      sourceCommit,
+      continuedFrom: {
+        experimentId: parentId,
+        manifestDigest: p.frozen.digest,
+        report: blob,
+        configurationDigest: digestOf(canonicalJson(p.configs ?? null)),
+        selectionDigest: digestOf(canonicalJson(p.selection ?? null)),
+        prefixLength: p.slots.length,
+      },
+    });
+    return { frozen, importedRuns: p.slots.length };
   }
   teacher(request: DecisionRequest): Promise<DecisionResult> {
     const s = state(this.app, this.id);
@@ -309,10 +422,10 @@ export class ObservedExperiment {
             "decision deadline exceeds frozen limit",
           );
           check(
-            !s.log.some((e) => e.runId === current.runId && e.type === "observed.counting"),
+            !s.callLog.some((e) => e.runId === current.runId && e.type === "observed.counting"),
             "generation lease already consumed",
           );
-          const count = s.log.filter((e) => e.type === "observed.counting").length;
+          const count = s.callLog.filter((e) => e.type === "observed.counting").length;
           check(
             count + s.frozen.plan.setup.modelCalls < s.frozen.plan.limits.calls,
             "cumulative generation reservation exhausted",
@@ -640,7 +753,11 @@ export class ObservedExperiment {
     const run = this.app.storage.getRun(runId)!;
     verifySnapshot(this.app, s, slot);
     check(
-      run && run.organismId === this.organismId && run.experimentId === this.id,
+      run &&
+        run.organismId === this.organismId &&
+        (run.experimentId === this.id ||
+          (slot.ordinal < s.importedCount &&
+            run.experimentId === s.frozen.plan.continuedFrom?.experimentId)),
       "raw Run ownership",
     );
     check(
@@ -726,7 +843,7 @@ export class ObservedExperiment {
           ),
         "raw evaluator drift",
       );
-    const log = s.log.filter((e) => e.runId === runId);
+    const log = s.callLog.filter((e) => e.runId === runId);
     const sending = log.filter((e) => e.type === "observed.sending");
     const received = log.filter((e) => e.type === "observed.received");
     let modelCalls = 0,
@@ -797,7 +914,7 @@ export class ObservedExperiment {
           call.provenance.servedModel?.toLowerCase() === s.frozen.plan.model.toLowerCase());
       if (received.length) {
         const result = read<DecisionResult>(this.app, received[0]!.payload.result as Blob);
-        if (s.frozen.plan.protocol === "adaptive-observed-v2")
+        if (s.frozen.plan.protocol !== "adaptive-observed-v1")
           meteringComplete =
             meteringComplete &&
             result.evidence?.servedModel?.toLowerCase() === s.frozen.plan.model.toLowerCase();
@@ -846,11 +963,19 @@ export class ObservedExperiment {
     this.access();
     const s = state(this.app, this.id);
     for (const e of s.frozen.plan.setup.evidence) read(this.app, e);
+    const inherited = s.frozen.plan.continuedFrom
+      ? read<{ receipts: RunReceipt[]; elapsedMs: number }>(
+          this.app,
+          s.frozen.plan.continuedFrom.report,
+        )
+      : null;
     const receipts = s.slots
       .filter((r) => r.closed)
       .map((r) => {
         const actual = this.auditRun(r.runId, s.frozen.slots[r.ordinal]!);
         check(same(actual, read(this.app, r.closed!)), "receipt/raw evidence drift");
+        if (r.ordinal < s.importedCount)
+          check(same(actual, inherited!.receipts[r.ordinal]), "frozen parent receipt drift");
         return actual;
       });
     const rows = s.frozen.slots
@@ -922,14 +1047,14 @@ export class ObservedExperiment {
           .map((c) => ({ id: c.id, kind: c.kind, state: c.state, sent: c.sent, usage: c.usage })),
         attempts: this.app.runtime.getRunSummary(r.runId).attempts,
       }));
-    const generations = s.log.filter((e) => e.type === "observed.sending");
-    const lateUsage = s.log
+    const generations = s.callLog.filter((e) => e.type === "observed.sending");
+    const lateUsage = s.callLog
       .filter((e) => e.type === "observed.received-late")
       .map((e) => ({
         runId: e.runId!,
         result: read<DecisionResult>(this.app, e.payload.result as Blob),
       }));
-    const returned = s.log
+    const returned = s.callLog
       .filter((e) => ["observed.received", "observed.received-late"].includes(e.type))
       .map((e) => ({
         runId: e.runId!,
@@ -955,11 +1080,11 @@ export class ObservedExperiment {
           s.frozen.plan.cases.some((c) => c.id === r.caseId && c.critical),
       )
       .map((r) => r.unitId);
-    const complete =
+    const dispatchComplete =
       !!s.terminal &&
       s.terminal.type === "observed.finished" &&
-      receipts.length === s.frozen.slots.length &&
-      receipts.every((r) => r.meteringComplete);
+      receipts.length === s.frozen.slots.length;
+    const complete = dispatchComplete && receipts.every((r) => r.meteringComplete);
     const c = arms.compiled;
     const qualityGate =
       complete &&
@@ -977,6 +1102,21 @@ export class ObservedExperiment {
       manifestDigest: s.frozen.digest,
       mode: s.frozen.plan.mode,
       engineering: complete ? "passed" : "incomplete",
+      ...(s.frozen.plan.protocol === "adaptive-observed-v3"
+        ? {
+            dispatchComplete,
+            continuation: {
+              parent: s.frozen.plan.continuedFrom!,
+              importedRuns: s.importedCount,
+              newRuns: receipts.length - s.importedCount,
+              totalActiveElapsedMs:
+                (inherited?.elapsedMs ?? 0) +
+                (s.terminal?.occurredAt ?? s.log.at(-1)!.occurredAt) -
+                s.log[0]!.occurredAt,
+              latencyScope: "sum-active-run-times-excludes-continuation-pause",
+            },
+          }
+        : {}),
       realModel: s.frozen.plan.mode === "real" && generations.length ? "ran" : "not_run",
       benefit: s.frozen.plan.mode === "real" ? "inconclusive" : "not_evaluated",
       formalEvaluation: "not_run",
@@ -1005,7 +1145,7 @@ export class ObservedExperiment {
         }),
       ),
       criticalFailures,
-      ...(s.frozen.plan.protocol === "adaptive-observed-v2"
+      ...(s.frozen.plan.protocol !== "adaptive-observed-v1"
         ? {
             criticalMissing: rows
               .filter(
@@ -1020,20 +1160,20 @@ export class ObservedExperiment {
       plannedRuns: s.frozen.slots.length,
       completedRuns: receipts.length,
       plannedModelCalls: s.frozen.plannedCalls,
-      reservedModelCalls: s.log.filter((e) => e.type === "observed.counting").length,
+      reservedModelCalls: s.callLog.filter((e) => e.type === "observed.counting").length,
       sentModelCalls: generations.length,
       setup: s.frozen.plan.setup,
       totalModelCallsIncludingSetup: generations.length + s.frozen.plan.setup.modelCalls,
       totalKnownInputTokensIncludingSetup: known("inputTokens") + s.frozen.plan.setup.inputTokens,
       totalKnownOutputTokensIncludingSetup:
         known("outputTokens") + s.frozen.plan.setup.outputTokens,
-      countRequests: s.log.filter((e) => e.type === "observed.counting").length,
+      countRequests: s.callLog.filter((e) => e.type === "observed.counting").length,
       reservedInputTokens:
-        (s.log.filter((e) => e.type === "observed.counting").length +
+        (s.callLog.filter((e) => e.type === "observed.counting").length +
           s.frozen.plan.setup.modelCalls) *
         2048,
       reservedOutputTokens:
-        (s.log.filter((e) => e.type === "observed.counting").length +
+        (s.callLog.filter((e) => e.type === "observed.counting").length +
           s.frozen.plan.setup.modelCalls) *
         256,
       knownInputTokens: known("inputTokens"),
@@ -1054,7 +1194,7 @@ export class ObservedExperiment {
             n + p.attempts.length + p.decisionCalls.filter((c) => c.kind === "model").length,
           0,
         ) +
-        s.log.filter((e) => e.type === "observed.counting").length,
+        s.callLog.filter((e) => e.type === "observed.counting").length,
       lateUsage,
       elapsedMs: (s.terminal?.occurredAt ?? s.log.at(-1)!.occurredAt) - s.log[0]!.occurredAt,
       development: receipts.filter((r) => r.phase !== "measurement"),

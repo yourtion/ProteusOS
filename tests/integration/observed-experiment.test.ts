@@ -4,8 +4,11 @@ import { join } from "node:path";
 import { expect, it } from "vitest";
 import { LlmDecisionProvider } from "../../src/adapters/decision-llm/index.ts";
 import type { DecisionRequest, DecisionResult } from "../../src/decision/index.ts";
-import { canonicalJson } from "../../src/storage/blobs.ts";
-import { prepareObservedRunner } from "../../src/app/experiment/observed-runner.ts";
+import { canonicalJson, digestOf } from "../../src/storage/blobs.ts";
+import {
+  prepareObservedRunner,
+  openObservedRunner,
+} from "../../src/app/experiment/observed-runner.ts";
 import { ObservedExperiment } from "../../src/app/experiment/observed.ts";
 import { openInstance } from "../../src/app/instance.ts";
 import { freezeObservedPlan } from "../../src/app/experiment/observed-plan.ts";
@@ -62,6 +65,89 @@ function boot() {
   return { ...h, root, provider };
 }
 const node26 = Number(process.versions.node.split(".")[0]) >= 26;
+
+it.skipIf(!node26)(
+  "延续只执行未开始槽位，冻结策略不变，父报告逐字段不变",
+  async () => {
+    const h = boot();
+    let child: ReturnType<typeof openObservedRunner> | undefined;
+    try {
+      for (let i = 0; i < 8; i++) await h.experiment.runNext();
+      h.experiment.stop("fixture active-time limit");
+      const before = h.experiment.report();
+      const sent = h.provider.generated;
+      child = openObservedRunner(h.app.root, "obs:continuation", h.provider);
+      const continued = child.experiment.continueFrom(
+        "obs:fixture",
+        "fixture-continuation",
+        digestOf(canonicalJson(before)),
+      );
+      expect(continued.importedRuns).toBe(8);
+      expect(() =>
+        child!.experiment.register({
+          ...continued.frozen.plan,
+          seed: continued.frozen.plan.seed + 1,
+        }),
+      ).toThrow(/cannot change/);
+      while (await child.experiment.runNext()) {}
+      const result = child.experiment.report();
+      expect(result).toMatchObject({
+        protocol: "adaptive-observed-v3",
+        dispatchComplete: true,
+        engineering: "passed",
+        completedRuns: 34,
+        sentModelCalls: 32,
+        knownInputTokens: 3200,
+        continuation: { importedRuns: 8, newRuns: 26 },
+      });
+      expect(h.provider.generated - sent).toBe(32 - sent);
+      expect(h.experiment.report()).toEqual(before);
+      rmSync(join(h.app.root, "workspaces"), { recursive: true });
+      rmSync(join(h.app.root, "observed-materials"), { recursive: true });
+      expect(child.experiment.report()).toEqual(result);
+    } finally {
+      child?.app.close();
+      h.app.close();
+      rmSync(h.root, { recursive: true, force: true });
+    }
+  },
+  30000,
+);
+
+it.skipIf(!node26)(
+  "延续保留历史未知调用的额度和完整分母，不重发该调用",
+  async () => {
+    const h = boot();
+    let child: ReturnType<typeof openObservedRunner> | undefined;
+    try {
+      for (let i = 0; i < 4; i++) await h.experiment.runNext();
+      h.provider.throwOnSend = true;
+      await expect(h.experiment.runNext()).rejects.toThrow(/unknown/);
+      const parent = h.experiment.report();
+      expect(parent.unknownUsageCalls).toBe(1);
+      h.provider.throwOnSend = false;
+      child = openObservedRunner(h.app.root, "obs:continuation-unknown", h.provider);
+      child.experiment.continueFrom("obs:fixture", "fixture-unknown-continuation");
+      while (await child.experiment.runNext()) {}
+      expect(child.experiment.report()).toMatchObject({
+        dispatchComplete: true,
+        engineering: "incomplete",
+        completedRuns: 34,
+        sentModelCalls: 32,
+        unknownUsageCalls: 1,
+        reservedModelCalls: 32,
+        qualityGate: false,
+      });
+      expect(h.provider.generated).toBe(32);
+      expect(h.experiment.report()).toEqual(parent);
+    } finally {
+      child?.app.close();
+      h.app.close();
+      rmSync(h.root, { recursive: true, force: true });
+    }
+  },
+  30000,
+);
 
 it.skipIf(!node26)(
   "观测协议完整三臂、无改善 fallback、全部原始计量及清理复算，旧协议不变",

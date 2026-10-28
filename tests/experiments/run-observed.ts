@@ -1,11 +1,14 @@
 import { execFileSync } from "node:child_process";
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, rmSync, writeFileSync, cpSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 import assert from "node:assert/strict";
 import { LlmDecisionProvider } from "../../src/adapters/decision-llm/index.ts";
 import { experimentServiceConfig } from "../../src/app/experiment/service-config.ts";
-import { prepareObservedRunner } from "../../src/app/experiment/observed-runner.ts";
+import {
+  prepareObservedRunner,
+  openObservedRunner,
+} from "../../src/app/experiment/observed-runner.ts";
 import { ObservedExperiment } from "../../src/app/experiment/observed.ts";
 import { observedDataset } from "../../src/app/experiment/observed-data.ts";
 import { canonicalJson, digestOf } from "../../src/storage/blobs.ts";
@@ -31,13 +34,16 @@ if (args[0] === "--report" && args.length === 2) {
     ![3, 5, 7].includes(args.length)
   )
     throw new Error(
-      "Usage: run-observed.ts (--fixture|--real) --output NEW_DIRECTORY [--claude-settings FILE] [--carry-stopped-round DIRECTORY] | --report DIRECTORY",
+      "Usage: run-observed.ts (--fixture|--real) --output NEW_DIRECTORY [--claude-settings FILE] [--carry-stopped-round DIRECTORY | --continue-frozen-round DIRECTORY] | --report DIRECTORY",
     );
   const mode = args[0] === "--real" ? "real" : "fixture";
   const extra = new Map<string, string>();
   for (let i = 3; i < args.length; i += 2) {
     const key = args[i]!;
-    if (!["--claude-settings", "--carry-stopped-round"].includes(key) || extra.has(key))
+    if (
+      !["--claude-settings", "--carry-stopped-round", "--continue-frozen-round"].includes(key) ||
+      extra.has(key)
+    )
       throw new Error("unknown/duplicate option");
     extra.set(key, args[i + 1]!);
   }
@@ -76,11 +82,41 @@ if (args[0] === "--report" && args.length === 2) {
         })
       : new Fixture();
   const id = `obs:${randomUUID()}`;
-  const h = prepareObservedRunner(join(output, "instance"), id, transport, {
-    mode,
-    sourceCommit,
-    stoppedRound: extra.get("--carry-stopped-round"),
-  });
+  const previous = extra.get("--continue-frozen-round");
+  if (previous && extra.has("--carry-stopped-round"))
+    throw new Error("continuation cannot reset development or add duplicate setup");
+  const h = previous
+    ? (() => {
+        const meta = JSON.parse(readFileSync(join(previous, "run.json"), "utf8")) as {
+          id: string;
+          mode: string;
+        };
+        const summary = JSON.parse(readFileSync(join(previous, "summary.json"), "utf8")) as {
+          reportDigest: string;
+        };
+        if (meta.mode !== mode) throw new Error("continuation transport mode must match parent");
+        cpSync(join(previous, "instance"), join(output, "instance"), {
+          recursive: true,
+          errorOnExist: true,
+        });
+        const runner = openObservedRunner(join(output, "instance"), id, transport);
+        try {
+          const continued = runner.experiment.continueFrom(
+            meta.id,
+            sourceCommit,
+            summary.reportDigest,
+          );
+          return { ...runner, ...continued };
+        } catch (error) {
+          runner.app.close();
+          throw error;
+        }
+      })()
+    : prepareObservedRunner(join(output, "instance"), id, transport, {
+        mode,
+        sourceCommit,
+        stoppedRound: extra.get("--carry-stopped-round"),
+      });
   writeFileSync(
     join(output, "run.json"),
     JSON.stringify(
@@ -104,11 +140,10 @@ if (args[0] === "--report" && args.length === 2) {
   );
   let failure: string | null = null;
   try {
-    let count = 0;
     for (;;) {
       const receipt = await h.experiment.runNext();
       if (!receipt) break;
-      count++;
+      const count = receipt.ordinal + 1;
       if (count % 10 === 0 || count === h.frozen.slots.length)
         process.stdout.write(`${count}/${h.frozen.slots.length} ${receipt.phase}\n`);
     }
@@ -136,6 +171,9 @@ if (args[0] === "--report" && args.length === 2) {
       manifestDigest: h.frozen.digest,
       reportDigest: digestOf(canonicalJson(report)),
       engineering: report.engineering,
+      ...(report.dispatchComplete !== undefined
+        ? { dispatchComplete: report.dispatchComplete, continuation: report.continuation }
+        : {}),
       realModel: report.realModel,
       benefit: report.benefit,
       selection: report.selection,
@@ -168,7 +206,8 @@ if (args[0] === "--report" && args.length === 2) {
     };
     writeFileSync(join(output, "summary.json"), `${JSON.stringify(summary, null, 2)}\n`);
     process.stdout.write(`${JSON.stringify(summary, null, 2)}\nEvidence saved to ${output}\n`);
-    process.exitCode = report.engineering === "passed" ? 0 : 1;
+    process.exitCode =
+      report.engineering === "passed" || (report.dispatchComplete && failure === null) ? 0 : 1;
   } finally {
     h.app.close();
   }

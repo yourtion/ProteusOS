@@ -20,7 +20,17 @@ export const observedCaseSchema = z.strictObject({
   expected: z.string().min(1),
 });
 const observedPlanSchema = z.strictObject({
-  protocol: z.enum(["adaptive-observed-v1", OBSERVED_PROTOCOL]),
+  protocol: z.enum(["adaptive-observed-v1", OBSERVED_PROTOCOL, "adaptive-observed-v3"]),
+  continuedFrom: z
+    .strictObject({
+      experimentId: id,
+      manifestDigest: sha,
+      report: z.strictObject({ ref: id, digest: sha }),
+      configurationDigest: sha,
+      selectionDigest: sha,
+      prefixLength: z.number().int().nonnegative(),
+    })
+    .optional(),
   mode: z.enum(["real", "fixture"]),
   visibility: z.literal("developer-visible"),
   semanticIndependence: z.literal("unverified"),
@@ -107,6 +117,8 @@ export function observedSlots(plan: ObservedPlan): ObservedSlot[] {
 }
 export function freezeObservedPlan(input: unknown) {
   const plan = observedPlanSchema.parse(input);
+  if ((plan.protocol === "adaptive-observed-v3") !== !!plan.continuedFrom)
+    throw new Error("v3 requires a frozen continuation parent");
   if (new Set(plan.cases.map((c) => c.id)).size !== plan.cases.length)
     throw new Error("duplicate observed case");
   const groups = new Map<string, string>();

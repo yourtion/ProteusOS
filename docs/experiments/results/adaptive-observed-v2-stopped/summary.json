@@ -1,0 +1,150 @@
+{
+  "protocol": "adaptive-observed-v2",
+  "sourceCommit": "fced4ff458b4c8e797d0528aaf944ef18b383538",
+  "sourceTreeDirty": false,
+  "mode": "real",
+  "id": "obs:725a819a-1ed8-4df3-b811-5033b6ef4035",
+  "manifestDigest": "51e8fd6b478dec787f61ad2548437022fcae5076dfb2af19bf30282112daba2b",
+  "reportDigest": "32be31080fcb0025fdabcd46fc474c71ee026a0a8d7a791c4185a9a16cd0da3f",
+  "engineering": "incomplete",
+  "realModel": "ran",
+  "benefit": "inconclusive",
+  "selection": {
+    "snapshotId": "01a18070-936d-706f-879e-22bf7636a1f6",
+    "kind": "prespecified-fixed-demo-ablation"
+  },
+  "qualityGate": false,
+  "arms": {
+    "single": {
+      "formal": {
+        "planned": 120,
+        "completed": 88,
+        "cases": 40,
+        "families": 10,
+        "successRate": 0.4416666666666667,
+        "misrouteRate": 0,
+        "failureRate": 0.5583333333333333,
+        "p95Ms": null
+      },
+      "regression": {
+        "planned": 30,
+        "completed": 0,
+        "cases": 10,
+        "families": 5,
+        "successRate": 0,
+        "misrouteRate": 0,
+        "failureRate": 1,
+        "p95Ms": null
+      }
+    },
+    "budget-matched": {
+      "formal": {
+        "planned": 120,
+        "completed": 87,
+        "cases": 40,
+        "families": 10,
+        "successRate": 0.4416666666666667,
+        "misrouteRate": 0,
+        "failureRate": 0.5583333333333333,
+        "p95Ms": null
+      },
+      "regression": {
+        "planned": 30,
+        "completed": 0,
+        "cases": 10,
+        "families": 5,
+        "successRate": 0,
+        "misrouteRate": 0,
+        "failureRate": 1,
+        "p95Ms": null
+      }
+    },
+    "compiled": {
+      "formal": {
+        "planned": 120,
+        "completed": 87,
+        "cases": 40,
+        "families": 10,
+        "successRate": 0.008333333333333333,
+        "misrouteRate": 0,
+        "failureRate": 0.9916666666666668,
+        "p95Ms": null
+      },
+      "regression": {
+        "planned": 30,
+        "completed": 0,
+        "cases": 10,
+        "families": 5,
+        "successRate": 0,
+        "misrouteRate": 0,
+        "failureRate": 1,
+        "p95Ms": null
+      }
+    }
+  },
+  "armResources": {
+    "single": {
+      "modelCalls": 88,
+      "knownInputTokens": 28365,
+      "knownOutputTokens": 18747,
+      "executionAttempts": 53,
+      "cumulativeRunMs": 620452
+    },
+    "budget-matched": {
+      "modelCalls": 262,
+      "knownInputTokens": 84132,
+      "knownOutputTokens": 56888,
+      "executionAttempts": 149,
+      "cumulativeRunMs": 1866104
+    },
+    "compiled": {
+      "modelCalls": 127,
+      "knownInputTokens": 71999,
+      "knownOutputTokens": 28847,
+      "executionAttempts": 56,
+      "cumulativeRunMs": 1085964
+    }
+  },
+  "completedRuns": 517,
+  "plannedRuns": 830,
+  "sentModelCalls": 477,
+  "setup": {
+    "modelCalls": 3,
+    "inputTokens": 878,
+    "outputTokens": 343,
+    "unknownCostItems": 48,
+    "evidence": [
+      {
+        "ref": "a2/a274b56392419b9043f0d30a518accc8f4c7aa886852ed9e8cdd537d2b82ce91",
+        "digest": "a274b56392419b9043f0d30a518accc8f4c7aa886852ed9e8cdd537d2b82ce91"
+      },
+      {
+        "ref": "6c/6cb15d703a62e0091e7d08c5e3cc5317182c926548d20e48303aa1536feddf4f",
+        "digest": "6cb15d703a62e0091e7d08c5e3cc5317182c926548d20e48303aa1536feddf4f"
+      },
+      {
+        "ref": "1c/1c58ce8dd2e1b651cfe7b3a83143f34b696506037fd6d5e4121b0f0a38bfba15",
+        "digest": "1c58ce8dd2e1b651cfe7b3a83143f34b696506037fd6d5e4121b0f0a38bfba15"
+      }
+    ]
+  },
+  "totalModelCallsIncludingSetup": 480,
+  "totalKnownInputTokensIncludingSetup": 185374,
+  "totalKnownOutputTokensIncludingSetup": 104825,
+  "reservedModelCalls": 477,
+  "countRequests": 477,
+  "knownInputTokens": 184496,
+  "knownOutputTokens": 104482,
+  "unknownUsageCalls": 1,
+  "unverifiedUsageCalls": 1,
+  "unknownCostItems": 1260,
+  "criticalFailures": 0,
+  "criticalMissing": 30,
+  "elapsedMs": 3600120,
+  "cleanReopenReplay": "passed",
+  "activeUnchanged": true,
+  "formalEvaluation": "not_run",
+  "adoption": "not_run",
+  "originalProtocolEligible": false,
+  "failure": "observed: unknown/over-limit usage or count drift; stop without retry"
+}
