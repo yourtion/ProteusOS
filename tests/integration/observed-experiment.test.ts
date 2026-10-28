@@ -22,6 +22,7 @@ class Fake extends LlmDecisionProvider {
   counter = 100;
   onSend?: () => Promise<void>;
   bodies: unknown[] = [];
+  servedModel: string | null = "GLM-5.3-Flash";
   constructor() {
     super({ apiKey: "FAKE_NO_NETWORK", baseUrl: "https://observed.invalid" });
   }
@@ -42,7 +43,11 @@ class Fake extends LlmDecisionProvider {
       value: "local-process",
       raw: canonicalJson({ kind: "value", value: "local-process" }),
       provenance: { provider: this.name, policyVersion: r.policy.versionId },
-      evidence: { inputTokens: this.drift ? 101 : 100, outputTokens: 5, servedModel: "fixture" },
+      evidence: {
+        inputTokens: this.drift ? 101 : 100,
+        outputTokens: 5,
+        servedModel: this.servedModel,
+      },
     };
   }
 }
@@ -83,6 +88,9 @@ it.skipIf(!node26)(
       });
       for (const arm of Object.values(report.arms)) expect(arm.formal.successRate).toBe(1);
       expect(h.provider.generated).toBe(32);
+      expect(
+        h.app.storage.getDecisionCall(report.receipts[2]!.callId)!.provenance.servedModel,
+      ).toBeNull();
       expect(JSON.stringify(h.provider.bodies)).not.toMatch(
         /familyId|expectedChoice|private-expected|source:|formal-0/,
       );
@@ -136,6 +144,25 @@ it.skipIf(!node26)("计数超限不生成，但保留计数请求和预留；未
         },
       ),
     ).toThrow(/closed/);
+  } finally {
+    h.app.close();
+    rmSync(h.root, { recursive: true, force: true });
+  }
+});
+
+it.skipIf(!node26)("服务模型身份必须来自原始响应，缺失时停止而不是放宽身份门", async () => {
+  const h = boot();
+  try {
+    await h.experiment.runNext();
+    await h.experiment.runNext();
+    h.provider.servedModel = null;
+    await expect(h.experiment.runNext()).rejects.toThrow(/unknown/);
+    expect(h.experiment.report()).toMatchObject({
+      engineering: "incomplete",
+      knownInputTokens: 100,
+      unverifiedUsageCalls: 1,
+    });
+    expect(h.provider.generated).toBe(1);
   } finally {
     h.app.close();
     rmSync(h.root, { recursive: true, force: true });

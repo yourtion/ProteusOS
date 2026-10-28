@@ -1,0 +1,142 @@
+{
+  "protocol": "adaptive-observed-v1",
+  "sourceCommit": "8a19919833f89c3a69055f3e891ba4c59aaac2a3",
+  "sourceTreeDirty": false,
+  "mode": "real",
+  "id": "obs:eff59773-5947-470e-8a7e-404f3c291965",
+  "manifestDigest": "8f544d2cc253cdd6510f7674e0e60189a12b2fe0ece8ab9d609ca8543e628740",
+  "reportDigest": "1c58ce8dd2e1b651cfe7b3a83143f34b696506037fd6d5e4121b0f0a38bfba15",
+  "engineering": "incomplete",
+  "realModel": "ran",
+  "benefit": "inconclusive",
+  "selection": null,
+  "qualityGate": false,
+  "arms": {
+    "single": {
+      "formal": {
+        "planned": 120,
+        "completed": 0,
+        "cases": 40,
+        "families": 10,
+        "successRate": 0,
+        "misrouteRate": 0,
+        "failureRate": 1,
+        "p95Ms": null
+      },
+      "regression": {
+        "planned": 30,
+        "completed": 0,
+        "cases": 10,
+        "families": 5,
+        "successRate": 0,
+        "misrouteRate": 0,
+        "failureRate": 1,
+        "p95Ms": null
+      }
+    },
+    "budget-matched": {
+      "formal": {
+        "planned": 120,
+        "completed": 0,
+        "cases": 40,
+        "families": 10,
+        "successRate": 0,
+        "misrouteRate": 0,
+        "failureRate": 1,
+        "p95Ms": null
+      },
+      "regression": {
+        "planned": 30,
+        "completed": 0,
+        "cases": 10,
+        "families": 5,
+        "successRate": 0,
+        "misrouteRate": 0,
+        "failureRate": 1,
+        "p95Ms": null
+      }
+    },
+    "compiled": {
+      "formal": {
+        "planned": 120,
+        "completed": 0,
+        "cases": 40,
+        "families": 10,
+        "successRate": 0,
+        "misrouteRate": 0,
+        "failureRate": 1,
+        "p95Ms": null
+      },
+      "regression": {
+        "planned": 30,
+        "completed": 0,
+        "cases": 10,
+        "families": 5,
+        "successRate": 0,
+        "misrouteRate": 0,
+        "failureRate": 1,
+        "p95Ms": null
+      }
+    }
+  },
+  "armResources": {
+    "single": {
+      "modelCalls": 0,
+      "knownInputTokens": 0,
+      "knownOutputTokens": 0,
+      "executionAttempts": 0,
+      "cumulativeRunMs": 0
+    },
+    "budget-matched": {
+      "modelCalls": 0,
+      "knownInputTokens": 0,
+      "knownOutputTokens": 0,
+      "executionAttempts": 0,
+      "cumulativeRunMs": 0
+    },
+    "compiled": {
+      "modelCalls": 1,
+      "knownInputTokens": 320,
+      "knownOutputTokens": 110,
+      "executionAttempts": 41,
+      "cumulativeRunMs": 9266
+    }
+  },
+  "completedRuns": 41,
+  "plannedRuns": 830,
+  "sentModelCalls": 1,
+  "setup": {
+    "modelCalls": 2,
+    "inputTokens": 558,
+    "outputTokens": 233,
+    "unknownCostItems": 5,
+    "evidence": [
+      {
+        "ref": "a2/a274b56392419b9043f0d30a518accc8f4c7aa886852ed9e8cdd537d2b82ce91",
+        "digest": "a274b56392419b9043f0d30a518accc8f4c7aa886852ed9e8cdd537d2b82ce91"
+      },
+      {
+        "ref": "6c/6cb15d703a62e0091e7d08c5e3cc5317182c926548d20e48303aa1536feddf4f",
+        "digest": "6cb15d703a62e0091e7d08c5e3cc5317182c926548d20e48303aa1536feddf4f"
+      }
+    ]
+  },
+  "totalModelCallsIncludingSetup": 3,
+  "totalKnownInputTokensIncludingSetup": 878,
+  "totalKnownOutputTokensIncludingSetup": 343,
+  "reservedModelCalls": 1,
+  "countRequests": 1,
+  "knownInputTokens": 320,
+  "knownOutputTokens": 110,
+  "unknownUsageCalls": 0,
+  "unverifiedUsageCalls": 1,
+  "unknownCostItems": 48,
+  "criticalFailures": 30,
+  "elapsedMs": 9982,
+  "cleanReopenReplay": "passed",
+  "activeUnchanged": true,
+  "formalEvaluation": "not_run",
+  "adoption": "not_run",
+  "originalProtocolEligible": false,
+  "failure": "observed: unknown/over-limit usage or count drift; stop without retry"
+}

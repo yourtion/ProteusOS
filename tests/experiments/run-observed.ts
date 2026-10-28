@@ -28,13 +28,19 @@ if (args[0] === "--report" && args.length === 2) {
   if (
     !["--fixture", "--real"].includes(args[0] ?? "") ||
     args[1] !== "--output" ||
-    ![3, 5].includes(args.length) ||
-    (args.length === 5 && args[3] !== "--claude-settings")
+    ![3, 5, 7].includes(args.length)
   )
     throw new Error(
-      "Usage: run-observed.ts (--fixture|--real) --output NEW_DIRECTORY [--claude-settings FILE] | --report DIRECTORY",
+      "Usage: run-observed.ts (--fixture|--real) --output NEW_DIRECTORY [--claude-settings FILE] [--carry-stopped-round DIRECTORY] | --report DIRECTORY",
     );
   const mode = args[0] === "--real" ? "real" : "fixture";
+  const extra = new Map<string, string>();
+  for (let i = 3; i < args.length; i += 2) {
+    const key = args[i]!;
+    if (!["--claude-settings", "--carry-stopped-round"].includes(key) || extra.has(key))
+      throw new Error("unknown/duplicate option");
+    extra.set(key, args[i + 1]!);
+  }
   const output = resolve(args[2]!);
   const sourceCommit = execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim();
   const sourceTreeDirty = !!execFileSync("git", ["status", "--porcelain"], {
@@ -58,19 +64,23 @@ if (args[0] === "--report" && args.length === 2) {
         value,
         raw: canonicalJson({ kind: "value", value }),
         provenance: { provider: this.name, policyVersion: r.policy.versionId },
-        evidence: { inputTokens: 100, outputTokens: 5, servedModel: "fixture" },
+        evidence: { inputTokens: 100, outputTokens: 5, servedModel: "GLM-5.3-Flash" },
       };
     }
   }
   const transport =
     mode === "real"
       ? new LlmDecisionProvider({
-          ...experimentServiceConfig(args[4]).config,
+          ...experimentServiceConfig(extra.get("--claude-settings")).config,
           requestTimeoutMs: 28_000,
         })
       : new Fixture();
   const id = `obs:${randomUUID()}`;
-  const h = prepareObservedRunner(join(output, "instance"), id, transport, { mode, sourceCommit });
+  const h = prepareObservedRunner(join(output, "instance"), id, transport, {
+    mode,
+    sourceCommit,
+    stoppedRound: extra.get("--carry-stopped-round"),
+  });
   writeFileSync(
     join(output, "run.json"),
     JSON.stringify(
@@ -147,6 +157,7 @@ if (args[0] === "--report" && args.length === 2) {
       unverifiedUsageCalls: report.unverifiedUsageCalls,
       unknownCostItems: report.unknownCostItems,
       criticalFailures: report.criticalFailures.length,
+      ...(report.criticalMissing ? { criticalMissing: report.criticalMissing.length } : {}),
       elapsedMs: report.elapsedMs,
       cleanReopenReplay: "passed",
       activeUnchanged: report.activeUnchanged,

@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { openInstance } from "../instance.ts";
 import { installSeed } from "../seed.ts";
@@ -56,7 +57,7 @@ export function prepareObservedRunner(
   root: string,
   id: string,
   transport: ObservedTransport,
-  opts: { mode: "fixture" | "real"; sourceCommit: string; small?: boolean },
+  opts: { mode: "fixture" | "real"; sourceCommit: string; small?: boolean; stoppedRound?: string },
 ) {
   const h = openObservedRunner(root, id, transport);
   try {
@@ -149,6 +150,42 @@ export function prepareObservedRunner(
         setup.evidence.push(app.blobs.write(raw));
       }
     if (opts.mode === "real") setup.unknownCostItems = 5;
+    if (opts.stoppedRound) {
+      const raw = readFileSync(join(opts.stoppedRound, "report.json"), "utf8");
+      const summary = JSON.parse(readFileSync(join(opts.stoppedRound, "summary.json"), "utf8")) as {
+        reportDigest: string;
+      };
+      if (digestOf(raw) !== summary.reportDigest)
+        throw new Error("stopped round report digest mismatch");
+      const prior = JSON.parse(raw) as {
+        mode: string;
+        engineering: string;
+        sentModelCalls: number;
+        knownInputTokens: number;
+        knownOutputTokens: number;
+        unknownUsageCalls: number;
+        unknownCostItems: number;
+        setup: { unknownCostItems: number };
+        receipts: Array<{ phase: string }>;
+        partial: unknown[];
+      };
+      if (
+        opts.mode !== "real" ||
+        prior.mode !== "real" ||
+        prior.engineering !== "incomplete" ||
+        prior.unknownUsageCalls ||
+        prior.partial.length ||
+        prior.receipts.some((r) => r.phase === "measurement")
+      )
+        throw new Error(
+          "carry requires a closed, metered development-only stopped round; no measurement reuse",
+        );
+      setup.modelCalls += prior.sentModelCalls;
+      setup.inputTokens += prior.knownInputTokens;
+      setup.outputTokens += prior.knownOutputTokens;
+      setup.unknownCostItems += prior.unknownCostItems - prior.setup.unknownCostItems;
+      setup.evidence.push(app.blobs.write(raw));
+    }
     const f = experiment.register({
       protocol: OBSERVED_PROTOCOL,
       mode: opts.mode,

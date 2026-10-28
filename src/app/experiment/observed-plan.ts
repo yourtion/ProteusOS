@@ -2,7 +2,7 @@ import { z } from "zod";
 import { canonicalJson, digestOf } from "../../storage/blobs.ts";
 import { adaptiveTaskInputDigest } from "./task-input.ts";
 
-export const OBSERVED_PROTOCOL = "adaptive-observed-v1";
+export const OBSERVED_PROTOCOL = "adaptive-observed-v2";
 export const OBSERVED_ARMS = ["single", "budget-matched", "compiled"] as const;
 const id = z.string().min(1);
 const sha = z.string().regex(/^[a-f0-9]{64}$/);
@@ -20,7 +20,7 @@ export const observedCaseSchema = z.strictObject({
   expected: z.string().min(1),
 });
 const observedPlanSchema = z.strictObject({
-  protocol: z.literal(OBSERVED_PROTOCOL),
+  protocol: z.enum(["adaptive-observed-v1", OBSERVED_PROTOCOL]),
   mode: z.enum(["real", "fixture"]),
   visibility: z.literal("developer-visible"),
   semanticIndependence: z.literal("unverified"),

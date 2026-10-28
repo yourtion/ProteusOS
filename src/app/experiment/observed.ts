@@ -792,10 +792,15 @@ export class ObservedExperiment {
         inputTokens === counted[0]!.payload.inputTokens &&
         inputTokens <= 2048 &&
         outputTokens <= 256 &&
-        (s.frozen.plan.mode === "fixture" ||
+        (s.frozen.plan.protocol !== "adaptive-observed-v1" ||
+          s.frozen.plan.mode === "fixture" ||
           call.provenance.servedModel?.toLowerCase() === s.frozen.plan.model.toLowerCase());
       if (received.length) {
         const result = read<DecisionResult>(this.app, received[0]!.payload.result as Blob);
+        if (s.frozen.plan.protocol === "adaptive-observed-v2")
+          meteringComplete =
+            meteringComplete &&
+            result.evidence?.servedModel?.toLowerCase() === s.frozen.plan.model.toLowerCase();
         check(
           result.evidence?.inputTokens === inputTokens &&
             result.evidence?.outputTokens === outputTokens,
@@ -946,6 +951,7 @@ export class ObservedExperiment {
         (r) =>
           r.arm === "compiled" &&
           !r.accepted &&
+          (s.frozen.plan.protocol === "adaptive-observed-v1" || r.complete) &&
           s.frozen.plan.cases.some((c) => c.id === r.caseId && c.critical),
       )
       .map((r) => r.unitId);
@@ -999,6 +1005,18 @@ export class ObservedExperiment {
         }),
       ),
       criticalFailures,
+      ...(s.frozen.plan.protocol === "adaptive-observed-v2"
+        ? {
+            criticalMissing: rows
+              .filter(
+                (r) =>
+                  r.arm === "compiled" &&
+                  !r.complete &&
+                  s.frozen.plan.cases.some((c) => c.id === r.caseId && c.critical),
+              )
+              .map((r) => r.unitId),
+          }
+        : {}),
       plannedRuns: s.frozen.slots.length,
       completedRuns: receipts.length,
       plannedModelCalls: s.frozen.plannedCalls,
