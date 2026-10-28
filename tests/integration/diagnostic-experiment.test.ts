@@ -63,6 +63,7 @@ class Model extends LlmDecisionProvider {
 }
 let parent: string;
 let fixedParent: string;
+let capParent: string;
 const opened = new Set<AppInstance>();
 const roots: string[] = [];
 beforeAll(() => {
@@ -88,7 +89,17 @@ beforeAll(() => {
     fixedParent,
   ]);
 });
+beforeAll(() => {
+  capParent = mkdtempSync(join(tmpdir(), "proteus-layout-parent-"));
+  execFileSync("tar", [
+    "-xzf",
+    "docs/experiments/results/routing-output-cap-v1/evidence.tar.gz",
+    "-C",
+    capParent,
+  ]);
+});
 afterAll(() => {
+  rmSync(capParent, { recursive: true, force: true });
   rmSync(parent, { recursive: true, force: true });
   rmSync(fixedParent, { recursive: true, force: true });
 });
@@ -96,7 +107,7 @@ function fixture(
   mode: Model["fault"] = "none",
   opts?: {
     parent?: string;
-    stage?: "confirmation" | "fixed-output" | "output-cap";
+    stage?: "confirmation" | "fixed-output" | "output-cap" | "layout" | "demo-increment";
     small?: boolean;
   },
 ) {
@@ -139,6 +150,44 @@ async function stoppedServiceParent() {
 }
 
 describe("O2 原始诊断：冻结额度、同正文计数和受约束执行", () => {
+  it("布局与示例分阶段冻结，平局选零示例且继承累计未知", async () => {
+    const layout = fixture("none", { parent: capParent, stage: "layout" });
+    expect(layout.frozen.plan.conditions.map((c) => c.id)).toEqual(["v1-t1024-d0", "v2-t1024-d0"]);
+    expect(() =>
+      freezeDiagnosticPlan({
+        ...layout.frozen.plan,
+        conditions: [
+          layout.frozen.plan.conditions[0],
+          { ...layout.frozen.plan.conditions[1], demos: 2 },
+        ],
+      }),
+    ).toThrow(/conditions drift/);
+    const first = await finish(layout);
+    expect(first).toMatchObject({
+      engineering: "passed",
+      developmentRecommendation: "v1-t1024-d0",
+      confirmationPassed: false,
+      totalUnknownUsageCallsIncludingHistory: 2,
+    });
+    writeFileSync(join(layout.out, "run.json"), JSON.stringify({ id: layout.id }));
+    writeFileSync(join(layout.out, "manifest.json"), canonicalJson(layout.frozen.plan));
+    writeFileSync(join(layout.out, "report.json"), canonicalJson(first));
+    writeFileSync(
+      join(layout.out, "summary.json"),
+      JSON.stringify({ reportDigest: digestOf(canonicalJson(first)) }),
+    );
+    close(layout.app);
+    const demos = fixture("none", { parent: layout.out, stage: "demo-increment" });
+    expect(demos.frozen.plan.conditions.map((c) => c.id)).toEqual(["v1-t1024-d0", "v1-t1024-d2"]);
+    const second = await finish(demos);
+    expect(second).toMatchObject({
+      engineering: "passed",
+      developmentRecommendation: "v1-t1024-d0",
+      confirmationPassed: false,
+      totalUnknownUsageCallsIncludingHistory: 2,
+    });
+    expect(demos.transport.calls).toBe(4);
+  });
   it("1024/2048 独立协议复用冻结任务、放宽共同时间窗，旧协议限额保持", async () => {
     const h = fixture("none", { parent: fixedParent, stage: "output-cap" });
     const p = h.frozen.plan;

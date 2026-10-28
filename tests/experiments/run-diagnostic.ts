@@ -27,7 +27,7 @@ if (args[0] === "--report" && args.length === 2) {
 } else {
   if (!["--fixture", "--real"].includes(args[0] ?? ""))
     throw new Error(
-      "Use --real|--fixture --output NEW_DIR --parent SEALED_DIR --stage matrix|confirmation|fixed-output|output-cap [--claude-settings FILE]",
+      "Use --real|--fixture --output NEW_DIR --parent SEALED_DIR --stage matrix|confirmation|fixed-output|output-cap|layout|demo-increment [--claude-settings FILE]",
     );
   const extra = new Map<string, string>();
   for (let i = 1; i < args.length; i += 2) {
@@ -47,7 +47,9 @@ if (args[0] === "--report" && args.length === 2) {
     stage !== "matrix" &&
     stage !== "confirmation" &&
     stage !== "fixed-output" &&
-    stage !== "output-cap"
+    stage !== "output-cap" &&
+    stage !== "layout" &&
+    stage !== "demo-increment"
   )
     throw new Error("invalid stage");
   const mode = args[0] === "--real" ? "real" : "fixture";
@@ -58,7 +60,12 @@ if (args[0] === "--report" && args.length === 2) {
   if (mode === "real" && sourceTreeDirty)
     throw new Error("Commit implementation before real generation");
   const fixtureDataset = diagnosticDataset(
-    stage === "fixed-output" || stage === "output-cap" ? "confirmation" : stage,
+    stage === "fixed-output" ||
+      stage === "output-cap" ||
+      stage === "layout" ||
+      stage === "demo-increment"
+      ? "confirmation"
+      : stage,
   );
   class Fixture extends LlmDecisionProvider {
     readonly labels = new Map(fixtureDataset.map((c) => [c.task.goal, c.expectedChoice]));
@@ -94,7 +101,10 @@ if (args[0] === "--report" && args.length === 2) {
     mode === "real"
       ? new LlmDecisionProvider({
           ...experimentServiceConfig(extra.get("--claude-settings")).config,
-          requestTimeoutMs: stage === "output-cap" ? 85000 : 28000,
+          requestTimeoutMs:
+            stage === "output-cap" || stage === "layout" || stage === "demo-increment"
+              ? 85000
+              : 28000,
         })
       : new Fixture();
   mkdirSync(output);

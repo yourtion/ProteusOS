@@ -34,7 +34,13 @@ const conditionSchema = z.strictObject({
   snapshotDigest: sha,
 });
 const planSchema = z.strictObject({
-  protocol: z.enum(["routing-diagnostic-v1", "routing-fixed-output-v1", "routing-output-cap-v1"]),
+  protocol: z.enum([
+    "routing-diagnostic-v1",
+    "routing-fixed-output-v1",
+    "routing-output-cap-v1",
+    "routing-layout-v1",
+    "routing-demo-increment-v1",
+  ]),
   maxService5xx: z.literal(2).optional(),
   stage: z.enum(["matrix", "confirmation"]),
   mode: z.enum(["real", "fixture"]),
@@ -135,15 +141,17 @@ export function freezeDiagnosticPlan(input: unknown) {
     "explicit fixed-output failure policy required",
   );
   const capComparison = plan.protocol === "routing-output-cap-v1";
+  const factorComparison =
+    plan.protocol === "routing-layout-v1" || plan.protocol === "routing-demo-increment-v1";
   check(
-    capComparison
+    capComparison || factorComparison
       ? plan.runMs === 90000 && plan.decisionMs === 85000
       : plan.runMs === 30000 &&
           plan.decisionMs === 28000 &&
           plan.conditions.every((c) => c.output === 256 || c.output === 512),
     "protocol output/time bounds drift",
   );
-  if (plan.protocol !== "routing-diagnostic-v1") {
+  if (plan.protocol !== "routing-diagnostic-v1" && !factorComparison) {
     check(
       plan.stage === "confirmation" &&
         same(
@@ -161,6 +169,18 @@ export function freezeDiagnosticPlan(input: unknown) {
           })),
         ),
       "fixed output comparison conditions drift",
+    );
+  }
+  if (factorComparison) {
+    const c = plan.conditions;
+    check(
+      plan.stage === "confirmation" &&
+        c.length === 2 &&
+        c.every((x) => x.output === 1024 && x.id === `v${x.layout}-t1024-d${x.demos}`) &&
+        (plan.protocol === "routing-layout-v1"
+          ? c[0]!.layout === 1 && c[1]!.layout === 2 && c.every((x) => x.demos === 0)
+          : c[0]!.layout === c[1]!.layout && c[0]!.demos === 0 && c[1]!.demos === 2),
+      "factor comparison conditions drift",
     );
   }
   check(new Set(plan.cases.map((c) => c.id)).size === plan.cases.length, "duplicate case");
@@ -837,6 +857,8 @@ export class DiagnosticExperiment {
     const confirmationPassed =
       p.stage === "confirmation" &&
       p.protocol !== "routing-output-cap-v1" &&
+      p.protocol !== "routing-layout-v1" &&
+      p.protocol !== "routing-demo-increment-v1" &&
       complete &&
       metrics[0]!.jsonValidRate >= 0.95 - 1e-12 &&
       metrics[0]!.successRate >= 0.9 - 1e-12 &&
@@ -926,6 +948,38 @@ export class DiagnosticExperiment {
                   )?.id ?? null)
               : null,
           }
+        : {}),
+      ...(p.protocol === "routing-layout-v1" || p.protocol === "routing-demo-increment-v1"
+        ? (() => {
+            const qualityGates = metrics.map((c) => ({
+              conditionId: c.id,
+              passed:
+                !!complete &&
+                c.jsonValidRate >= 0.95 - 1e-12 &&
+                c.successRate >= 0.9 - 1e-12 &&
+                c.misrouteRate <= 0.05 + 1e-12 &&
+                c.criticalFailures === 0,
+            }));
+            const base = qualityGates[0]!.passed;
+            const candidate = qualityGates[1]!.passed;
+            const improvement = metrics[1]!.successRate - metrics[0]!.successRate;
+            const winner =
+              candidate &&
+              (!base ||
+                (p.protocol === "routing-layout-v1"
+                  ? improvement > 1e-12
+                  : improvement >= 0.05 - 1e-12))
+                ? metrics[1]!.id
+                : base
+                  ? metrics[0]!.id
+                  : null;
+            return {
+              selectionSource: "prespecified-factor-comparison",
+              qualityGates,
+              developmentRecommendation: winner,
+              service5xxPolicy: "up-to-two-failed-slots-counted-unknown-no-retry",
+            };
+          })()
         : {}),
       receipts,
       partialRuns: s.admitted
