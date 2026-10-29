@@ -1,0 +1,58 @@
+{
+  "scope": "developer-visible descriptive reliability observation",
+  "planned": 60,
+  "completed": 60,
+  "accepted": 60,
+  "jsonValid": 60,
+  "criticalFailures": 0,
+  "medianRunMs": 5634.5,
+  "p95RunMs": 15695,
+  "family": {
+    "reliability-new-bundle-completeness": {
+      "planned": 6,
+      "accepted": 6
+    },
+    "reliability-new-literal-path-interop": {
+      "planned": 6,
+      "accepted": 6
+    },
+    "reliability-new-manifest-conservation": {
+      "planned": 6,
+      "accepted": 6
+    },
+    "reliability-new-outline-lexer": {
+      "planned": 6,
+      "accepted": 6
+    },
+    "reliability-new-record-framing": {
+      "planned": 6,
+      "accepted": 6
+    },
+    "reliability-new-suffix-dispatch": {
+      "planned": 6,
+      "accepted": 6
+    },
+    "reliability-new-test-name-boundary": {
+      "planned": 6,
+      "accepted": 6
+    },
+    "reliability-new-test-ownership": {
+      "planned": 6,
+      "accepted": 6
+    },
+    "reliability-new-token-boundaries": {
+      "planned": 6,
+      "accepted": 6
+    },
+    "reliability-new-utf8-budget": {
+      "planned": 6,
+      "accepted": 6
+    }
+  },
+  "failureReceipts": [],
+  "sha256VerifiedBlobs": 5248,
+  "sqliteIntegrity": "ok",
+  "foreignKeyViolations": 0,
+  "parentEventsUnchanged": 842,
+  "reportDigest": "26b43b09ddb60e6d118a17c6749c571efd4980548d4e4e8d3b51cdb01be3fec0"
+}

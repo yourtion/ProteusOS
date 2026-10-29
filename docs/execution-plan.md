@@ -48,6 +48,7 @@ P0-01/02/03/04、M6a-01/02 和 M6a-03-02 的 fixture 工程闭环均已完成工
 | O2-02 | [开发诊断矩阵](./experiments/results/routing-diagnostic-matrix-v1.md) | O2-01，新登记限额和开发任务 | 已结案 | 142/160 槽位后服务 500，历史未知新增 1；按原协议停止，selected=null，没有通过筛选。原记录与未执行分母保留 |
 | O2-R1 | [固定 512/256 新对照](./experiments/results/routing-fixed-output-v1.md) | 用户要求提高上限，封闭的 5xx 停止轮 | 已结案 | 完整 120 次、计量通过；512 成功 56/60（93.33%），256 为 40/60（66.67%）；512 JSON 仍低于 95%，严格确认未过。当前未知 0、历史未知 2 保留 |
 | O2-R2 | [固定布局 1024 / 2048 对照](./experiments/output-cap-v1.md) | R1 完整结果，用户确认开发方可见资料与独立收益 inconclusive | 已结案 | [完整 120 次](./experiments/results/routing-output-cap-v1.md)；1024 为 60/60、2048 为 59/60，JSON 均 100%，关键全过、无截断/新增未知；推荐 1024 作为下一开发基线，独立收益 inconclusive |
+| O2-R5 | [候选基线新资料可靠性](./experiments/results/routing-reliability-v1.md) | R4 零示例候选、固定新资料 | 已结案 | 60/60 成功及合法 JSON，24 个关键槽位通过，无新增未知；10 类开发场景，独立收益 inconclusive，active 不变 |
 | O2-03 | [冻结开发确认](./experiments/observed-iteration-plan.md) | 新的开发矩阵通过，固定候选/对照 | 待前置 | 新 20 任务 ×2 配置 ×3 repeats，最多 120 次；仅无示例改善时不冒充示例收益 |
 | O2-04 | [新资料完整三臂复测](./experiments/observed-iteration-plan.md) | O2 示例开发门通过，新清单/资料 | 待前置 | 750 次测量；此前开发 280 次计入新链 1,030 次预算草案，原 O1 800 上限不改；正式条件不足仍只做观测 |
 | M6a-03-03 | 受信 runner 与正式 Evaluation | M6a-03-02，预算后端 | 待前置 | 实际调用受约束，正式集一次领用，三臂完整执行与新版 Evaluation；采用仍显式授权 |
@@ -185,6 +186,7 @@ env -u PROTEUS_E2E -u PROTEUS_SANDBOX PATH="/opt/homebrew/bin:$PATH" \
 | 2026-10-28 | O2-R2 1024 / 2048 工程验收 | 用户明确两档直接对照、512 仅历史参考；新协议固定父轮 20 任务、v1 / 零示例与共同 90/85 秒窗口，新预算 120 次，开发累计最多 382 | 17 个定向用例、120 槽位 fixture、静态与全量 456 passed / 5 skipped；封闭矩阵与 R1 报告复算不变。提交后从干净代码运行真实对照，独立收益仍 inconclusive |
 | 2026-10-28 | O2-R2 完整真实额度对照 | 从干净 0647295 完成 120/120；1024 成功 100%、2048 为 98.33%（一次自然结束弃权），JSON 均 100%、关键全过，无截断/新增未知；推荐 1024 | [原始证据与完整结果](./experiments/results/routing-output-cap-v1.md)归档；3983 blob、父 842 事件、解包报告/独立核验复算通过。O2 开发累计 382、含 O1 共 1175 次，历史未知 2 保留；下一步固定 1024 单独验证布局与示例增量 |
 | 2026-10-28 | O2-R3 /R4 布局与示例对照 | 1024 固定，布局 v1 59/60、v2 60/60，选择 v2；示例阶段零示例 60/60、两示例 55/60，推荐零示例 | [布局结果](./experiments/results/routing-layout-v1.md)和[示例结果](./experiments/results/routing-demo-increment-v1.md)含原始证据；各 120 次，计量完整、无新增未知、父轮复算一致。累计 1415 次，历史未知 2；独立收益 inconclusive，active 不变 |
+| 2026-10-29 | O2-R5 基线与新资料可靠性 | 固定 1024 /v2 /零示例原快照，整理截断及弃权回归，20 个新合成任务 ×3 repeats：60/60 成功、合法 JSON 100%、24 个关键槽位全过 | [报告及原始证据](./experiments/results/routing-reliability-v1.md)解包复算一致；34 定向与全量 460 passed /5 skipped。累计 1475 次，历史未知 2 次，独立收益 inconclusive |
 
 P0-01 的最小复现与回归命令：
 

@@ -102,3 +102,6 @@ O2-R2 已结案：[1024 / 2048 完整真实对照](./results/routing-output-cap-
 
 
 O2-R3 /R4 已完成：[布局对照](./results/routing-layout-v1.md)推荐 v2，[示例对照](./results/routing-demo-increment-v1.md)推荐零示例，均固定 1024；每段完整 120 次、无新增未知，独立收益仍 inconclusive。两示例相对零示例为 55/60 对 60/60，且用量和 p95 均较高；仅对本次固定示例及开发资料作此结论。下一步若进行更新配置的完整三臂，应另行预登记、计入累计成本并按观测性质解释。
+
+
+O2-R5 已完成：[候选基线新资料可靠性](./results/routing-reliability-v1.md)，20 个新合成任务 ×3 repeats，60/60 成功、合法 JSON 100%、关键槽位全过，当前无新增未知。场景家族独立性未证，开发方可见，独立收益 inconclusive；累计 1475 次、历史未知 2 次。固定示例原增量门仍未通过。
