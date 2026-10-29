@@ -26,16 +26,17 @@ export function validateSchema(value: unknown, schema: unknown, path = "$"): Sch
 
   if (value !== null && typeof value === "object" && !Array.isArray(value)) {
     const record = value as Record<string, unknown>;
+    const hasOwn = (key: string) => Object.prototype.hasOwnProperty.call(record, key);
     const required = Array.isArray(s.required) ? (s.required as string[]) : [];
     for (const key of required) {
-      if (!(key in record)) errors.push({ path: `${path}.${key}`, message: "缺少必填字段" });
+      if (!hasOwn(key)) errors.push({ path: `${path}.${key}`, message: "缺少必填字段" });
     }
     const properties =
       typeof s.properties === "object" && s.properties !== null
         ? (s.properties as Record<string, unknown>)
         : {};
     for (const [key, subSchema] of Object.entries(properties)) {
-      if (key in record) errors.push(...validateSchema(record[key], subSchema, `${path}.${key}`));
+      if (hasOwn(key)) errors.push(...validateSchema(record[key], subSchema, `${path}.${key}`));
     }
     if (s.additionalProperties === false) {
       const allowed = new Set(Object.keys(properties));
