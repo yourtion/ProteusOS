@@ -1,0 +1,78 @@
+{
+  "version": "development-pilot-v1",
+  "manifestDigest": "c87bf356cea3e467f54d893472fd935673aefc40f60e5ddba25eb7f3a9c328ae",
+  "summary": {
+    "runId": "01a186a4-fab4-766c-9b61-ce66bb0ddd21",
+    "taskId": "01a186a4-fab4-766c-9b61-d19e7d194a50",
+    "state": "succeeded",
+    "failureReason": null,
+    "snapshotId": "01a186a4-fab3-7361-9680-21e048aef2f7",
+    "graphSource": "dag-v1",
+    "nodes": [
+      {
+        "id": "develop",
+        "type": "execute",
+        "state": "succeeded"
+      },
+      {
+        "id": "verify",
+        "type": "verify",
+        "state": "succeeded"
+      }
+    ],
+    "decisions": [],
+    "attempts": [
+      {
+        "id": "01a186a4-fab8-7661-9bd0-c692f47ae20a",
+        "ordinal": 1,
+        "state": "succeeded",
+        "exitCode": 0,
+        "evidence": {
+          "version": "execution-evidence-v1",
+          "attemptId": "01a186a4-fab8-7661-9bd0-c692f47ae20a",
+          "executor": "claude-code-acp-pilot",
+          "adapter": "executor-acp-v1",
+          "snapshotId": "01a186a4-fab3-7361-9680-21e048aef2f7",
+          "promptDigest": "06b6042a83901d8bcb11cac73ef93f3ed0223e412b14f3b641c2b1a96aab2171",
+          "inputDigest": "313b01adb5f4a37f5e062fcb16afdf51057259d17bac4e4550782879c64f9c7d",
+          "outputDigest": null,
+          "stdoutDigest": "933487df9a85968b6aaab82d7cb85de656fa6ff37ccfbccc4948ecf522c2c162",
+          "stderrDigest": "c9e982d99e93cf1b92f9db3dec0ebebe8b647024854605d971f6e694676329b0",
+          "traceStatus": "partial",
+          "traceCoverage": "agent-events",
+          "traceRef": "ef/ef357da5a809ab639ebc5f158e48f050133b5a28445e1fbde30d39e8fc4e1bed",
+          "traceDigest": "ef357da5a809ab639ebc5f158e48f050133b5a28445e1fbde30d39e8fc4e1bed",
+          "droppedEvents": 132,
+          "detail": null,
+          "usage": null,
+          "stdoutTruncated": false,
+          "stderrTruncated": false
+        }
+      }
+    ],
+    "checks": [
+      {
+        "name": "tests",
+        "passed": true
+      }
+    ],
+    "experienceId": "01a186a5-d74e-761b-af7d-b526d4f1495b"
+  },
+  "elapsedMs": 56487,
+  "verification": {
+    "passed": true,
+    "checksIntact": true,
+    "inputsIntact": true,
+    "outputDigest": "554a2284179cb1da31e475e26d455d89eae82aff56d945a50047867b4d1a35c5",
+    "testExitCode": 0,
+    "testOutput": "{\n  \"passed\": true,\n  \"results\": [\n    {\n      \"name\": \"missing-required-constructor\",\n      \"passed\": true\n    },\n    {\n      \"name\": \"missing-required-toString\",\n      \"passed\": true\n    },\n    {\n      \"name\": \"missing-required-__proto__\",\n      \"passed\": true\n    },\n    {\n      \"name\": \"missing-required-hasOwnProperty\",\n      \"passed\": true\n    },\n    {\n      \"name\": \"optional-inherited-property-is-absent\",\n      \"passed\": true\n    },\n    {\n      \"name\": \"custom-inherited-required-property-is-absent\",\n      \"passed\": true\n    },\n    {\n      \"name\": \"custom-inherited-optional-property-is-absent\",\n      \"passed\": true\n    },\n    {\n      \"name\": \"own-special-names-are-valid\",\n      \"passed\": true\n    },\n    {\n      \"name\": \"own-special-name-still-checks-type\",\n      \"passed\": true\n    },\n    {\n      \"name\": \"null-prototype-object\",\n      \"passed\": true\n    },\n    {\n      \"name\": \"nested-missing-inherited-name\",\n      \"passed\": true\n    },\n    {\n      \"name\": \"existing-subset-regression\",\n      \"passed\": true\n    }\n  ]\n}\n",
+    "error": null
+  },
+  "activeUnchanged": true,
+  "hasPatch": true,
+  "passed": true,
+  "benefit": "inconclusive",
+  "modelCallCount": null,
+  "modelUsage": null,
+  "cost": null
+}

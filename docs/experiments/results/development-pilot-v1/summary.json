@@ -1,0 +1,52 @@
+{
+  "version": "development-pilot-result-v1",
+  "functionalLoopPassed": true,
+  "evidenceComplete": false,
+  "benefit": "inconclusive",
+  "baseline": {
+    "checks": 12,
+    "failed": 8,
+    "passed": 4
+  },
+  "realRuns": [
+    {
+      "runId": "01a1869c-1191-76c3-a9ae-e5a4d3097b0b",
+      "state": "failed",
+      "elapsedMs": 125995,
+      "reason": "pilot permission callback read legacy metadata only; three standard-name Write requests were denied"
+    },
+    {
+      "runId": "01a186a4-fab4-766c-9b61-ce66bb0ddd21",
+      "state": "succeeded",
+      "elapsedMs": 56487,
+      "checksPassed": 12
+    }
+  ],
+  "appliedProposal": {
+    "sourceRunId": "01a1869c-1191-76c3-a9ae-e5a4d3097b0b",
+    "commit": "d82402d",
+    "sha256": "b916225f8d484e7c0e427b744001f45c56c623bd3c2f528884e89a5d8cd11ba1",
+    "hostAction": "extracted denied Write proposal unchanged, reviewed, validated and applied"
+  },
+  "harnessCommit": "8d22656",
+  "automaticSecondProposal": {
+    "sha256": "554a2284179cb1da31e475e26d455d89eae82aff56d945a50047867b4d1a35c5",
+    "applied": false,
+    "reason": "functionally equivalent; retained as independent trial output"
+  },
+  "validation": {
+    "passed": 473,
+    "skipped": 5,
+    "files": 74,
+    "staticChecks": "passed",
+    "localHttpRerun": "3 files / 9 tests passed; initial 7 failures were loopback EPERM/timeouts"
+  },
+  "trace": {
+    "attempt1": "partial/protocol_error",
+    "attempt2": "partial/132 dropped events",
+    "reason": "streamed message chunks exceed 256-event buffer"
+  },
+  "modelUsage": null,
+  "cost": null,
+  "adoptionPerformed": false
+}

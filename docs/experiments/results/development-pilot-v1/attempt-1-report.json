@@ -1,0 +1,65 @@
+{
+  "version": "development-pilot-v1",
+  "manifestDigest": "3034227ee99c72edc08029c7dff05ed3f201e9024d802d2cf4db5d86e4886aac",
+  "summary": {
+    "runId": "01a1869c-1191-76c3-a9ae-e5a4d3097b0b",
+    "taskId": "01a1869c-1191-76c3-a9ae-e84dfadad2fd",
+    "state": "failed",
+    "failureReason": "execution_aborted",
+    "snapshotId": "01a1869c-1190-73e3-be0e-d078a489600a",
+    "graphSource": "dag-v1",
+    "nodes": [
+      {
+        "id": "develop",
+        "type": "execute",
+        "state": "failed"
+      },
+      {
+        "id": "verify",
+        "type": "verify",
+        "state": "skipped"
+      }
+    ],
+    "decisions": [],
+    "attempts": [
+      {
+        "id": "01a1869c-1197-7097-92d0-8f49b397e188",
+        "ordinal": 1,
+        "state": "failed",
+        "exitCode": null,
+        "evidence": {
+          "version": "execution-evidence-v1",
+          "attemptId": "01a1869c-1197-7097-92d0-8f49b397e188",
+          "executor": "claude-code-acp-pilot",
+          "adapter": "executor-acp-v1",
+          "snapshotId": "01a1869c-1190-73e3-be0e-d078a489600a",
+          "promptDigest": "06b6042a83901d8bcb11cac73ef93f3ed0223e412b14f3b641c2b1a96aab2171",
+          "inputDigest": "313b01adb5f4a37f5e062fcb16afdf51057259d17bac4e4550782879c64f9c7d",
+          "outputDigest": null,
+          "stdoutDigest": "021ba93a4eb5eb468ddef2d5f6fc31886018ccdca3f4f04d2cd0e9c86ef37a94",
+          "stderrDigest": "a722e2aff5b1f3a5f95cc01b379938de7309820498919bf70871f633c99206f7",
+          "traceStatus": "partial",
+          "traceCoverage": "agent-events",
+          "traceRef": "7b/7b29a84e258da242b966bbc1083b151f9f2e2b386ac25a5b026c6497c6ccbf2a",
+          "traceDigest": "7b29a84e258da242b966bbc1083b151f9f2e2b386ac25a5b026c6497c6ccbf2a",
+          "droppedEvents": 0,
+          "detail": "protocol_error",
+          "usage": null,
+          "stdoutTruncated": false,
+          "stderrTruncated": false
+        }
+      }
+    ],
+    "checks": [],
+    "experienceId": "01a1869d-fdc0-768f-8444-8f38c3c6af3a"
+  },
+  "elapsedMs": 125995,
+  "verification": null,
+  "activeUnchanged": true,
+  "hasPatch": false,
+  "passed": false,
+  "benefit": "inconclusive",
+  "modelCallCount": null,
+  "modelUsage": null,
+  "cost": null
+}

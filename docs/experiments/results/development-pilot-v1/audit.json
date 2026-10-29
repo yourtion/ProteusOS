@@ -1,0 +1,30 @@
+{
+  "auditPassed": true,
+  "modelCallsDuringReplay": 0,
+  "attempts": [
+    {
+      "attempt": 1,
+      "runId": "01a1869c-1191-76c3-a9ae-e5a4d3097b0b",
+      "runtimeState": "failed",
+      "beforeFailed": 8,
+      "beforePassed": 4,
+      "afterPassed": 12,
+      "blobsChecked": 6,
+      "traceStatus": "partial",
+      "droppedEvents": 0,
+      "activeUnchanged": true
+    },
+    {
+      "attempt": 2,
+      "runId": "01a186a4-fab4-766c-9b61-ce66bb0ddd21",
+      "runtimeState": "succeeded",
+      "beforeFailed": 8,
+      "beforePassed": 4,
+      "afterPassed": 12,
+      "blobsChecked": 6,
+      "traceStatus": "partial",
+      "droppedEvents": 132,
+      "activeUnchanged": true
+    }
+  ]
+}

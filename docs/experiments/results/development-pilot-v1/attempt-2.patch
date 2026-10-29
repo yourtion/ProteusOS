@@ -1,0 +1,34 @@
+diff --git a/src/runtime/schema-validator.ts b/src/runtime/schema-validator.ts
+index 7321213..2be4d8d 100644
+--- a/src/runtime/schema-validator.ts
++++ b/src/runtime/schema-validator.ts
+@@ -10,6 +10,11 @@ export interface SchemaError {
+   message: string;
+ }
+ 
++/** 仅检查对象自身字段，忽略原型链上的属性（如 constructor/toString/__proto__）。 */
++function hasOwnKey(record: Record<string, unknown>, key: string): boolean {
++  return Object.prototype.hasOwnProperty.call(record, key);
++}
++
+ export function validateSchema(value: unknown, schema: unknown, path = "$"): SchemaError[] {
+   if (typeof schema !== "object" || schema === null) {
+     return [{ path, message: `schema 本身无效：${String(schema)}` }];
+@@ -28,14 +33,15 @@ export function validateSchema(value: unknown, schema: unknown, path = "$"): Sch
+     const record = value as Record<string, unknown>;
+     const required = Array.isArray(s.required) ? (s.required as string[]) : [];
+     for (const key of required) {
+-      if (!(key in record)) errors.push({ path: `${path}.${key}`, message: "缺少必填字段" });
++      if (!hasOwnKey(record, key)) errors.push({ path: `${path}.${key}`, message: "缺少必填字段" });
+     }
+     const properties =
+       typeof s.properties === "object" && s.properties !== null
+         ? (s.properties as Record<string, unknown>)
+         : {};
+     for (const [key, subSchema] of Object.entries(properties)) {
+-      if (key in record) errors.push(...validateSchema(record[key], subSchema, `${path}.${key}`));
++      if (hasOwnKey(record, key))
++        errors.push(...validateSchema(record[key], subSchema, `${path}.${key}`));
+     }
+     if (s.additionalProperties === false) {
+       const allowed = new Set(Object.keys(properties));

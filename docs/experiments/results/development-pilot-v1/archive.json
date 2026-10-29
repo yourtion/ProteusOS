@@ -1,0 +1,16 @@
+{
+  "file": "evidence.tar.gz",
+  "sha256": "e7b6fba7344913af0f99a768ebb0e5c44579adc5b30e0cde7cc21803f9e851e9",
+  "bytes": 91856,
+  "auditScriptSha256": "99ab32eb2290ca421d0d2d2c2b637557347bb44302fca85657bd7db42a3e2e32",
+  "auditSha256": "fdde3997bff1eb47b914c5f86d379f04aff218bf9db9fbf3e1a3cfd3230fcfa9",
+  "contains": [
+    "two original instance directories, manifests, reports and frozen inputs",
+    "public ACP updates and permission decisions",
+    "accepted first proposal and its recorded origin"
+  ],
+  "excludes": [
+    "provider credentials and agent configuration directories",
+    "raw SDK transcripts and private reasoning"
+  ]
+}
