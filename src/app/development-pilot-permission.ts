@@ -2,13 +2,22 @@ import { join, resolve } from "node:path";
 import type { AcpPermissionPolicy } from "../adapters/executor-acp/index.ts";
 
 /** Capability for the one-file pilot only; paths and tool names must both match. */
-export function developmentPilotPermission(workspace: string): AcpPermissionPolicy {
+export function developmentPilotPermission(
+  workspace: string,
+  target = "src/runtime/schema-validator.ts",
+): AcpPermissionPolicy {
+  if (
+    !/^[a-zA-Z0-9_./-]+\.(?:ts|mjs|js)$/.test(target) ||
+    target.startsWith("/") ||
+    target.split("/").some((part) => ["", ".", ".."].includes(part))
+  )
+    throw new Error("target must be a safe relative module path");
   const readable = new Set(
-    ["inputs/source.ts", "inputs/checks.mjs", "output/src/runtime/schema-validator.ts"].map(
-      (path) => join(workspace, path),
+    ["inputs/source.ts", "inputs/checks.mjs", `output/${target}`].map((path) =>
+      join(workspace, path),
     ),
   );
-  const writable = join(workspace, "output/src/runtime/schema-validator.ts");
+  const writable = join(workspace, "output", target);
   return (request) => {
     const raw = request.toolCall.rawInput as { file_path?: unknown } | undefined;
     const meta = request.toolCall._meta as { claudeCode?: { toolName?: unknown } } | undefined;

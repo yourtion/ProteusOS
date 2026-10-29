@@ -22,6 +22,16 @@ function request(name: string, filePath: string): RequestPermissionRequest {
   };
 }
 describe("development pilot ACP permissions", () => {
+  it("expands to exactly one registered target and rejects traversal in the target itself", async () => {
+    const policy = developmentPilotPermission(workspace, "src/kernel/index.ts");
+    expect(await policy(request("Write", "output/src/kernel/index.ts"))).toEqual({
+      outcome: { outcome: "selected", optionId: "allow-once" },
+    });
+    expect(await policy(request("Write", "output/src/runtime/schema-validator.ts"))).toEqual({
+      outcome: { outcome: "cancelled" },
+    });
+    expect(() => developmentPilotPermission(workspace, "../outside.ts")).toThrow(/safe relative/);
+  });
   it("accepts the standard toolCall.name shape observed in the real run, once only", async () => {
     const policy = developmentPilotPermission(workspace);
     for (const path of [
