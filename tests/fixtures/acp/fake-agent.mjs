@@ -31,6 +31,15 @@ const app = agent({ name: "fake-acp-agent" })
   .onRequest(methods.agent.session.new, async (ctx) => {
     const params = ctx.params;
     sessionState.cwd = params.cwd;
+    if (params._meta?.testConfiguration === "probe") {
+      writeFileSync(
+        join(params.cwd, "configuration-probe.json"),
+        JSON.stringify({
+          meta: params._meta,
+          environmentMatched: process.env.PROTEUS_TEST_ACP_ENV === "explicit-test-value",
+        }),
+      );
+    }
     return { sessionId: sessionState.sessionId, modes: null, meta: {} };
   })
   .onNotification(methods.agent.session.cancel, async () => {

@@ -10,6 +10,7 @@ import {
   type RequestPermissionRequest,
   type RequestPermissionResponse,
   type SessionUpdate,
+  type NewSessionRequest,
 } from "@agentclientprotocol/sdk";
 import type { ExecutionRequest, ExecutionResult, ExecutorProvider } from "../../runtime/types.ts";
 import { ExecutionTrace, boundedOutput } from "../../runtime/execution-evidence.ts";
@@ -46,6 +47,10 @@ export interface AcpExecutorOptions {
   /** agent 进程入口脚本（以 process.execPath 启动，避免 exec 位问题） */
   agentEntry: string;
   agentArgs?: string[];
+  /** 受信宿主显式提供子进程环境；不写入 trace 或版本。缺省保持既有行为。 */
+  env?: NodeJS.ProcessEnv;
+  /** Provider 专属会话设置（如模型/工具/轮数），不放凭据。 */
+  sessionMeta?: NewSessionRequest["_meta"];
   permissionPolicy?: AcpPermissionPolicy;
   clientInfo?: { name: string; title: string; version: string };
 }
@@ -55,6 +60,8 @@ export class AcpExecutor implements ExecutorProvider {
   readonly recoveryPolicy = "manual";
   private readonly agentEntry: string;
   private readonly agentArgs: string[];
+  private readonly env: NodeJS.ProcessEnv | undefined;
+  private readonly sessionMeta: NewSessionRequest["_meta"];
   private readonly permissionPolicy: AcpPermissionPolicy;
   private readonly clientInfo: { name: string; title: string; version: string };
 
@@ -62,6 +69,8 @@ export class AcpExecutor implements ExecutorProvider {
     this.name = options.name;
     this.agentEntry = options.agentEntry;
     this.agentArgs = options.agentArgs ?? [];
+    this.env = options.env;
+    this.sessionMeta = options.sessionMeta;
     this.permissionPolicy = options.permissionPolicy ?? allowFirstOptionPolicy;
     this.clientInfo = options.clientInfo ?? {
       name: "proteus",
@@ -76,7 +85,7 @@ export class AcpExecutor implements ExecutorProvider {
     trace.record("session.started", { attemptId: req.attemptId });
     const child = spawn(process.execPath, [this.agentEntry, ...this.agentArgs], {
       stdio: ["pipe", "pipe", "pipe"],
-      env: process.env,
+      env: this.env ?? process.env,
     });
 
     let stderr = "";
@@ -163,15 +172,17 @@ export class AcpExecutor implements ExecutorProvider {
           capabilities: {},
           info: this.clientInfo,
         });
-        return ctx.buildSession(req.workspaceDir).withSession(async (session) => {
-          liveSessionId = session.sessionId;
-          if (cancelPending) sendCancel();
-          const done = session.prompt(req.prompt);
-          done.catch(() => undefined); // 协议错误经超时/连接关闭体现，避免未处理拒绝
-          const response = await done;
-          stopReason = response.stopReason ?? null;
-          return response;
-        });
+        return ctx
+          .buildSession({ cwd: req.workspaceDir, mcpServers: [], _meta: this.sessionMeta })
+          .withSession(async (session) => {
+            liveSessionId = session.sessionId;
+            if (cancelPending) sendCancel();
+            const done = session.prompt(req.prompt);
+            done.catch(() => undefined); // 协议错误经超时/连接关闭体现，避免未处理拒绝
+            const response = await done;
+            stopReason = response.stopReason ?? null;
+            return response;
+          });
       });
       stopReason = response.stopReason ?? stopReason;
     } catch (err) {

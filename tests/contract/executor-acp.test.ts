@@ -32,6 +32,25 @@ function request(prompt: string, ws: string) {
 }
 
 describe("AcpExecutor 合同（fake ACP agent）", () => {
+  it("显式环境与会话配置送达 agent，环境值不进入执行证据", async () => {
+    const ws = workspace();
+    const configured = new AcpExecutor({
+      name: "fake-acp",
+      agentEntry: FAKE_AGENT,
+      env: { PROTEUS_TEST_ACP_ENV: "explicit-test-value" },
+      sessionMeta: { testConfiguration: "probe", model: "test-model", maxTurns: 6 },
+    });
+    const result = await configured.start(request("实现 wordcount", ws));
+    expect(result.ok).toBe(true);
+    expect(JSON.parse(readFileSync(join(ws, "configuration-probe.json"), "utf8"))).toEqual({
+      meta: { testConfiguration: "probe", model: "test-model", maxTurns: 6 },
+      environmentMatched: true,
+    });
+    expect(JSON.stringify(result)).not.toContain("explicit-test-value");
+    expect(readFileSync(join(ws, ".proteus/acp-trace.json"), "utf8")).not.toContain(
+      "explicit-test-value",
+    );
+  });
   it("initialize → session/new(cwd) → prompt：end_turn 视为执行完成，产物落在工作区", async () => {
     const ws = workspace();
     const result = await executor().start(request("实现 wordcount", ws));
