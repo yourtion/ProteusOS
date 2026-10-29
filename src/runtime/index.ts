@@ -53,6 +53,7 @@ import {
   ExecutionTrace,
   executionInputDigest,
   type StoredExecutionEvidence,
+  type ExecutionProgress,
 } from "./execution-evidence.ts";
 import type { SandboxBackend } from "./sandbox.ts";
 import {
@@ -133,6 +134,11 @@ export class RuntimeError extends Error {
 }
 
 export interface RuntimeDeps {
+  onExecutionProgress?: (event: {
+    runId: string;
+    attemptId: string;
+    progress: ExecutionProgress;
+  }) => void;
   /** 受信宿主的准入/单次启动/派发守卫；在短事务内同步执行，不能调用外部服务。 */
   runGuard?(run: RunRecord, phase: "admit" | "start" | "dispatch"): void;
   actorId?: string;
@@ -1000,7 +1006,17 @@ export class Runtime {
     const run = this.mustGetRun(runId);
     const attempts = this.listRunAttempts(runId);
     const experience = this.deps.storage.getExperienceByRun(runId);
-    const events = this.deps.storage.listEvents({ runId }, 1000);
+    const events = [
+      ...this.deps.storage.listEvents({ runId }, 1000),
+      ...["node.completed", "decision.recorded", "attempt.evidence.recorded"].flatMap((type) =>
+        this.deps.storage.runEventsByType(runId, type),
+      ),
+    ];
+    const progress = new Map<string, ExecutionProgress>();
+    for (const event of this.deps.storage.runEventsByType(runId, "attempt.progress")) {
+      if (event.attemptId)
+        progress.set(event.attemptId, event.payload["progress"] as unknown as ExecutionProgress);
+    }
 
     const nodeMap = new Map<string, RunSummaryNode>();
     for (const e of events) {
@@ -1048,6 +1064,7 @@ export class Runtime {
         state: a.state,
         exitCode: a.exitCode,
         ...(executionEvidence.has(a.id) ? { evidence: executionEvidence.get(a.id) } : {}),
+        ...(progress.has(a.id) ? { progress: progress.get(a.id) } : {}),
       })),
       checks: experience?.outcome.checks ?? [],
       experienceId: experience?.id ?? null,
@@ -2054,6 +2071,23 @@ export class Runtime {
       workspaceDir: workspace,
       prompt: task.goal,
       timeoutMs: remainingMs,
+      onProgress: (progress) => {
+        this.deps.storage.appendEvent({
+          streamId: `attempt-${attemptId}`,
+          type: "attempt.progress",
+          payload: { progress },
+          correlationId: runId,
+          runId,
+          processId,
+          attemptId,
+          occurredAt: this.deps.clock.now(),
+        });
+        try {
+          this.deps.onExecutionProgress?.({ runId, attemptId, progress });
+        } catch {
+          /* Display failure never retries an execution. */
+        }
+      },
     });
 
     const handle = `${executorName}:${dispatchId}`;
@@ -2161,6 +2195,17 @@ export class Runtime {
         // 工作已经执行，采集失败不能导致自动重派副作用。
         evidence.traceStatus = "failed";
         evidence.detail = "trace_persistence_failed";
+      }
+      if (supplied.accounting) {
+        evidence.accounting = structuredClone(supplied.accounting);
+        try {
+          const written = this.deps.blobs.write(canonicalJson(supplied.accounting));
+          evidence.accountingRef = written.ref;
+          evidence.accountingDigest = written.digest;
+        } catch {
+          evidence.accounting.tokenStatus = "partial";
+          evidence.accounting.issues.push("accounting_persistence_failed");
+        }
       }
     }
     return evidence;

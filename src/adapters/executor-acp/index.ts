@@ -1,6 +1,4 @@
 import { spawn } from "node:child_process";
-import { mkdirSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
 import { Readable, Writable } from "node:stream";
 import {
   client,
@@ -13,7 +11,9 @@ import {
   type NewSessionRequest,
 } from "@agentclientprotocol/sdk";
 import type { ExecutionRequest, ExecutionResult, ExecutorProvider } from "../../runtime/types.ts";
-import { ExecutionTrace, boundedOutput } from "../../runtime/execution-evidence.ts";
+import { boundedOutput } from "../../runtime/execution-evidence.ts";
+import { AcpAccounting, accountingUsage } from "./accounting.ts";
+import { AcpObservation } from "./observation.ts";
 
 /**
  * ACP 执行器（M1）：以 ACP client 身份 spawn agent 侧适配器
@@ -51,6 +51,8 @@ export interface AcpExecutorOptions {
   env?: NodeJS.ProcessEnv;
   /** Provider 专属会话设置（如模型/工具/轮数），不放凭据。 */
   sessionMeta?: NewSessionRequest["_meta"];
+  /** Explicit Claude SDK numeric receipts; never store raw message content. */
+  captureClaudeUsage?: boolean;
   permissionPolicy?: AcpPermissionPolicy;
   clientInfo?: { name: string; title: string; version: string };
 }
@@ -62,6 +64,7 @@ export class AcpExecutor implements ExecutorProvider {
   private readonly agentArgs: string[];
   private readonly env: NodeJS.ProcessEnv | undefined;
   private readonly sessionMeta: NewSessionRequest["_meta"];
+  private readonly captureClaudeUsage: boolean;
   private readonly permissionPolicy: AcpPermissionPolicy;
   private readonly clientInfo: { name: string; title: string; version: string };
 
@@ -71,6 +74,7 @@ export class AcpExecutor implements ExecutorProvider {
     this.agentArgs = options.agentArgs ?? [];
     this.env = options.env;
     this.sessionMeta = options.sessionMeta;
+    this.captureClaudeUsage = options.captureClaudeUsage ?? false;
     this.permissionPolicy = options.permissionPolicy ?? allowFirstOptionPolicy;
     this.clientInfo = options.clientInfo ?? {
       name: "proteus",
@@ -81,8 +85,11 @@ export class AcpExecutor implements ExecutorProvider {
 
   async start(req: ExecutionRequest): Promise<ExecutionResult> {
     const startedAt = Date.now();
-    const trace = new ExecutionTrace();
-    trace.record("session.started", { attemptId: req.attemptId });
+    const observation = new AcpObservation(req.workspaceDir, req.onProgress);
+    observation.record("session.started", { attemptId: req.attemptId });
+    observation.report("connecting", null, true);
+    const accounting = new AcpAccounting(this.captureClaudeUsage);
+    const heartbeat = setInterval(() => observation.heartbeat(), 1000);
     const child = spawn(process.execPath, [this.agentEntry, ...this.agentArgs], {
       stdio: ["pipe", "pipe", "pipe"],
       env: this.env ?? process.env,
@@ -97,8 +104,6 @@ export class AcpExecutor implements ExecutorProvider {
       stderrTruncated ||= captured.truncated;
     });
 
-    const updates: SessionUpdate[] = [];
-    const permissions: Array<{ toolCall: unknown; options: unknown; decision: unknown }> = [];
     let stdoutText = "";
 
     const stream = ndJsonStream(
@@ -109,33 +114,24 @@ export class AcpExecutor implements ExecutorProvider {
     const app = client({ name: "proteus" })
       .onRequest(methods.client.session.requestPermission, async (ctx) => {
         const decision = await this.permissionPolicy(ctx.params);
-        trace.record("permission", {
-          toolCallId: ctx.params.toolCall.toolCallId,
-          outcome: decision.outcome.outcome,
-          optionId: decision.outcome.outcome === "selected" ? decision.outcome.optionId : null,
-        });
-        permissions.push({ toolCall: ctx.params.toolCall, options: ctx.params.options, decision });
+        observation.permission(ctx.params, decision);
         return decision;
       })
       .onNotification(methods.client.session.update, async (ctx) => {
         const update = ctx.params.update;
-        if (update.sessionUpdate !== "agent_thought_chunk" && updates.length < 256)
-          updates.push(update);
+        observation.update(update);
         const text = textOf(update);
         const captured = boundedOutput(stdoutText, text);
         stdoutText = captured.text;
         stdoutTruncated ||= captured.truncated;
-        if (update.sessionUpdate === "agent_message_chunk") trace.record("message", { text });
-        else if (
-          update.sessionUpdate === "tool_call" ||
-          update.sessionUpdate === "tool_call_update"
-        )
-          trace.record("tool", {
-            toolCallId: update.toolCallId,
-            status: update.status ?? null,
-            title: update.title ?? null,
-          });
-      });
+      })
+      .onNotification(
+        "_claude/sdkMessage",
+        (params: unknown) => params,
+        async (ctx) => {
+          accounting.observeSdk(ctx.params);
+        },
+      );
 
     let timedOut = false;
     let cancelNotified = false;
@@ -173,10 +169,11 @@ export class AcpExecutor implements ExecutorProvider {
           info: this.clientInfo,
         });
         return ctx
-          .buildSession({ cwd: req.workspaceDir, mcpServers: [], _meta: this.sessionMeta })
+          .buildSession({ cwd: req.workspaceDir, mcpServers: [], _meta: this.sessionMetadata() })
           .withSession(async (session) => {
             liveSessionId = session.sessionId;
             if (cancelPending) sendCancel();
+            observation.report("working", null, true);
             const done = session.prompt(req.prompt);
             done.catch(() => undefined); // 协议错误经超时/连接关闭体现，避免未处理拒绝
             const response = await done;
@@ -185,27 +182,18 @@ export class AcpExecutor implements ExecutorProvider {
           });
       });
       stopReason = response.stopReason ?? stopReason;
+      accounting.observeResponse(response);
     } catch (err) {
       failure = err instanceof Error ? err.message : String(err);
     } finally {
+      clearInterval(heartbeat);
       clearTimeout(timer);
       child.kill("SIGKILL");
     }
 
-    // trace 尽力落盘：update 流 + 权限决定（产出可定位 trace，roadmap M1）
-    try {
-      mkdirSync(join(req.workspaceDir, ".proteus"), { recursive: true });
-      writeFileSync(
-        join(req.workspaceDir, ".proteus", "acp-trace.json"),
-        JSON.stringify({ agent: this.name, stopReason, updates, permissions }, null, 2),
-        "utf8",
-      );
-    } catch {
-      // trace 不影响执行结果
-    }
-
-    const ok = !timedOut && stopReason === "end_turn";
-    trace.record("session.completed", { stopReason, timedOut, protocolError: failure !== null });
+    const ok = !timedOut && stopReason === "end_turn" && failure === null;
+    observation.finish(this.name, stopReason, ok, timedOut, failure !== null);
+    const metering = accounting.snapshot(!timedOut && failure === null);
     return {
       ok,
       exitCode: ok ? 0 : null,
@@ -224,11 +212,29 @@ export class AcpExecutor implements ExecutorProvider {
         .join("\n"),
       durationMs: Date.now() - startedAt,
       outputRef: null,
-      evidence: trace.finish("executor-acp-v1", "agent-events", !timedOut && failure === null, {
-        stdoutTruncated,
-        stderrTruncated,
-        detail: timedOut ? "timeout" : failure === null ? null : "protocol_error",
-      }),
+      evidence: {
+        ...observation.trace.finish(
+          "executor-acp-v1",
+          "agent-events",
+          !timedOut && failure === null,
+          {
+            usage: accountingUsage(metering),
+            stdoutTruncated,
+            stderrTruncated,
+            detail: timedOut ? "timeout" : failure === null ? null : "protocol_error",
+          },
+        ),
+        accounting: metering,
+      },
+    };
+  }
+
+  private sessionMetadata(): NewSessionRequest["_meta"] {
+    if (!this.captureClaudeUsage) return this.sessionMeta;
+    const claude = this.sessionMeta?.claudeCode as Record<string, unknown> | undefined;
+    return {
+      ...this.sessionMeta,
+      claudeCode: { ...claude, emitRawSDKMessages: [{ type: "assistant" }, { type: "result" }] },
     };
   }
 }

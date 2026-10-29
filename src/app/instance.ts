@@ -20,7 +20,7 @@ import { Federation } from "../federation/index.ts";
 import { PublicationTrust } from "../federation/trust.ts";
 import { Evolution } from "../evolution/index.ts";
 import { Kernel } from "../kernel/index.ts";
-import { Runtime } from "../runtime/index.ts";
+import { Runtime, type RuntimeDeps } from "../runtime/index.ts";
 import type { ExecutorProvider } from "../runtime/types.ts";
 import { DEFAULT_ORGANISM_BUDGET, type OrganismBudget } from "../runtime/types.ts";
 import { MicrosandboxBackend, type SandboxBackend } from "../runtime/sandbox.ts";
@@ -100,7 +100,11 @@ export function buildExecutors(): Map<string, ExecutorProvider> {
     try {
       executors.set(
         name,
-        new AcpExecutor({ name, agentEntry: resolvePackageBin(spec.packageName, spec.bin) }),
+        new AcpExecutor({
+          name,
+          agentEntry: resolvePackageBin(spec.packageName, spec.bin),
+          captureClaudeUsage: name === "claude-code-acp",
+        }),
       );
     } catch {
       // 适配器未安装时该执行器不注册；图中引用会得到明确的 unknown_executor
@@ -134,6 +138,7 @@ export function openInstance(
     logger?: Logger;
     organismBudget?: OrganismBudget;
     executors?: Map<string, ExecutorProvider>;
+    onExecutionProgress?: RuntimeDeps["onExecutionProgress"];
     /** 追加按名称查找的 DecisionProvider（实验显式装配 LLM；默认仍只有规则） */
     decisions?: ReadonlyMap<string, DecisionProvider>;
     /** 单次决策调用超时上限（默认 15s，实验协议 §4.2） */
@@ -170,6 +175,7 @@ export function openInstance(
     kernel,
     organismId,
     executors: options.executors ?? buildExecutors(),
+    onExecutionProgress: options.onExecutionProgress,
     decisions: buildDecisions(options.decisions),
     blobs,
     instanceRoot: root,

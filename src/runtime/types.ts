@@ -1,5 +1,9 @@
 import type { DecisionCallRecord } from "../decision/call.ts";
-import type { ExecutionEvidence, StoredExecutionEvidence } from "./execution-evidence.ts";
+import type {
+  ExecutionEvidence,
+  StoredExecutionEvidence,
+  ExecutionProgress,
+} from "./execution-evidence.ts";
 import type { ModelFreeConstraint } from "./model-free.ts";
 
 /**
@@ -192,6 +196,7 @@ export interface RunSummary {
     state: AttemptState;
     exitCode: number | null;
     evidence?: StoredExecutionEvidence;
+    progress?: ExecutionProgress;
   }>;
   checks: OutcomeCheck[];
   experienceId: string | null;
@@ -325,6 +330,7 @@ export interface RuntimeStore {
  * start 等待执行完成；handle/事件流/cancel 语义随后续切片扩展（docs/runtime.md §5）。
  */
 export interface ExecutionRequest {
+  onProgress?: (event: ExecutionProgress) => void;
   runId: string;
   processId: string;
   attemptId: string;

@@ -62,6 +62,7 @@ const executor: ExecutorProvider = {
       agentEntry: resolvePackageBin("@agentclientprotocol/claude-agent-acp", "claude-agent-acp"),
       env,
       sessionMeta,
+      captureClaudeUsage: true,
       permissionPolicy: developmentPilotPermission(request.workspaceDir),
     }).start(request);
   },
@@ -76,6 +77,8 @@ const report = await runDevelopmentPilot({
   goal: "Fix the JSON Schema subset validator: required and properties must inspect fields actually present on the output object, not fields inherited from its prototype. Preserve current supported keyword behavior and error paths. The frozen tests reproduce missing constructor/toString/__proto__/hasOwnProperty fields, optional inherited properties, and ordinary regression cases. Make the smallest correct source change.",
   executor,
   maxWallClockSeconds: 300,
+  onProgress: (event) =>
+    process.stderr.write(JSON.stringify({ type: "execution.progress", ...event }) + "\n"),
   provenance: {
     mode: "real",
     sourceCommit: execFileSync("git", ["rev-parse", "HEAD"], {

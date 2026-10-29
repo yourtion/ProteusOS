@@ -78,6 +78,69 @@ const app = agent({ name: "fake-acp-agent" })
       return { stopReason: cancelRequested ? "cancelled" : "end_turn" };
     }
 
+    if (text.includes("ACCOUNTING-MODE")) {
+      for (let i = 0; i < 1000; i++)
+        await client.notify(methods.client.session.update, {
+          sessionId: sessionState.sessionId,
+          update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "text" } },
+        });
+      for (const status of ["in_progress", "completed"])
+        await client.notify(methods.client.session.update, {
+          sessionId: sessionState.sessionId,
+          update: {
+            sessionUpdate: "tool_call",
+            toolCallId: "late-tool",
+            title: "late write",
+            status,
+          },
+        });
+      for (let i = 0; i < 3; i++)
+        await client.notify("_claude/sdkMessage", {
+          sessionId: sessionState.sessionId,
+          message: {
+            type: "assistant",
+            message: {
+              id: "response-1",
+              model: "fixture-model",
+              content: [{ type: "thinking", thinking: "PRIVATE-SDK-CONTENT" }],
+              usage: {
+                input_tokens: 10,
+                output_tokens: 20,
+                cache_read_input_tokens: 30,
+                cache_creation_input_tokens: 40,
+              },
+            },
+          },
+        });
+      for (let i = 0; i < 2; i++)
+        await client.notify("_claude/sdkMessage", {
+          sessionId: sessionState.sessionId,
+          message: {
+            type: "result",
+            total_cost_usd: 0.012,
+            modelUsage: {
+              "fixture-model": {
+                inputTokens: 10,
+                outputTokens: 20,
+                cacheReadInputTokens: 30,
+                cacheCreationInputTokens: 40,
+              },
+            },
+          },
+        });
+      await sleep(100);
+      return {
+        stopReason: "end_turn",
+        usage: {
+          inputTokens: 10,
+          outputTokens: 20,
+          cachedReadTokens: 30,
+          cachedWriteTokens: 40,
+          totalTokens: 100,
+        },
+      };
+    }
+
     const toolCall = {
       sessionUpdate: "tool_call",
       toolCallId: "tool-1",

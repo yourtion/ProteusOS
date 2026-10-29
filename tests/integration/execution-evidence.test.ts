@@ -3,7 +3,12 @@ import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { openInstance } from "../../src/app/instance.ts";
 import { LocalProcessExecutor } from "../../src/adapters/executor-process/index.ts";
-import { ExecutionTrace, readExecutionTrace } from "../../src/runtime/execution-evidence.ts";
+import {
+  ExecutionTrace,
+  readExecutionTrace,
+  readExecutionAccounting,
+} from "../../src/runtime/execution-evidence.ts";
+import { AcpAccounting } from "../../src/adapters/executor-acp/accounting.ts";
 import type { ExecutorProvider } from "../../src/runtime/types.ts";
 import { bootSeededInstance, fixturePath, REPO_ROOT } from "../helpers.ts";
 
@@ -21,6 +26,70 @@ const real = () =>
   new LocalProcessExecutor(join(REPO_ROOT, "src/adapters/executor-process/stats-worker.mjs"));
 
 describe("执行证据持久化", () => {
+  it("live progress is persisted before completion; a long stream cannot hide terminal evidence; usage survives reopen and detects tampering", async () => {
+    const accounting = new AcpAccounting(true);
+    accounting.observeSdk({
+      message: {
+        type: "result",
+        modelUsage: {
+          model: {
+            inputTokens: 10,
+            outputTokens: 20,
+            cacheReadInputTokens: 30,
+            cacheCreationInputTokens: 40,
+          },
+        },
+      },
+    });
+    const executor: ExecutorProvider = {
+      name: "local-process",
+      recoveryPolicy: "manual",
+      async start(request) {
+        for (let i = 0; i < 1005; i++)
+          request.onProgress?.({
+            phase: "working",
+            elapsedMs: i,
+            messageChars: i,
+            toolCalls: 0,
+            lastActivityAt: Date.now(),
+            detail: null,
+          });
+        expect(app.runtime.getRunSummary(request.runId).attempts[0]?.progress?.messageChars).toBe(
+          1004,
+        );
+        expect(app.runtime.getRunSummary(request.runId).state).toBe("running");
+        const output = await real().start(request);
+        output.evidence!.accounting = accounting.snapshot(true);
+        return output;
+      },
+    };
+    const app = bootSeededInstance(undefined, new Map([[executor.name, executor]]));
+    let runId = "";
+    try {
+      const summary = await app.runtime.submitTask(task);
+      runId = summary.runId;
+      expect(summary.state).toBe("succeeded");
+      expect(summary.nodes.some((n) => n.state === "succeeded")).toBe(true);
+      expect(
+        readExecutionAccounting(summary.attempts[0]!.evidence!, app.blobs)?.totals?.totalTokens,
+      ).toBe(100);
+    } finally {
+      app.close();
+    }
+    const reopened = openInstance(app.root);
+    try {
+      const evidence = reopened.runtime.getRunSummary(runId).attempts[0]!.evidence!;
+      expect(readExecutionAccounting(evidence, reopened.blobs)?.tokenStatus).toBe("complete");
+      expect(() =>
+        readExecutionAccounting({ ...evidence, accountingDigest: "wrong" }, reopened.blobs),
+      ).toThrow(/digest_mismatch/);
+      expect(
+        readExecutionAccounting({ ...evidence, accounting: undefined }, reopened.blobs),
+      ).toBeNull();
+    } finally {
+      reopened.close();
+    }
+  });
   it("执行结果提交后宿主崩溃，恢复沿已记录节点续跑且不重复执行", async () => {
     let calls = 0;
     const executor: ExecutorProvider = {

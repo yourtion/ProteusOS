@@ -10,6 +10,14 @@ import {
 } from "../../src/runtime/execution-evidence.ts";
 
 describe("有界执行证据", () => {
+  it("terminal is retained even when the event buffer is exhausted", () => {
+    const trace = new ExecutionTrace(2);
+    trace.appendMessage("a".repeat(4001));
+    trace.recordTerminal("session.completed", { stopReason: "end_turn" });
+    const evidence = trace.finish("fixture", "agent-events", true);
+    expect(evidence.trace).toMatchObject({ status: "partial", droppedEvents: 2 });
+    expect(evidence.trace.events.at(-1)?.kind).toBe("session.completed");
+  });
   it("事件溢出和文本截断明确标为 partial，已返回快照不受迟到事件影响", () => {
     const trace = new ExecutionTrace(2);
     trace.record("message", { text: "x".repeat(3000) });

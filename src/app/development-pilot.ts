@@ -4,6 +4,7 @@ import { join, resolve } from "node:path";
 import type { ExecutorProvider } from "../runtime/types.ts";
 import { canonicalJson, digestOf } from "../storage/blobs.ts";
 import { openInstance } from "./instance.ts";
+import type { RuntimeDeps } from "../runtime/index.ts";
 import { installSeed, LINEAGE_ID, ORGANISM_ID, PRINCIPAL_ID } from "./seed.ts";
 
 /** Fixed host verifier, embedded in the immutable evaluator version. It never runs worker tests. */
@@ -69,6 +70,7 @@ export interface DevelopmentPilotPlan {
   goal: string;
   executor: ExecutorProvider;
   maxWallClockSeconds: number;
+  onProgress?: RuntimeDeps["onExecutionProgress"];
   /** Public, non-secret description only; secrets belong in the executor's environment. */
   provenance: {
     mode: "real" | "fixture";
@@ -177,6 +179,7 @@ export async function runDevelopmentPilot(plan: DevelopmentPilotPlan) {
   writeFileSync(join(root, "manifest.json"), JSON.stringify(manifest, null, 2));
   const app = openInstance(join(root, "instance"), {
     executors: new Map([[plan.executor.name, plan.executor]]),
+    onExecutionProgress: plan.onProgress,
   });
   try {
     const seed = installSeed({ ...app, clock: { now: Date.now } });
@@ -294,7 +297,7 @@ export async function runDevelopmentPilot(plan: DevelopmentPilotPlan) {
       passed: summary.state === "succeeded" && verification?.passed === true && activeUnchanged,
       benefit: "inconclusive",
       modelCallCount: null,
-      modelUsage: null,
+      modelUsage: summary.attempts[0]?.evidence?.accounting ?? null,
       cost: null,
     };
     writeFileSync(join(root, "report.json"), JSON.stringify(report, null, 2));

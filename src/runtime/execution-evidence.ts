@@ -11,6 +11,40 @@ export interface ExecutionUsage {
   priceRef: string | null;
 }
 
+/** Public progress only. Counts describe observed work, never a fabricated completion percentage. */
+export interface ExecutionProgress {
+  phase: "connecting" | "working" | "tool" | "permission" | "completed" | "failed";
+  elapsedMs: number;
+  messageChars: number;
+  toolCalls: number;
+  lastActivityAt: number;
+  detail: string | null;
+}
+
+export interface ExecutionTokenTotals {
+  uncachedInputTokens: number | null;
+  cachedReadTokens: number | null;
+  cachedWriteTokens: number | null;
+  inputTokens: number | null;
+  outputTokens: number | null;
+  totalTokens: number | null;
+}
+
+export interface ExecutionAccounting {
+  version: "execution-accounting-v1";
+  tokenStatus: "complete" | "partial" | "unavailable";
+  source: "claude-sdk-model-usage" | "acp-prompt-usage" | null;
+  totals: ExecutionTokenTotals | null;
+  observedModelResponses: number | null;
+  /** The SDK may perform invisible transport retries; response IDs are not transport attempts. */
+  transportAttempts: null;
+  models: string[];
+  reportedCost: { amount: number; currency: string; source: string; verified: false } | null;
+  issues: string[];
+  /** Allowlisted numeric metadata only. No message content or private reasoning. */
+  receipts: Array<Record<string, unknown>>;
+}
+
 export interface ExecutionTraceEvent {
   kind: string;
   at: number;
@@ -28,6 +62,7 @@ export interface ExecutionEvidence {
     detail: string | null;
   };
   usage: ExecutionUsage | null;
+  accounting?: ExecutionAccounting;
   modelConstraint?: ModelFreeConstraint;
   stdoutTruncated: boolean;
   stderrTruncated: boolean;
@@ -51,6 +86,9 @@ export interface StoredExecutionEvidence {
   droppedEvents: number;
   detail: string | null;
   usage: ExecutionUsage | null;
+  accounting?: ExecutionAccounting;
+  accountingRef?: string;
+  accountingDigest?: string;
   modelConstraint?: ModelFreeConstraint;
   stdoutTruncated: boolean;
   stderrTruncated: boolean;
@@ -61,6 +99,7 @@ export class ExecutionTrace {
   private events: ExecutionTraceEvent[] = [];
   private dropped = 0;
   private clipped = false;
+  private pendingMessage = "";
 
   private readonly limit: number;
 
@@ -69,6 +108,36 @@ export class ExecutionTrace {
   }
 
   record(kind: string, data: ExecutionTraceEvent["data"] = {}): void {
+    this.flushMessage();
+    this.recordEvent(kind, data);
+  }
+
+  /** Streaming text is split into full 2000-character segments, not clipped per token. */
+  appendMessage(text: string): void {
+    this.pendingMessage += text;
+    while (this.pendingMessage.length >= 2000) {
+      this.recordEvent("message", { text: this.pendingMessage.slice(0, 2000) });
+      this.pendingMessage = this.pendingMessage.slice(2000);
+    }
+  }
+
+  flushMessage(): void {
+    if (!this.pendingMessage) return;
+    this.recordEvent("message", { text: this.pendingMessage });
+    this.pendingMessage = "";
+  }
+
+  /** Even an exhausted buffer must retain the terminal fact; any eviction remains explicit. */
+  recordTerminal(kind: string, data: ExecutionTraceEvent["data"]): void {
+    this.flushMessage();
+    if (this.events.length >= this.limit && this.limit > 0) {
+      this.events.pop();
+      this.dropped++;
+    }
+    this.recordEvent(kind, data);
+  }
+
+  private recordEvent(kind: string, data: ExecutionTraceEvent["data"]): void {
     if (this.events.length >= this.limit) {
       this.dropped++;
       return;
@@ -97,6 +166,7 @@ export class ExecutionTrace {
       modelConstraint?: ModelFreeConstraint;
     } = {},
   ): ExecutionEvidence {
+    this.flushMessage();
     const partial =
       !complete ||
       this.dropped > 0 ||
@@ -119,6 +189,22 @@ export class ExecutionTrace {
       stderrTruncated: options.stderrTruncated ?? false,
     };
   }
+}
+
+export function readExecutionAccounting(
+  evidence: StoredExecutionEvidence,
+  blobs: Pick<BlobStore, "read">,
+): ExecutionAccounting | null {
+  if (!evidence.accounting) return null;
+  if (!evidence.accountingRef || !evidence.accountingDigest)
+    throw new Error("accounting_receipt_unavailable");
+  const raw = blobs.read(evidence.accountingRef);
+  if (
+    digestOf(raw) !== evidence.accountingDigest ||
+    canonicalJson(JSON.parse(raw)) !== canonicalJson(evidence.accounting)
+  )
+    throw new Error("accounting_receipt_digest_mismatch");
+  return JSON.parse(raw) as ExecutionAccounting;
 }
 
 export const EXECUTION_OUTPUT_LIMIT = 64 * 1024;
