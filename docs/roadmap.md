@@ -88,6 +88,8 @@ ChangedFileSummary 的验收流程由 `tests/acceptance/bootstrap-story.test.ts`
 
 产品路径为一个用户日常使用一个长期个体，通过任务积累许可经验并验证改进。Web 是优先操作与观察入口，CLI 保留，TUI 在后续需要时复用 Application Interface；具体合同见 [交互设计](./interaction.md)。
 
+2026-10-29 的 [Web 代码工作台实施计划](./web-workbench-plan.md) 将首用场景确定为代码任务，细化 U0/U1 为项目接入、需求输入、实时执行、diff 审阅和应用修改。下表为基础交互范围的早期估算；完整代码工作台连同新增后端能力按该计划估算约 4–6 周，读取与报告闭环约 2–3 周可试用。该工作可先于 M5 新能力交付，复用已有执行器。
+
 | 切片 | 交付 | 建议投入 | 验收 |
 | --- | --- | --- | --- |
 | U0 | 共享应用用例、Host/实例所有权、回执、后台准入、查询与订阅 | 1–2 周 | CLI/HTTP 操作一致；响应丢失、刷新与恢复不重复副作用 |
@@ -95,4 +97,4 @@ ChangedFileSummary 的验收流程由 `tests/acceptance/bootstrap-story.test.ts`
 | U2 | 学习作业、候选比较、Evaluation、晋升/回滚、采用历史 | 1 周 | 明确用户采用意图，领域 CAS 生效，stale 不静默重试 |
 | U3 | Jev 分布/校准、预测偏差、Memory/Skill 与分享操作 | 按后端合同增量排期 | 未实现能力不以模拟数据冒充；数据用途与可见范围保留 |
 
-U0 先固定共享应用 Interface，U1 在 M5 期间落地；U2 可先复用已有演化工程，不等待完整 M6；U3 跟随后端真实能力。首期设计基线为 React/TypeScript/Vite 浏览器客户端与现有 Node 控制面 HTTP/SSE，同源本地运行。远端/多人部署单独验证。
+U0 先固定共享应用 Interface，U1 在 M5 期间落地；U2 可先复用已有演化工程，不等待完整 M6；U3 跟随后端真实能力。首期设计基线为 React/TypeScript/Rsbuild 浏览器客户端与现有 Node 控制面 HTTP/SSE，同源本地运行。远端/多人部署单独验证。

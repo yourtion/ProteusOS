@@ -8,3 +8,7 @@ dist/
 *.token
 .zcodeignore
 .DS_Store
+
+.proteus-web/
+
+.pnpm-store/

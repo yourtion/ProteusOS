@@ -144,3 +144,28 @@ describe("AcpExecutor 合同（fake ACP agent）", () => {
     );
   });
 });
+
+it("host abort reaches a running ACP prompt and never reports success", async () => {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 150);
+  try {
+    const result = await executor().start({
+      ...request("SLOW-MODE", workspace()),
+      signal: controller.signal,
+    });
+    expect(result.ok).toBe(false);
+    expect(result.durationMs).toBeLessThan(3500);
+  } finally {
+    clearTimeout(timer);
+  }
+});
+
+it("public progress excludes hidden thought chunks", async () => {
+  const events: Array<{ kind: string; text: string }> = [];
+  await executor().start({
+    ...request("HIDDEN-MODE", workspace()),
+    onEvent: (event) => events.push(event),
+  });
+  expect(events.length).toBeGreaterThan(0);
+  expect(JSON.stringify(events)).not.toContain("HIDDEN-THOUGHT-MARKER");
+});

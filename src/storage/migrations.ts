@@ -588,4 +588,11 @@ CREATE TABLE adaptive_run_slots (
 );
 `,
   },
+  {
+    version: 19,
+    name: "workbench-records",
+    sql: `
+CREATE TABLE workbench_records (kind TEXT NOT NULL, id TEXT NOT NULL, record TEXT NOT NULL, PRIMARY KEY(kind,id));
+`,
+  },
 ];

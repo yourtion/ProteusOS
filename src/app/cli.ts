@@ -64,6 +64,24 @@ function withCommon(cmd: Command): Command {
     .option("--json", "以 JSON 输出");
 }
 
+withCommon(
+  program
+    .command("web")
+    .description("启动本地代码工作台")
+    .option("--port <port>", "监听端口", "4310"),
+).action(async (opts) => {
+  if (opts.organism !== "organism-default" || opts.actor !== "principal-local")
+    throw new Error("首版工作台使用默认个体和本地操作者");
+  const port = Number(opts.port);
+  if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error("无效端口");
+  const { startWorkbench } = await import("./web/server.ts");
+  const server = startWorkbench(port, opts.home ?? process.env.PROTEUS_HOME ?? ".proteus-web");
+  for (const signal of ["SIGINT", "SIGTERM"] as const)
+    process.once(signal, () => {
+      void server.shutdown().then(() => process.exit(0));
+    });
+});
+
 withCommon(program.command("init").description("初始化实例：创建身份、安装 seed 并装载 G0")).action(
   async (opts) => {
     await initCommand(opts);

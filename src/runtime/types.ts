@@ -331,6 +331,9 @@ export interface RuntimeStore {
  */
 export interface ExecutionRequest {
   onProgress?: (event: ExecutionProgress) => void;
+  /** Optional host cancellation and public event projection. Never carries hidden thoughts. */
+  signal?: AbortSignal;
+  onEvent?: (event: import("./execution-evidence.ts").PublicExecutionEvent) => void;
   runId: string;
   processId: string;
   attemptId: string;

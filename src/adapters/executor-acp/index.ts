@@ -1,3 +1,4 @@
+import { publicEvent } from "./public-event.ts";
 import { spawn } from "node:child_process";
 import { Readable, Writable } from "node:stream";
 import {
@@ -85,6 +86,7 @@ export class AcpExecutor implements ExecutorProvider {
 
   async start(req: ExecutionRequest): Promise<ExecutionResult> {
     const startedAt = Date.now();
+    if (req.signal?.aborted) throw new Error("execution_cancelled");
     const observation = new AcpObservation(req.workspaceDir, req.onProgress);
     observation.record("session.started", { attemptId: req.attemptId });
     observation.report("connecting", null, true);
@@ -124,6 +126,14 @@ export class AcpExecutor implements ExecutorProvider {
         const captured = boundedOutput(stdoutText, text);
         stdoutText = captured.text;
         stdoutTruncated ||= captured.truncated;
+        const event = publicEvent(update);
+        if (event) {
+          try {
+            req.onEvent?.(event);
+          } catch {
+            /* Observers cannot retry work. */
+          }
+        }
       })
       .onNotification(
         "_claude/sdkMessage",
@@ -152,10 +162,17 @@ export class AcpExecutor implements ExecutorProvider {
         cancelPending = true;
       }
     };
+    let killTimer: ReturnType<typeof setTimeout> | undefined;
+    const abort = () => {
+      sendCancel();
+      killTimer ??= setTimeout(() => child.kill("SIGKILL"), 1000);
+    };
+    req.signal?.addEventListener("abort", abort, { once: true });
+    if (req.signal?.aborted) abort();
     const timer = setTimeout(() => {
       timedOut = true;
       sendCancel();
-      setTimeout(() => child.kill("SIGKILL"), 5_000);
+      killTimer ??= setTimeout(() => child.kill("SIGKILL"), 5_000);
     }, req.timeoutMs);
 
     let stopReason: string | null = null;
@@ -188,12 +205,14 @@ export class AcpExecutor implements ExecutorProvider {
     } finally {
       clearInterval(heartbeat);
       clearTimeout(timer);
+      clearTimeout(killTimer);
+      req.signal?.removeEventListener("abort", abort);
       child.kill("SIGKILL");
     }
 
-    const ok = !timedOut && stopReason === "end_turn" && failure === null;
+    const ok = !req.signal?.aborted && !timedOut && stopReason === "end_turn" && failure === null;
     observation.finish(this.name, stopReason, ok, timedOut, failure !== null);
-    const metering = accounting.snapshot(!timedOut && failure === null);
+    const metering = accounting.snapshot(!timedOut && failure === null && !req.signal?.aborted);
     return {
       ok,
       exitCode: ok ? 0 : null,
@@ -216,7 +235,7 @@ export class AcpExecutor implements ExecutorProvider {
         ...observation.trace.finish(
           "executor-acp-v1",
           "agent-events",
-          !timedOut && failure === null,
+          !timedOut && failure === null && !req.signal?.aborted,
           {
             usage: accountingUsage(metering),
             stdoutTruncated,

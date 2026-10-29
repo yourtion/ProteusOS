@@ -10,7 +10,7 @@ M0–M4 的本地闭环已实现：任务执行与恢复、外部委托、能力
 
 决策层目前只在有限 choice 上接通规则与通用 LLM；Jev Adapter、概率校准与决策级联尚未实现。原始架构还包含预测、记忆、归因和更完整的经验适应闭环，具体差距与后续顺序见 [架构差距](./docs/architecture-gaps.md) 和 [迭代规划](./docs/iteration-plan.md)。
 
-交互方向确定为 Web 优先、CLI 保留，未来 TUI 复用共享应用 Interface。Web/长驻 Host 尚未实现，列入近期 U0/U1；页面、合同与验收见 [交互设计](./docs/interaction.md)。
+交互方向确定为 Web 优先、CLI 保留，未来 TUI 复用共享应用 Interface。已有本地代码工作台，支持项目、任务、执行审批、结果审阅和应用修改；已完成核心流程浏览器验收与真实 Codex ACP 小任务闭环，并接通首批规则学习和版本治理页面；页面与合同见 [交互设计](./docs/interaction.md)，参考 DSH 的项目、任务、diff 和应用修改流程见 [Web 代码工作台实施计划](./docs/web-workbench-plan.md)。
 
 ## 快速开始
 
@@ -57,3 +57,7 @@ CLI 服务仅监听 loopback；远端部署通过 HTTPS 反向代理接入。撤
 - 自举路线、已决策事项与实现进度：[docs/roadmap.md](./docs/roadmap.md)
 
 License：Apache-2.0
+
+## 本地 Web 代码工作台
+
+运行 `pnpm web:build` 后执行 `pnpm web`，打开终端打印的完整地址。添加 Git 项目后，可提交代码任务、处理执行权限、查看结果和检查，审阅后应用修改。默认使用独立实例 `.proteus-web/`。输入限制、认证、恢复及 DSH 复用核对见 [Web 说明](./web/README.md)。

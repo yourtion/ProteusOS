@@ -11,6 +11,8 @@
 | [领域词汇](./CONTEXT.md) | 统一术语 |
 | [总体架构](./architecture.md) | 模块职责、依赖和不变量 |
 | [Web 与应用 Interface](./interaction.md) | Web 优先、CLI/TUI 复用、Host、操作/查询/订阅与交付切片 |
+| [Web 代码工作台实施计划](./web-workbench-plan.md) | 参考 DSH 的项目与任务交互，代码任务、实时执行、diff 与应用修改的分阶段交付 |
+| [Web 工作台验收记录](./web-workbench-validation.md) | 浏览器覆盖、真实 Codex 修复闭环、验收修复与未验证范围 |
 | [领域模型](./domain-model.md) | 当前记录、归属和关联 |
 | [运行时合同](./runtime.md) | DAG、决策调用、派发、取消与恢复 |
 | [进化与继承](./evolution.md) | 经验冻结、候选、评估、晋升与共享 |

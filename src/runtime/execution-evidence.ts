@@ -3,6 +3,21 @@ import { join } from "node:path";
 import { canonicalJson, digestOf, type BlobStore } from "../storage/blobs.ts";
 import type { ModelFreeConstraint } from "./model-free.ts";
 
+export interface PublicExecutionEvent {
+  kind: "message" | "tool" | "context" | "plan";
+  text: string;
+  data?: {
+    toolCallId?: string;
+    status?: string;
+    toolKind?: string;
+    input?: string;
+    output?: string;
+    used?: number;
+    size?: number;
+    truncated?: boolean;
+  };
+}
+
 export interface ExecutionUsage {
   inputTokens: number | null;
   outputTokens: number | null;

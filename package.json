@@ -10,11 +10,14 @@
   "type": "module",
   "scripts": {
     "proteus": "tsx src/app/cli.ts",
-    "check": "oxlint . && oxfmt --check src tests bin && tsc --noEmit && vitest run",
+    "check": "oxlint . && oxfmt --check src tests bin web/src web/rsbuild.config.ts && tsc --noEmit && tsc -p web/tsconfig.json && vitest run && pnpm web:build",
     "lint": "oxlint .",
-    "format": "oxfmt src tests bin",
+    "format": "oxfmt src tests bin web/src web/rsbuild.config.ts",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "web:build": "cd web && rsbuild build",
+    "web": "tsx src/app/cli.ts web",
+    "web:typecheck": "tsc -p web/tsconfig.json"
   },
   "dependencies": {
     "@agentclientprotocol/claude-agent-acp": "^0.79.0",
@@ -22,14 +25,23 @@
     "@agentclientprotocol/sdk": "^1.4.0",
     "@anthropic-ai/sdk": "^0.127.0",
     "@earendil-works/pi-coding-agent": "^0.85.1",
+    "@hono/node-server": "^2.1.5",
     "commander": "^15.0.0",
+    "hono": "^4.13.14",
     "pino": "^10.3.1",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
     "uuid": "^14.0.2",
     "yaml": "^2.9.1",
-    "zod": "^4.6.5"
+    "zod": "^4.6.5",
+    "marked": "18.0.5"
   },
   "devDependencies": {
+    "@rsbuild/core": "^2.2.14",
+    "@rsbuild/plugin-react": "^2.1.1",
     "@types/node": "^26.6.2",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
     "oxfmt": "^0.68.0",
     "oxlint": "^1.83.0",
     "tsx": "^4.23.13",

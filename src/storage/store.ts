@@ -91,6 +91,31 @@ export class Storage implements KernelStore, RuntimeStore {
     return this.db.tx(fn);
   }
 
+  workbenchGet<T>(kind: string, id: string): T | undefined {
+    const row = this.db.get<{ record: string }>(
+      "SELECT record FROM workbench_records WHERE kind=? AND id=?",
+      kind,
+      id,
+    );
+    return row ? (JSON.parse(row.record) as T) : undefined;
+  }
+  workbenchList<T>(kind: string): T[] {
+    return this.db
+      .all<{ record: string }>(
+        "SELECT record FROM workbench_records WHERE kind=? ORDER BY rowid",
+        kind,
+      )
+      .map((row) => JSON.parse(row.record) as T);
+  }
+  workbenchPut(kind: string, id: string, record: unknown): void {
+    this.db.run(
+      "INSERT INTO workbench_records(kind,id,record) VALUES(?,?,?) ON CONFLICT(kind,id) DO UPDATE SET record=excluded.record",
+      kind,
+      id,
+      JSON.stringify(record),
+    );
+  }
+
   compileDevelopmentBundle(jobId: string): CompileDevelopmentRecord | undefined {
     const row = this.db.get<{ record: string }>(
       "SELECT record FROM compile_development_bundles WHERE job_id = ?",

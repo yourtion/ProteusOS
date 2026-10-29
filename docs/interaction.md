@@ -1,6 +1,8 @@
 # 应用交互 Interface 与 Web 界面
 
-日期：2026-10-10。产品偏好：**Web 优先**；保留 CLI，未来 TUI 复用相同应用 Interface。本文确定设计与实施顺序，Web、长驻应用 Host 和统一交互合同尚未实现；已有 HTTP registry 只承担版本交换。
+日期：2026-10-10。产品偏好：**Web 优先**；保留 CLI，未来 TUI 复用相同应用 Interface。本文记录设计与实施顺序；本地 Web 工作台和长驻 Host 已实现，当前范围与验收见 [工作台说明](../web/README.md)。已有 HTTP registry 只承担版本交换。
+
+2026-10-29 补充：第一使用场景确定为代码任务。以项目选择、需求输入、执行观察、diff 审阅和应用修改为主流程；DSH 参考、代码能力缺口与细化交付见 [Web 代码工作台实施计划](./web-workbench-plan.md)。本文保留共享 Interface 合同，首版页面优先级和扩展后的工期以该计划为准。
 
 ## 1. 界面的职责与抽象位置
 
@@ -38,7 +40,7 @@ flowchart TB
 | --- | --- |
 | [commands.ts](../src/app/commands.ts) 与 sharing-commands 混合解析、openInstance、业务操作、console 输出和关闭实例 | 抽出返回结构化结果的应用用例，CLI Adapter 保留参数与文字输出 |
 | [instance.ts](../src/app/instance.ts) 每次命令打开实例，按 actor/organism 组装依赖 | 长驻 Host 拥有实例资源；请求绑定受信身份和明确个体，领域上下文不得跨请求串用 |
-| [Runtime.submitTask](../src/runtime/index.ts) 创建并持久化 Run 后内联执行 | 拆开受控准入与后台执行：持久化 Task/Run、操作映射及调度事实后返回，原 CLI 可继续等待终态 |
+| [Runtime](../src/runtime/index.ts) 已提供 `admitTask` 与 `executeRun`，`submitTask` 仍内联等待 | 复用准入事务的 bind 回调，持久化应用操作映射及调度事实后返回；原 CLI 可继续等待终态 |
 | [事件合同](../src/runtime/types.ts) 的 seq 按 stream 分配；[查询](../src/storage/store.ts) 是内部 listEvents | 新增授权分页与可恢复订阅投影；不能将某个 stream 的 seq 当全局游标 |
 | 当前 CLI 的 `--actor` 是本地受信身份声明 | HTTP 身份从 Host 会话确定，浏览器传来的 actorId 不授予权限 |
 | [HTTP registry](../src/federation/registry.ts) 提供精确版本交换 | 复用 HTTP 工程经验，Web 的操作与查询合同独立设计；registry 凭据不自动成为用户操作授权 |
@@ -118,7 +120,7 @@ Host 持有实例级独占锁，防止多个控制进程同时派发同一实例
 
 Host 运行时，同一实例的 CLI 写操作通过同一 Host/应用 Interface；Host 不运行时，保留 CLI 进程内调用模式，并获得相同的实例运行所有权。连接失败明确报告，不自动降级启动第二个 writer/runner。无头批处理仍可使用相同应用用例。
 
-当前 Runtime 提交会内联执行，应先将“事务准入并创建 Run”和“执行已创建 Run”拆为受控操作。Application Module 将回执映射与待运行事实一致保存，然后由 Host 调度，不能仅以未持久化的后台 Promise 支撑 202 响应。准入时的预算预留和截止点继续有效，排队或恢复不会重新给足预算。
+当前 Runtime 已提供“事务准入并创建 Run”的 `admitTask` 和“执行已创建 Run”的 `executeRun`，`submitTask` 仍将两者串联并等待完成。Application Module 应复用准入事务的 bind 回调，将回执映射与待运行事实一致保存，再由 Host 调度，不能仅以未持久化的后台 Promise 支撑 202 响应。准入时的预算预留和截止点继续有效，排队或恢复不会重新给足预算。
 
 Host 启动后按现有记录恢复：已确认结果读回，未知外部调用保留 unknown，由授权恢复/对账流程处理；浏览器刷新不会造成重派。停止 Host 时停止新准入并记录在途状态、传播允许的取消；不能以进程结束证明远端未执行或费用为零。
 
@@ -126,7 +128,7 @@ AppInstance 目前按 actor/Organism 装配 Runtime/Evolution。长驻 Host 可�
 
 ## 6. 首期技术选择与目录
 
-设计基线采用 **TypeScript + React + Vite 的浏览器客户端，现有 Node.js 控制面提供 HTTP/SSE**。这是本地操作界面，服务器已有领域和持久化实现；首期不需要搜索引擎收录或服务端页面渲染。React 官方列出 Vite 作为客户端构建方案，Vite 提供开发和静态构建能力；具体依赖版本实施时锁定。[React 构建说明](https://react.dev/learn/build-a-react-app-from-scratch)、[Vite](https://vite.dev/guide/)
+设计基线采用 **TypeScript + React + Rsbuild 的浏览器客户端，现有 Node.js 控制面提供 HTTP/SSE**。这是本地操作界面，服务器已有领域和持久化实现；首期不需要搜索引擎收录或服务端页面渲染。当前使用 Rsbuild 构建静态客户端，具体依赖版本记录在 package.json 和锁文件中。
 
 保持现有单仓库与领域目录，按实际职责增量增加：
 

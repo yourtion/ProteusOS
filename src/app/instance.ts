@@ -130,6 +130,7 @@ export function buildDecisions(
 export function openInstance(
   root: string,
   options: {
+    workbenchOwner?: boolean;
     organismId?: string;
     actorId?: string;
     routeProposer?: RouteProposer;
@@ -147,6 +148,9 @@ export function openInstance(
     capabilitySandbox?: SandboxBackend;
   } = {},
 ): AppInstance {
+  if (!options.workbenchOwner && existsSync(join(root, ".workbench.lock"))) {
+    throw new Error("该实例由 Web Host 管理；请通过工作台操作，或停止 Host 后使用 CLI");
+  }
   for (const dir of [root, join(root, "blobs"), join(root, "workspaces"), join(root, "tmp")]) {
     mkdirSync(dir, { recursive: true });
   }
