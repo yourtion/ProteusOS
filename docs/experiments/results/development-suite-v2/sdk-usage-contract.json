@@ -1,0 +1,8 @@
+{
+  "package": "@anthropic-ai/sdk",
+  "version": "0.127.0",
+  "typeFile": "resources/messages/messages.d.ts",
+  "typeFileDigest": "53e46f74804c2d8ba941bd69780f0c241424d2f1668379e0a19ae12cc1c77a3c",
+  "excerpt": "export interface Usage {\n    /**\n     * Breakdown of cached tokens by TTL\n     */\n    cache_creation: CacheCreation | null;\n    /**\n     * The number of input tokens used to create the cache entry.\n     */\n    cache_creation_input_tokens: number | null;\n    /**\n     * The number of input tokens read from the cache.\n     */\n    cache_read_input_tokens: number | null;\n",
+  "interpretation": "SDK declares cache read/create counters as number | null; the frozen historical reference treats null cache components as zero while missing or null core counters remain unknown."
+}

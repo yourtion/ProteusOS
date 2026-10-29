@@ -139,6 +139,34 @@ describe("LLM Adapter：保持 v1，消费 v2 的冻结正文", () => {
       evidence: { inputTokens: null, outputTokens: null },
     });
   });
+  it.each([
+    { input: 5, read: null, creation: undefined, expected: 5 },
+    { input: 5, read: undefined, creation: null, expected: 5 },
+    { input: 0, read: null, creation: null, expected: 0 },
+    { input: 5, read: null, creation: 7, expected: 12 },
+    { input: 5, read: 7, creation: null, expected: 12 },
+    { input: null, read: null, creation: null, expected: null },
+  ])(
+    "SDK 可空缓存字段不抹掉已知输入，核心输入仍允许未知：$input/$read/$creation",
+    async ({ input, read, creation, expected }) => {
+      const provider = new LlmDecisionProvider({ apiKey: "unused" });
+      sdk.create.mockResolvedValueOnce({
+        content: [{ type: "text", text: '{"kind":"value","value":"local-process"}' }],
+        usage: {
+          input_tokens: input,
+          output_tokens: 2,
+          cache_read_input_tokens: read,
+          cache_creation_input_tokens: creation,
+        },
+      });
+      expect(await provider.decide(llmDemosRequest())).toMatchObject({
+        kind: "value",
+        value: "local-process",
+        evidence: { inputTokens: expected, outputTokens: 2 },
+      });
+      expect(sdk.create).toHaveBeenCalledTimes(1);
+    },
+  );
   it("计数使用同一冻结消息且不生成；无效计数或服务失败不回退估算", async () => {
     const p = new LlmDecisionProvider({ apiKey: "NEVER_PERSIST_API_KEY" });
     const r = llmDemosRequest();

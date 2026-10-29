@@ -1,0 +1,56 @@
+[
+  {
+    "id": "snapshot-digest-1",
+    "addedLines": 4,
+    "removedLines": 4,
+    "sdkTurns": 5
+  },
+  {
+    "id": "snapshot-digest-2",
+    "addedLines": 4,
+    "removedLines": 4,
+    "sdkTurns": 6
+  },
+  {
+    "id": "snapshot-digest-3",
+    "addedLines": 4,
+    "removedLines": 4,
+    "sdkTurns": 6
+  },
+  {
+    "id": "evolution-capability-accumulation-1",
+    "addedLines": 6,
+    "removedLines": 1,
+    "sdkTurns": 5
+  },
+  {
+    "id": "adapter-cached-token-accounting-1",
+    "addedLines": 22,
+    "removedLines": 10,
+    "sdkTurns": 5
+  },
+  {
+    "id": "evolution-capability-accumulation-2",
+    "addedLines": 5,
+    "removedLines": 1,
+    "sdkTurns": 5
+  },
+  {
+    "id": "adapter-cached-token-accounting-2",
+    "addedLines": 32,
+    "removedLines": 12,
+    "sdkTurns": 5
+  },
+  {
+    "id": "evolution-capability-accumulation-3",
+    "addedLines": 5,
+    "removedLines": 1,
+    "sdkTurns": 5
+  },
+  {
+    "id": "adapter-cached-token-accounting-3",
+    "addedLines": 20,
+    "removedLines": 12,
+    "sdkTurns": 5
+  }
+]

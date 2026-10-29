@@ -1,0 +1,52 @@
+{
+  "sessions": 9,
+  "independentTasks": 3,
+  "passed": 9,
+  "elapsedMs": 719221,
+  "sdkTurns": 47,
+  "observedModelResponses": 29,
+  "progressRecords": 826,
+  "journalRecords": 292,
+  "tokenTotals": {
+    "uncachedInputTokens": 142353,
+    "outputTokens": 27780,
+    "cachedReadTokens": 145920,
+    "cachedWriteTokens": 0,
+    "inputTokens": 288273,
+    "totalTokens": 316053
+  },
+  "actualCost": null,
+  "benefit": "inconclusive",
+  "tasks": [
+    {
+      "task": "snapshot-digest",
+      "sessions": 3,
+      "functional": 3,
+      "repositoryTypes": 3,
+      "apiCompatibility": 3,
+      "passed": 3,
+      "medianElapsedMs": 53092,
+      "medianTotalTokens": 26157
+    },
+    {
+      "task": "evolution-capability-accumulation",
+      "sessions": 3,
+      "functional": 3,
+      "repositoryTypes": 3,
+      "apiCompatibility": 3,
+      "passed": 3,
+      "medianElapsedMs": 79344,
+      "medianTotalTokens": 50278
+    },
+    {
+      "task": "adapter-cached-token-accounting",
+      "sessions": 3,
+      "functional": 3,
+      "repositoryTypes": 3,
+      "apiCompatibility": 3,
+      "passed": 3,
+      "medianElapsedMs": 99772,
+      "medianTotalTokens": 30465
+    }
+  ]
+}

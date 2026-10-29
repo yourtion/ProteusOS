@@ -1,0 +1,179 @@
+{
+  "version": "development-suite-v2-nullable-cache-review",
+  "postHoc": true,
+  "changesRegisteredScore": false,
+  "modelCalls": 0,
+  "checksDigest": "f9ad581716f778c41d5cd625e6482f7eaee1addd14bc67dee9eeb1f9ef265bf3",
+  "historicalReferenceDigest": "f8a1213b481ceaea9ac7a871618bac2f19e770e0f94f0b4556b4cf23416fbad8",
+  "candidatePassed": 1,
+  "candidateCount": 3,
+  "runs": [
+    {
+      "id": "historical-source",
+      "sourceDigest": "d7fdaf71d47b73d519d6df59f923a19127e128ba3ed13f567f14ac4568a52580",
+      "passed": false,
+      "results": [
+        {
+          "name": "null cache read preserves measured core input",
+          "passed": true
+        },
+        {
+          "name": "null cache creation preserves measured core input",
+          "passed": true
+        },
+        {
+          "name": "both null cache fields preserve explicit zero",
+          "passed": true
+        },
+        {
+          "name": "null read and numeric creation still count creation",
+          "passed": false,
+          "error": "Expected values to be strictly equal:\n\n5 !== 12\n"
+        },
+        {
+          "name": "numeric read and null creation still count read",
+          "passed": false,
+          "error": "Expected values to be strictly equal:\n\n5 !== 12\n"
+        },
+        {
+          "name": "null core input remains unknown",
+          "passed": true
+        }
+      ]
+    },
+    {
+      "id": "historical-reference",
+      "sourceDigest": "f8a1213b481ceaea9ac7a871618bac2f19e770e0f94f0b4556b4cf23416fbad8",
+      "passed": true,
+      "results": [
+        {
+          "name": "null cache read preserves measured core input",
+          "passed": true
+        },
+        {
+          "name": "null cache creation preserves measured core input",
+          "passed": true
+        },
+        {
+          "name": "both null cache fields preserve explicit zero",
+          "passed": true
+        },
+        {
+          "name": "null read and numeric creation still count creation",
+          "passed": true
+        },
+        {
+          "name": "numeric read and null creation still count read",
+          "passed": true
+        },
+        {
+          "name": "null core input remains unknown",
+          "passed": true
+        }
+      ]
+    },
+    {
+      "id": "adapter-cached-token-accounting-1",
+      "sourceDigest": "a0c98b3fad561a75f21689310efcd57b5027c82e7e15f60639e51de053a8d964",
+      "passed": false,
+      "results": [
+        {
+          "name": "null cache read preserves measured core input",
+          "passed": false,
+          "error": "Expected values to be strictly equal:\n\nnull !== 5\n"
+        },
+        {
+          "name": "null cache creation preserves measured core input",
+          "passed": false,
+          "error": "Expected values to be strictly equal:\n\nnull !== 5\n"
+        },
+        {
+          "name": "both null cache fields preserve explicit zero",
+          "passed": false,
+          "error": "Expected values to be strictly equal:\n\nnull !== 0\n"
+        },
+        {
+          "name": "null read and numeric creation still count creation",
+          "passed": false,
+          "error": "Expected values to be strictly equal:\n\nnull !== 12\n"
+        },
+        {
+          "name": "numeric read and null creation still count read",
+          "passed": false,
+          "error": "Expected values to be strictly equal:\n\nnull !== 12\n"
+        },
+        {
+          "name": "null core input remains unknown",
+          "passed": true
+        }
+      ]
+    },
+    {
+      "id": "adapter-cached-token-accounting-2",
+      "sourceDigest": "49a38c3cb4dda3a3f5aa2715bfd4c3e86b0f82fb156bca3d89a6e9e4e4d19726",
+      "passed": false,
+      "results": [
+        {
+          "name": "null cache read preserves measured core input",
+          "passed": false,
+          "error": "Expected values to be strictly equal:\n\nnull !== 5\n"
+        },
+        {
+          "name": "null cache creation preserves measured core input",
+          "passed": false,
+          "error": "Expected values to be strictly equal:\n\nnull !== 5\n"
+        },
+        {
+          "name": "both null cache fields preserve explicit zero",
+          "passed": false,
+          "error": "Expected values to be strictly equal:\n\nnull !== 0\n"
+        },
+        {
+          "name": "null read and numeric creation still count creation",
+          "passed": false,
+          "error": "Expected values to be strictly equal:\n\nnull !== 12\n"
+        },
+        {
+          "name": "numeric read and null creation still count read",
+          "passed": false,
+          "error": "Expected values to be strictly equal:\n\nnull !== 12\n"
+        },
+        {
+          "name": "null core input remains unknown",
+          "passed": true
+        }
+      ]
+    },
+    {
+      "id": "adapter-cached-token-accounting-3",
+      "sourceDigest": "6b7e4b6d9351e5ed5fb6dad0902ef4f6d77ebcf556cd255855c465ab35c60ef6",
+      "passed": true,
+      "results": [
+        {
+          "name": "null cache read preserves measured core input",
+          "passed": true
+        },
+        {
+          "name": "null cache creation preserves measured core input",
+          "passed": true
+        },
+        {
+          "name": "both null cache fields preserve explicit zero",
+          "passed": true
+        },
+        {
+          "name": "null read and numeric creation still count creation",
+          "passed": true
+        },
+        {
+          "name": "numeric read and null creation still count read",
+          "passed": true
+        },
+        {
+          "name": "null core input remains unknown",
+          "passed": true
+        }
+      ]
+    }
+  ]
+}

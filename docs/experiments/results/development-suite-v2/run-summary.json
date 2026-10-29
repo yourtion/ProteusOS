@@ -1,0 +1,988 @@
+{
+  "version": "development-suite-v2",
+  "manifestDigest": "a2775f48e0716191be06c18f2035ad1c6158055c4f884faa6c673bdc58be2898",
+  "plannedRuns": 9,
+  "runs": [
+    {
+      "id": "snapshot-digest-1",
+      "task": "snapshot-digest",
+      "stage": "gate",
+      "repetition": 1,
+      "runId": "01a186f9-eca4-70dc-9120-0f9695307896",
+      "passed": true,
+      "functional": true,
+      "repositoryTypes": true,
+      "apiCompatibility": true,
+      "elapsedMs": 50992,
+      "evidenceComplete": true,
+      "droppedEvents": 0,
+      "usage": {
+        "version": "execution-accounting-v1",
+        "tokenStatus": "complete",
+        "source": "claude-sdk-model-usage",
+        "totals": {
+          "uncachedInputTokens": 8354,
+          "outputTokens": 1826,
+          "cachedReadTokens": 8768,
+          "cachedWriteTokens": 0,
+          "inputTokens": 17122,
+          "totalTokens": 18948
+        },
+        "observedModelResponses": 3,
+        "transportAttempts": null,
+        "models": [
+          "GLM-5.3-Flash"
+        ],
+        "reportedCost": {
+          "amount": 0.091804,
+          "currency": "USD",
+          "source": "claude-sdk-estimate",
+          "verified": false
+        },
+        "issues": [],
+        "receipts": [
+          {
+            "kind": "assistant",
+            "id": "msg_20261029172449788a697443c14e49",
+            "model": "GLM-5.3-Flash",
+            "usage": {
+              "input_tokens": 0,
+              "output_tokens": 0,
+              "cache_read_input_tokens": null,
+              "cache_creation_input_tokens": null
+            }
+          },
+          {
+            "kind": "assistant",
+            "id": "msg_202610291724573207cf49b61c46c8",
+            "model": "GLM-5.3-Flash",
+            "usage": {
+              "input_tokens": 0,
+              "output_tokens": 0,
+              "cache_read_input_tokens": null,
+              "cache_creation_input_tokens": null
+            }
+          },
+          {
+            "kind": "assistant",
+            "id": "msg_20261029172524d8717210cd8c47a0",
+            "model": "GLM-5.3-Flash",
+            "usage": {
+              "input_tokens": 0,
+              "output_tokens": 0,
+              "cache_read_input_tokens": null,
+              "cache_creation_input_tokens": null
+            }
+          },
+          {
+            "kind": "sdk-result",
+            "id": "411365b2-7f86-45e8-a906-c03c3824f2cc",
+            "subtype": "success",
+            "numTurns": 5,
+            "usage": {
+              "input_tokens": 7457,
+              "output_tokens": 1610,
+              "cache_read_input_tokens": 8768,
+              "cache_creation_input_tokens": 0
+            },
+            "modelUsage": [
+              {
+                "model": "GLM-5.3-Flash",
+                "uncachedInputTokens": 8354,
+                "cachedReadTokens": 8768,
+                "cachedWriteTokens": 0,
+                "inputTokens": 17122,
+                "outputTokens": 1826,
+                "totalTokens": 18948
+              }
+            ]
+          },
+          {
+            "kind": "prompt-response",
+            "inputTokens": 7457,
+            "outputTokens": 1610,
+            "cachedReadTokens": 8768,
+            "cachedWriteTokens": 0,
+            "totalTokens": 17835
+          }
+        ]
+      }
+    },
+    {
+      "id": "snapshot-digest-2",
+      "task": "snapshot-digest",
+      "stage": "gate",
+      "repetition": 2,
+      "runId": "01a186fa-b558-71c4-8b8e-75dda08ee210",
+      "passed": true,
+      "functional": true,
+      "repositoryTypes": true,
+      "apiCompatibility": true,
+      "elapsedMs": 53092,
+      "evidenceComplete": true,
+      "droppedEvents": 0,
+      "usage": {
+        "version": "execution-accounting-v1",
+        "tokenStatus": "complete",
+        "source": "claude-sdk-model-usage",
+        "totals": {
+          "uncachedInputTokens": 9667,
+          "outputTokens": 1770,
+          "cachedReadTokens": 14720,
+          "cachedWriteTokens": 0,
+          "inputTokens": 24387,
+          "totalTokens": 26157
+        },
+        "observedModelResponses": 4,
+        "transportAttempts": null,
+        "models": [
+          "GLM-5.3-Flash"
+        ],
+        "reportedCost": {
+          "amount": 0.099945,
+          "currency": "USD",
+          "source": "claude-sdk-estimate",
+          "verified": false
+        },
+        "issues": [],
+        "receipts": [
+          {
+            "kind": "assistant",
+            "id": "msg_202610291725408b765fe3f7ae48f4",
+            "model": "GLM-5.3-Flash",
+            "usage": {
+              "input_tokens": 0,
+              "output_tokens": 0,
+              "cache_read_input_tokens": null,
+              "cache_creation_input_tokens": null
+            }
+          },
+          {
+            "kind": "assistant",
+            "id": "msg_20261029172549e5f609d07cb049a9",
+            "model": "GLM-5.3-Flash",
+            "usage": {
+              "input_tokens": 0,
+              "output_tokens": 0,
+              "cache_read_input_tokens": null,
+              "cache_creation_input_tokens": null
+            }
+          },
+          {
+            "kind": "assistant",
+            "id": "msg_20261029172611da799d9ea8774101",
+            "model": "GLM-5.3-Flash",
+            "usage": {
+              "input_tokens": 0,
+              "output_tokens": 0,
+              "cache_read_input_tokens": null,
+              "cache_creation_input_tokens": null
+            }
+          },
+          {
+            "kind": "assistant",
+            "id": "msg_20261029172619e7773c17caa84ec8",
+            "model": "GLM-5.3-Flash",
+            "usage": {
+              "input_tokens": 0,
+              "output_tokens": 0,
+              "cache_read_input_tokens": null,
+              "cache_creation_input_tokens": null
+            }
+          },
+          {
+            "kind": "sdk-result",
+            "id": "b4a47c03-4cc5-432c-adea-cd261a705402",
+            "subtype": "success",
+            "numTurns": 6,
+            "usage": {
+              "input_tokens": 8770,
+              "output_tokens": 1622,
+              "cache_read_input_tokens": 14720,
+              "cache_creation_input_tokens": 0
+            },
+            "modelUsage": [
+              {
+                "model": "GLM-5.3-Flash",
+                "uncachedInputTokens": 9667,
+                "cachedReadTokens": 14720,
+                "cachedWriteTokens": 0,
+                "inputTokens": 24387,
+                "outputTokens": 1770,
+                "totalTokens": 26157
+              }
+            ]
+          },
+          {
+            "kind": "prompt-response",
+            "inputTokens": 8770,
+            "outputTokens": 1622,
+            "cachedReadTokens": 14720,
+            "cachedWriteTokens": 0,
+            "totalTokens": 25112
+          }
+        ]
+      }
+    },
+    {
+      "id": "snapshot-digest-3",
+      "task": "snapshot-digest",
+      "stage": "gate",
+      "repetition": 3,
+      "runId": "01a18707-8c17-763d-bf51-1b841e4b3792",
+      "passed": true,
+      "functional": true,
+      "repositoryTypes": true,
+      "apiCompatibility": true,
+      "elapsedMs": 65906,
+      "evidenceComplete": true,
+      "droppedEvents": 0,
+      "usage": {
+        "version": "execution-accounting-v1",
+        "tokenStatus": "complete",
+        "source": "claude-sdk-model-usage",
+        "totals": {
+          "uncachedInputTokens": 8748,
+          "outputTokens": 2195,
+          "cachedReadTokens": 16064,
+          "cachedWriteTokens": 0,
+          "inputTokens": 24812,
+          "totalTokens": 27007
+        },
+        "observedModelResponses": 4,
+        "transportAttempts": null,
+        "models": [
+          "GLM-5.3-Flash"
+        ],
+        "reportedCost": {
+          "amount": 0.10664699999999999,
+          "currency": "USD",
+          "source": "claude-sdk-estimate",
+          "verified": false
+        },
+        "issues": [],
+        "receipts": [
+          {
+            "kind": "assistant",
+            "id": "msg_20261029173942cfb9d7f31fc7446d",
+            "model": "GLM-5.3-Flash",
+            "usage": {
+              "input_tokens": 0,
+              "output_tokens": 0,
+              "cache_read_input_tokens": null,
+              "cache_creation_input_tokens": null
+            }
+          },
+          {
+            "kind": "assistant",
+            "id": "msg_20261029173952189e71e88b8c4f5f",
+            "model": "GLM-5.3-Flash",
+            "usage": {
+              "input_tokens": 0,
+              "output_tokens": 0,
+              "cache_read_input_tokens": null,
+              "cache_creation_input_tokens": null
+            }
+          },
+          {
+            "kind": "assistant",
+            "id": "msg_202610291740152f448f5e84184c1f",
+            "model": "GLM-5.3-Flash",
+            "usage": {
+              "input_tokens": 0,
+              "output_tokens": 0,
+              "cache_read_input_tokens": null,
+              "cache_creation_input_tokens": null
+            }
+          },
+          {
+            "kind": "assistant",
+            "id": "msg_202610291740271b271fd0517747ad",
+            "model": "GLM-5.3-Flash",
+            "usage": {
+              "input_tokens": 0,
+              "output_tokens": 0,
+              "cache_read_input_tokens": null,
+              "cache_creation_input_tokens": null
+            }
+          },
+          {
+            "kind": "sdk-result",
+            "id": "6b8feae7-3702-473a-83f5-706c33e4bc6f",
+            "subtype": "success",
+            "numTurns": 6,
+            "usage": {
+              "input_tokens": 7851,
+              "output_tokens": 1972,
+              "cache_read_input_tokens": 16064,
+              "cache_creation_input_tokens": 0
+            },
+            "modelUsage": [
+              {
+                "model": "GLM-5.3-Flash",
+                "uncachedInputTokens": 8748,
+                "cachedReadTokens": 16064,
+                "cachedWriteTokens": 0,
+                "inputTokens": 24812,
+                "outputTokens": 2195,
+                "totalTokens": 27007
+              }
+            ]
+          },
+          {
+            "kind": "prompt-response",
+            "inputTokens": 7851,
+            "outputTokens": 1972,
+            "cachedReadTokens": 16064,
+            "cachedWriteTokens": 0,
+            "totalTokens": 25887
+          }
+        ]
+      }
+    },
+    {
+      "id": "evolution-capability-accumulation-1",
+      "task": "evolution-capability-accumulation",
+      "stage": "expansion",
+      "repetition": 1,
+      "runId": "01a18708-8f62-7032-a5c9-3a1e49784b9a",
+      "passed": true,
+      "functional": true,
+      "repositoryTypes": true,
+      "apiCompatibility": true,
+      "elapsedMs": 81336,
+      "evidenceComplete": true,
+      "droppedEvents": 0,
+      "usage": {
+        "version": "execution-accounting-v1",
+        "tokenStatus": "complete",
+        "source": "claude-sdk-model-usage",
+        "totals": {
+          "uncachedInputTokens": 23928,
+          "outputTokens": 2798,
+          "cachedReadTokens": 23552,
+          "cachedWriteTokens": 0,
+          "inputTokens": 47480,
+          "totalTokens": 50278
+        },
+        "observedModelResponses": 3,
+        "transportAttempts": null,
+        "models": [
+          "GLM-5.3-Flash"
+        ],
+        "reportedCost": {
+          "amount": 0.201366,
+          "currency": "USD",
+          "source": "claude-sdk-estimate",
+          "verified": false
+        },
+        "issues": [],
+        "receipts": [
+          {
+            "kind": "assistant",
+            "id": "msg_202610291740484d7b873f11a44f99",
+            "model": "GLM-5.3-Flash",
+            "usage": {
+              "input_tokens": 0,
+              "output_tokens": 0,
+              "cache_read_input_tokens": null,
+              "cache_creation_input_tokens": null
+            }
+          },
+          {
+            "kind": "assistant",
+            "id": "msg_20261029174059825140aec1a949dd",
+            "model": "GLM-5.3-Flash",
+            "usage": {
+              "input_tokens": 0,
+              "output_tokens": 0,
+              "cache_read_input_tokens": null,
+              "cache_creation_input_tokens": null
+            }
+          },
+          {
+            "kind": "assistant",
+            "id": "msg_20261029174148cf967b8a27a14691",
+            "model": "GLM-5.3-Flash",
+            "usage": {
+              "input_tokens": 0,
+              "output_tokens": 0,
+              "cache_read_input_tokens": null,
+              "cache_creation_input_tokens": null
+            }
+          },
+          {
+            "kind": "sdk-result",
+            "id": "454d045a-5030-4665-93a2-ddccce511fdd",
+            "subtype": "success",
+            "numTurns": 5,
+            "usage": {
+              "input_tokens": 22996,
+              "output_tokens": 2690,
+              "cache_read_input_tokens": 23552,
+              "cache_creation_input_tokens": 0
+            },
+            "modelUsage": [
+              {
+                "model": "GLM-5.3-Flash",
+                "uncachedInputTokens": 23928,
+                "cachedReadTokens": 23552,
+                "cachedWriteTokens": 0,
+                "inputTokens": 47480,
+                "outputTokens": 2798,
+                "totalTokens": 50278
+              }
+            ]
+          },
+          {
+            "kind": "prompt-response",
+            "inputTokens": 22996,
+            "outputTokens": 2690,
+            "cachedReadTokens": 23552,
+            "cachedWriteTokens": 0,
+            "totalTokens": 49238
+          }
+        ]
+      }
+    },
+    {
+      "id": "adapter-cached-token-accounting-1",
+      "task": "adapter-cached-token-accounting",
+      "stage": "expansion",
+      "repetition": 1,
+      "runId": "01a18709-cfa4-714d-963b-92541d60683e",
+      "passed": true,
+      "functional": true,
+      "repositoryTypes": true,
+      "apiCompatibility": true,
+      "elapsedMs": 99772,
+      "evidenceComplete": true,
+      "droppedEvents": 0,
+      "usage": {
+        "version": "execution-accounting-v1",
+        "tokenStatus": "complete",
+        "source": "claude-sdk-model-usage",
+        "totals": {
+          "uncachedInputTokens": 13902,
+          "outputTokens": 4275,
+          "cachedReadTokens": 12288,
+          "cachedWriteTokens": 0,
+          "inputTokens": 26190,
+          "totalTokens": 30465
+        },
+        "observedModelResponses": 3,
+        "transportAttempts": null,
+        "models": [
+          "GLM-5.3-Flash"
+        ],
+        "reportedCost": {
+          "amount": 0.182529,
+          "currency": "USD",
+          "source": "claude-sdk-estimate",
+          "verified": false
+        },
+        "issues": [],
+        "receipts": [
+          {
+            "kind": "assistant",
+            "id": "msg_2026102917421017c213b2397a4c52",
+            "model": "GLM-5.3-Flash",
+            "usage": {
+              "input_tokens": 0,
+              "output_tokens": 0,
+              "cache_read_input_tokens": null,
+              "cache_creation_input_tokens": null
+            }
+          },
+          {
+            "kind": "assistant",
+            "id": "msg_202610291742191b2e45ee6cff4f99",
+            "model": "GLM-5.3-Flash",
+            "usage": {
+              "input_tokens": 0,
+              "output_tokens": 0,
+              "cache_read_input_tokens": null,
+              "cache_creation_input_tokens": null
+            }
+          },
+          {
+            "kind": "assistant",
+            "id": "msg_20261029174328770898952e4a40a2",
+            "model": "GLM-5.3-Flash",
+            "usage": {
+              "input_tokens": 0,
+              "output_tokens": 0,
+              "cache_read_input_tokens": null,
+              "cache_creation_input_tokens": null
+            }
+          },
+          {
+            "kind": "sdk-result",
+            "id": "bf192605-2259-4c35-a14a-0eb1060c62e2",
+            "subtype": "success",
+            "numTurns": 5,
+            "usage": {
+              "input_tokens": 12954,
+              "output_tokens": 4003,
+              "cache_read_input_tokens": 12288,
+              "cache_creation_input_tokens": 0
+            },
+            "modelUsage": [
+              {
+                "model": "GLM-5.3-Flash",
+                "uncachedInputTokens": 13902,
+                "cachedReadTokens": 12288,
+                "cachedWriteTokens": 0,
+                "inputTokens": 26190,
+                "outputTokens": 4275,
+                "totalTokens": 30465
+              }
+            ]
+          },
+          {
+            "kind": "prompt-response",
+            "inputTokens": 12954,
+            "outputTokens": 4003,
+            "cachedReadTokens": 12288,
+            "cachedWriteTokens": 0,
+            "totalTokens": 29245
+          }
+        ]
+      }
+    },
+    {
+      "id": "evolution-capability-accumulation-2",
+      "task": "evolution-capability-accumulation",
+      "stage": "expansion",
+      "repetition": 2,
+      "runId": "01a1870b-5739-7530-bd09-3f93cf36a24e",
+      "passed": true,
+      "functional": true,
+      "repositoryTypes": true,
+      "apiCompatibility": true,
+      "elapsedMs": 79344,
+      "evidenceComplete": true,
+      "droppedEvents": 0,
+      "usage": {
+        "version": "execution-accounting-v1",
+        "tokenStatus": "complete",
+        "source": "claude-sdk-model-usage",
+        "totals": {
+          "uncachedInputTokens": 24022,
+          "outputTokens": 3090,
+          "cachedReadTokens": 23552,
+          "cachedWriteTokens": 0,
+          "inputTokens": 47574,
+          "totalTokens": 50664
+        },
+        "observedModelResponses": 3,
+        "transportAttempts": null,
+        "models": [
+          "GLM-5.3-Flash"
+        ],
+        "reportedCost": {
+          "amount": 0.209136,
+          "currency": "USD",
+          "source": "claude-sdk-estimate",
+          "verified": false
+        },
+        "issues": [],
+        "receipts": [
+          {
+            "kind": "assistant",
+            "id": "msg_20261029174350ae3e3b5cf42a496d",
+            "model": "GLM-5.3-Flash",
+            "usage": {
+              "input_tokens": 0,
+              "output_tokens": 0,
+              "cache_read_input_tokens": null,
+              "cache_creation_input_tokens": null
+            }
+          },
+          {
+            "kind": "assistant",
+            "id": "msg_20261029174358b1b3fc792b82477a",
+            "model": "GLM-5.3-Flash",
+            "usage": {
+              "input_tokens": 0,
+              "output_tokens": 0,
+              "cache_read_input_tokens": null,
+              "cache_creation_input_tokens": null
+            }
+          },
+          {
+            "kind": "assistant",
+            "id": "msg_2026102917444890d7f67c82594004",
+            "model": "GLM-5.3-Flash",
+            "usage": {
+              "input_tokens": 0,
+              "output_tokens": 0,
+              "cache_read_input_tokens": null,
+              "cache_creation_input_tokens": null
+            }
+          },
+          {
+            "kind": "sdk-result",
+            "id": "4e4d1f19-db1c-4dcd-a071-dd10b0f2e211",
+            "subtype": "success",
+            "numTurns": 5,
+            "usage": {
+              "input_tokens": 23090,
+              "output_tokens": 2743,
+              "cache_read_input_tokens": 23552,
+              "cache_creation_input_tokens": 0
+            },
+            "modelUsage": [
+              {
+                "model": "GLM-5.3-Flash",
+                "uncachedInputTokens": 24022,
+                "cachedReadTokens": 23552,
+                "cachedWriteTokens": 0,
+                "inputTokens": 47574,
+                "outputTokens": 3090,
+                "totalTokens": 50664
+              }
+            ]
+          },
+          {
+            "kind": "prompt-response",
+            "inputTokens": 23090,
+            "outputTokens": 2743,
+            "cachedReadTokens": 23552,
+            "cachedWriteTokens": 0,
+            "totalTokens": 49385
+          }
+        ]
+      }
+    },
+    {
+      "id": "adapter-cached-token-accounting-2",
+      "task": "adapter-cached-token-accounting",
+      "stage": "expansion",
+      "repetition": 2,
+      "runId": "01a1870c-8fab-779c-8f2b-767637b64997",
+      "passed": true,
+      "functional": true,
+      "repositoryTypes": true,
+      "apiCompatibility": true,
+      "elapsedMs": 89845,
+      "evidenceComplete": true,
+      "droppedEvents": 0,
+      "usage": {
+        "version": "execution-accounting-v1",
+        "tokenStatus": "complete",
+        "source": "claude-sdk-model-usage",
+        "totals": {
+          "uncachedInputTokens": 13493,
+          "outputTokens": 3620,
+          "cachedReadTokens": 12288,
+          "cachedWriteTokens": 0,
+          "inputTokens": 25781,
+          "totalTokens": 29401
+        },
+        "observedModelResponses": 3,
+        "transportAttempts": null,
+        "models": [
+          "GLM-5.3-Flash"
+        ],
+        "reportedCost": {
+          "amount": 0.16410899999999998,
+          "currency": "USD",
+          "source": "claude-sdk-estimate",
+          "verified": false
+        },
+        "issues": [],
+        "receipts": [
+          {
+            "kind": "assistant",
+            "id": "msg_20261029174511bc2e6a16763c41e1",
+            "model": "GLM-5.3-Flash",
+            "usage": {
+              "input_tokens": 0,
+              "output_tokens": 0,
+              "cache_read_input_tokens": null,
+              "cache_creation_input_tokens": null
+            }
+          },
+          {
+            "kind": "assistant",
+            "id": "msg_202610291745193ff44db5088542ea",
+            "model": "GLM-5.3-Flash",
+            "usage": {
+              "input_tokens": 0,
+              "output_tokens": 0,
+              "cache_read_input_tokens": null,
+              "cache_creation_input_tokens": null
+            }
+          },
+          {
+            "kind": "assistant",
+            "id": "msg_2026102917461804a06b313b9345a3",
+            "model": "GLM-5.3-Flash",
+            "usage": {
+              "input_tokens": 0,
+              "output_tokens": 0,
+              "cache_read_input_tokens": null,
+              "cache_creation_input_tokens": null
+            }
+          },
+          {
+            "kind": "sdk-result",
+            "id": "c75740e4-6306-4aad-a92b-be113d6883e5",
+            "subtype": "success",
+            "numTurns": 5,
+            "usage": {
+              "input_tokens": 12545,
+              "output_tokens": 3466,
+              "cache_read_input_tokens": 12288,
+              "cache_creation_input_tokens": 0
+            },
+            "modelUsage": [
+              {
+                "model": "GLM-5.3-Flash",
+                "uncachedInputTokens": 13493,
+                "cachedReadTokens": 12288,
+                "cachedWriteTokens": 0,
+                "inputTokens": 25781,
+                "outputTokens": 3620,
+                "totalTokens": 29401
+              }
+            ]
+          },
+          {
+            "kind": "prompt-response",
+            "inputTokens": 12545,
+            "outputTokens": 3466,
+            "cachedReadTokens": 12288,
+            "cachedWriteTokens": 0,
+            "totalTokens": 28299
+          }
+        ]
+      }
+    },
+    {
+      "id": "evolution-capability-accumulation-3",
+      "task": "evolution-capability-accumulation",
+      "stage": "expansion",
+      "repetition": 3,
+      "runId": "01a1870d-f076-708f-8d44-9e8628b37a54",
+      "passed": true,
+      "functional": true,
+      "repositoryTypes": true,
+      "apiCompatibility": true,
+      "elapsedMs": 76951,
+      "evidenceComplete": true,
+      "droppedEvents": 0,
+      "usage": {
+        "version": "execution-accounting-v1",
+        "tokenStatus": "complete",
+        "source": "claude-sdk-model-usage",
+        "totals": {
+          "uncachedInputTokens": 24743,
+          "outputTokens": 2442,
+          "cachedReadTokens": 22400,
+          "cachedWriteTokens": 0,
+          "inputTokens": 47143,
+          "totalTokens": 49585
+        },
+        "observedModelResponses": 3,
+        "transportAttempts": null,
+        "models": [
+          "GLM-5.3-Flash"
+        ],
+        "reportedCost": {
+          "amount": 0.195965,
+          "currency": "USD",
+          "source": "claude-sdk-estimate",
+          "verified": false
+        },
+        "issues": [],
+        "receipts": [
+          {
+            "kind": "assistant",
+            "id": "msg_202610291746407069471076714584",
+            "model": "GLM-5.3-Flash",
+            "usage": {
+              "input_tokens": 0,
+              "output_tokens": 0,
+              "cache_read_input_tokens": null,
+              "cache_creation_input_tokens": null
+            }
+          },
+          {
+            "kind": "assistant",
+            "id": "msg_20261029174649b396d314ed574ead",
+            "model": "GLM-5.3-Flash",
+            "usage": {
+              "input_tokens": 0,
+              "output_tokens": 0,
+              "cache_read_input_tokens": null,
+              "cache_creation_input_tokens": null
+            }
+          },
+          {
+            "kind": "assistant",
+            "id": "msg_20261029174737b4fc12172a4b4d84",
+            "model": "GLM-5.3-Flash",
+            "usage": {
+              "input_tokens": 0,
+              "output_tokens": 0,
+              "cache_read_input_tokens": null,
+              "cache_creation_input_tokens": null
+            }
+          },
+          {
+            "kind": "sdk-result",
+            "id": "51d6b2d5-91bd-46ee-ae60-dbe9569ba338",
+            "subtype": "success",
+            "numTurns": 5,
+            "usage": {
+              "input_tokens": 23811,
+              "output_tokens": 2314,
+              "cache_read_input_tokens": 22400,
+              "cache_creation_input_tokens": 0
+            },
+            "modelUsage": [
+              {
+                "model": "GLM-5.3-Flash",
+                "uncachedInputTokens": 24743,
+                "cachedReadTokens": 22400,
+                "cachedWriteTokens": 0,
+                "inputTokens": 47143,
+                "outputTokens": 2442,
+                "totalTokens": 49585
+              }
+            ]
+          },
+          {
+            "kind": "prompt-response",
+            "inputTokens": 23811,
+            "outputTokens": 2314,
+            "cachedReadTokens": 22400,
+            "cachedWriteTokens": 0,
+            "totalTokens": 48525
+          }
+        ]
+      }
+    },
+    {
+      "id": "adapter-cached-token-accounting-3",
+      "task": "adapter-cached-token-accounting",
+      "stage": "expansion",
+      "repetition": 3,
+      "runId": "01a1870f-1f8d-7745-96c8-efccc1a5ffd0",
+      "passed": true,
+      "functional": true,
+      "repositoryTypes": true,
+      "apiCompatibility": true,
+      "elapsedMs": 121983,
+      "evidenceComplete": true,
+      "droppedEvents": 0,
+      "usage": {
+        "version": "execution-accounting-v1",
+        "tokenStatus": "complete",
+        "source": "claude-sdk-model-usage",
+        "totals": {
+          "uncachedInputTokens": 15496,
+          "outputTokens": 5764,
+          "cachedReadTokens": 12288,
+          "cachedWriteTokens": 0,
+          "inputTokens": 27784,
+          "totalTokens": 33548
+        },
+        "observedModelResponses": 3,
+        "transportAttempts": null,
+        "models": [
+          "GLM-5.3-Flash"
+        ],
+        "reportedCost": {
+          "amount": 0.227724,
+          "currency": "USD",
+          "source": "claude-sdk-estimate",
+          "verified": false
+        },
+        "issues": [],
+        "receipts": [
+          {
+            "kind": "assistant",
+            "id": "msg_202610291747591f50e61d2c194521",
+            "model": "GLM-5.3-Flash",
+            "usage": {
+              "input_tokens": 0,
+              "output_tokens": 0,
+              "cache_read_input_tokens": null,
+              "cache_creation_input_tokens": null
+            }
+          },
+          {
+            "kind": "assistant",
+            "id": "msg_202610291748085636152857ae4230",
+            "model": "GLM-5.3-Flash",
+            "usage": {
+              "input_tokens": 0,
+              "output_tokens": 0,
+              "cache_read_input_tokens": null,
+              "cache_creation_input_tokens": null
+            }
+          },
+          {
+            "kind": "assistant",
+            "id": "msg_20261029174941deb6a5e1910e45a4",
+            "model": "GLM-5.3-Flash",
+            "usage": {
+              "input_tokens": 0,
+              "output_tokens": 0,
+              "cache_read_input_tokens": null,
+              "cache_creation_input_tokens": null
+            }
+          },
+          {
+            "kind": "sdk-result",
+            "id": "c494c25d-2d0e-40ee-869f-3abd0400ffbf",
+            "subtype": "success",
+            "numTurns": 5,
+            "usage": {
+              "input_tokens": 14548,
+              "output_tokens": 5568,
+              "cache_read_input_tokens": 12288,
+              "cache_creation_input_tokens": 0
+            },
+            "modelUsage": [
+              {
+                "model": "GLM-5.3-Flash",
+                "uncachedInputTokens": 15496,
+                "cachedReadTokens": 12288,
+                "cachedWriteTokens": 0,
+                "inputTokens": 27784,
+                "outputTokens": 5764,
+                "totalTokens": 33548
+              }
+            ]
+          },
+          {
+            "kind": "prompt-response",
+            "inputTokens": 14548,
+            "outputTokens": 5568,
+            "cachedReadTokens": 12288,
+            "cachedWriteTokens": 0,
+            "totalTokens": 32404
+          }
+        ]
+      }
+    }
+  ],
+  "halted": null,
+  "benefit": "inconclusive",
+  "segments": [
+    {
+      "name": "initial",
+      "file": "segments/initial-summary.json",
+      "digest": "e1d0ef4e510040b9c5ac6464b46df029305f60701e2ef620ed39f5d1d6dbd99b"
+    },
+    {
+      "name": "continuation",
+      "file": "segments/continuation-summary.json",
+      "digest": "3d5d2c858fe74e12618e50fcc9c2118d2f13c4ce8506b84a557debd2b8dbf966"
+    }
+  ]
+}

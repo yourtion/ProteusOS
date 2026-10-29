@@ -255,3 +255,7 @@ env -u PROTEUS_E2E -u PROTEUS_SANDBOX PATH="/opt/homebrew/bin:$PATH" \
 `868c79c` 已将固定行为测试、历史仓库类型检查和公开接口兼容检查接入同一自动 verify；预置原始输出文件并提供明确列出的只读依赖上下文。全量回归 505 passed /5 skipped，格式、lint、类型检查通过。零模型调用重放 v1 九份候选，三个坏快照自动拒绝、其余六份通过，五项任务的红绿控制全部通过；证据见 [offline-validation.json](./experiments/results/development-suite-v2/offline-validation.json)。
 
 [v2 冻结方案](./experiments/development-suite-v2.md) 已获用户明确授权最多 9 次新会话，先运行 snapshot 三次门槛，全部通过后才扩至 evolution 能力累积和 decision-llm 缓存计量各三次。后两项为不同模块的真实历史缺陷，累计覆盖五个独立缺陷；保持开发方可见及收益 inconclusive。
+
+v2 真实轮已完成：[结果与语义复核](./experiments/results/development-suite-v2.md)。9/9 通过预注册的功能、仓库类型及接口验收，快照由上一轮附加复核的 0/3 改善为 3/3；新增两个历史缺陷，累计覆盖五个。共享执行接口漂移在第三次派发前中断，隔离并固定原版本后仅续跑剩余 7 次，未增加授权会话。316,053 tokens、719.221 秒会话墙钟合计，轨迹/用量完整、丢失 0。
+
+补丁审查后新增的 SDK 可空缓存语义检查发现两份候选不兼容，附加复核后为 7/9；保留预注册 9/9 的原始成绩与独立诊断。当前仓库已增加六个边界回归，19 项合同测试通过；归档及解压后的两套离线复验一致。下一步先把语义边界和 SDK 合同纳入新的冻结协议，再选当前未修复任务，测量首次产出和人工修订成本；不单纯扩样本或提高 tokens。候选未应用，收益仍为 inconclusive。

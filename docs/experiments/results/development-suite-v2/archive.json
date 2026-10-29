@@ -1,0 +1,30 @@
+{
+  "bytes": 4369174,
+  "sha256": "b96d8d37ad7af06a1a5ab8dc106a5049b82ad63fc412d0eb9daab19174b01aec",
+  "files": 1655,
+  "extractedFilesByteIdentical": true,
+  "file": "evidence.tar.gz",
+  "replays": {
+    "audit": {
+      "byteIdentical": true,
+      "sha256": "be08120b132c8d0166911f4850e7879f9afb5f68e9a78786fb367208aa6ec853",
+      "modelCalls": 0
+    },
+    "nullableReview": {
+      "byteIdentical": true,
+      "sha256": "16dbd0a461a71a5cf4001c4d3efb4c305dae6bc55af809ba82b4084a14beb2ac",
+      "modelCalls": 0
+    }
+  },
+  "credentialScan": {
+    "files": 1655,
+    "bytes": 21536368,
+    "exactCredentialMatches": 0,
+    "privateAgentConfigArchived": false,
+    "rawSdkSessionsArchived": false
+  },
+  "registeredPassed": 9,
+  "postHocNullableCachePassed": 1,
+  "postHocNullableCacheTotal": 3,
+  "registeredScoreChanged": false
+}
