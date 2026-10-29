@@ -1,3 +1,4 @@
+import { loadModelAdapter } from "./model-adapter.ts";
 import { Command } from "commander";
 import {
   accessCommand,
@@ -58,6 +59,7 @@ program.name("proteus").description("ProteusOS：多个体运行、受控演化�
 
 function withCommon(cmd: Command): Command {
   return cmd
+    .option("--model-adapter <file>", "本地模型适配器模块（或 PROTEUS_MODEL_ADAPTER）")
     .option("--home <dir>", "实例根目录（默认 ~/.proteus 或 PROTEUS_HOME）")
     .option("--organism <id>", "个体 ID", "organism-default")
     .option("--actor <principal>", "当前主体 Principal ID", "principal-local")
@@ -75,7 +77,9 @@ withCommon(
   const port = Number(opts.port);
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error("无效端口");
   const { startWorkbench } = await import("./web/server.ts");
-  const server = startWorkbench(port, opts.home ?? process.env.PROTEUS_HOME ?? ".proteus-web");
+  const server = startWorkbench(port, opts.home ?? process.env.PROTEUS_HOME ?? ".proteus-web", {
+    modelAdapter: await loadModelAdapter(opts.modelAdapter),
+  });
   for (const signal of ["SIGINT", "SIGTERM"] as const)
     process.once(signal, () => {
       void server.shutdown().then(() => process.exit(0));
@@ -171,7 +175,7 @@ withCommon(
     .argument("<datasetId>", "development 用途的经验集 ID")
     .option("--gold <file>", "开发集标注 JSON（验证 family 不得传入）")
     .option("--validation-set <id>", "绑定验证集 ID")
-    .option("--mode <mode>", "rule | llm（llm 需 PROTEUS_LLM_API_KEY）", "rule")
+    .option("--mode <mode>", "rule | llm（llm 需模型适配器或 PROTEUS_LLM_API_KEY）", "rule")
     .option("--min-support <n>", "最小支持数（默认 2）")
     .option("--min-precision <f>", "最小精度 0-1（默认 0.8）")
     .option("--max-rules <n>", "规则数上限（默认 4）"),
@@ -433,7 +437,7 @@ withCommon(
     .requiredOption("--out <dir>", "实验输出目录（manifest/trials/report 落盘处）")
     .option(
       "--llm <impl>",
-      "L 组实现：fake（管道演练）| real（真实 Adapter，需 PROTEUS_LLM_API_KEY）",
+      "L 组实现：fake（管道演练）| real（真实 Adapter，需模型适配器或 PROTEUS_LLM_API_KEY）",
       "fake",
     )
     .option("--arm <arms...>", "执行的组别（默认 R L）")

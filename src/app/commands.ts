@@ -1,3 +1,4 @@
+import { loadModelAdapter } from "./model-adapter.ts";
 import { readFileSync, writeFileSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 import { openInstance, resolveInstanceRoot, type AppInstance } from "./instance.ts";
@@ -8,13 +9,15 @@ import type { RunSummary } from "../runtime/types.ts";
 
 export interface CommonOpts {
   home?: string;
+  modelAdapter?: string;
   json?: boolean;
   organism?: string;
   actor?: string;
 }
 
-function federationFor(opts: CommonOpts) {
+async function federationFor(opts: CommonOpts) {
   const instance = openInstance(resolveInstanceRoot(opts.home), {
+    modelAdapter: await loadModelAdapter(opts.modelAdapter),
     organismId: opts.organism,
     actorId: opts.actor,
   });
@@ -39,7 +42,7 @@ function validatePublicationScope(scope: string): void {
 }
 
 export async function teamCreateCommand(teamId: string, opts: CommonOpts): Promise<void> {
-  const { instance, federation } = federationFor(opts);
+  const { instance, federation } = await federationFor(opts);
   try {
     printRecord(federation.createTeam(teamId, { createdBy: opts.actor ?? PRINCIPAL_ID }), opts);
   } finally {
@@ -55,7 +58,7 @@ export async function teamGrantCommand(
   if (!["read", "publish", "manage"].includes(opts.permission)) {
     throw new Error("permission 必须为 read、publish 或 manage");
   }
-  const { instance, federation } = federationFor(opts);
+  const { instance, federation } = await federationFor(opts);
   try {
     printRecord(
       federation.grantTeam(teamId, principalId, opts.permission as "read" | "publish" | "manage", {
@@ -73,7 +76,7 @@ export async function shareForkCommand(
 ): Promise<void> {
   const organismId = opts.organism ?? ORGANISM_ID;
   validateForkScope(opts.scope, organismId);
-  const { instance, federation } = federationFor(opts);
+  const { instance, federation } = await federationFor(opts);
   try {
     printRecord(
       federation.fork({
@@ -97,7 +100,7 @@ export async function publishCommand(
   },
 ): Promise<void> {
   validatePublicationScope(opts.scope);
-  const { instance, federation } = federationFor(opts);
+  const { instance, federation } = await federationFor(opts);
   try {
     printRecord(
       federation.publish({
@@ -118,7 +121,7 @@ export async function shareExportCommand(
   publicationId: string,
   opts: CommonOpts & { out: string },
 ): Promise<void> {
-  const { instance, federation } = federationFor(opts);
+  const { instance, federation } = await federationFor(opts);
   try {
     const envelope = federation.exportPublication(publicationId, opts.actor ?? PRINCIPAL_ID);
     writeFileSync(resolve(opts.out), `${JSON.stringify(envelope, null, 2)}\n`, "utf8");
@@ -131,7 +134,7 @@ export async function shareExportCommand(
 
 export async function shareImportCommand(file: string, opts: CommonOpts): Promise<void> {
   const envelope = JSON.parse(readFileSync(resolve(file), "utf8"));
-  const { instance, federation } = federationFor(opts);
+  const { instance, federation } = await federationFor(opts);
   try {
     printRecord(federation.importBundle(envelope, { createdBy: opts.actor ?? PRINCIPAL_ID }), opts);
   } finally {
@@ -143,7 +146,7 @@ export async function inheritCommand(
   importId: string,
   opts: CommonOpts & { validationSet: string; versions?: string[]; hypothesis?: string },
 ): Promise<void> {
-  const { instance, federation } = federationFor(opts);
+  const { instance, federation } = await federationFor(opts);
   try {
     printRecord(
       federation.inherit(importId, {
@@ -163,7 +166,7 @@ export async function shareRejectCommand(
   importId: string,
   opts: CommonOpts & { note?: string },
 ): Promise<void> {
-  const { instance, federation } = federationFor(opts);
+  const { instance, federation } = await federationFor(opts);
   try {
     printRecord(
       federation.rejectImport(importId, {
@@ -178,7 +181,7 @@ export async function shareRejectCommand(
 }
 
 export async function organismsCommand(opts: CommonOpts): Promise<void> {
-  const { instance } = federationFor(opts);
+  const { instance } = await federationFor(opts);
   try {
     printRecord(instance.storage.listOrganisms(opts.actor ?? PRINCIPAL_ID), opts);
   } finally {
@@ -188,7 +191,11 @@ export async function organismsCommand(opts: CommonOpts): Promise<void> {
 
 export async function initCommand(opts: CommonOpts): Promise<void> {
   const root = resolveInstanceRoot(opts.home);
-  const inst = openInstance(root, { organismId: opts.organism, actorId: opts.actor });
+  const inst = openInstance(root, {
+    modelAdapter: await loadModelAdapter(opts.modelAdapter),
+    organismId: opts.organism,
+    actorId: opts.actor,
+  });
   try {
     const result = installSeed(
       {
@@ -221,6 +228,7 @@ export async function initCommand(opts: CommonOpts): Promise<void> {
 export async function submitCommand(taskPath: string, opts: CommonOpts): Promise<void> {
   const { file, budget, baseDir } = loadTaskFile(taskPath);
   const inst = openInstance(resolveInstanceRoot(opts.home), {
+    modelAdapter: await loadModelAdapter(opts.modelAdapter),
     organismId: opts.organism,
     actorId: opts.actor,
     onExecutionProgress: opts.json
@@ -304,6 +312,7 @@ function printExecutionObservation(attempt: RunSummary["attempts"][number]): voi
 
 export async function runsCommand(id: string | undefined, opts: CommonOpts): Promise<void> {
   const inst = openInstance(resolveInstanceRoot(opts.home), {
+    modelAdapter: await loadModelAdapter(opts.modelAdapter),
     organismId: opts.organism,
     actorId: opts.actor,
   });
@@ -363,6 +372,7 @@ export async function runsCommand(id: string | undefined, opts: CommonOpts): Pro
 
 export async function cancelCommand(id: string, opts: CommonOpts): Promise<void> {
   const inst = openInstance(resolveInstanceRoot(opts.home), {
+    modelAdapter: await loadModelAdapter(opts.modelAdapter),
     organismId: opts.organism,
     actorId: opts.actor,
   });
@@ -381,6 +391,7 @@ export async function cancelCommand(id: string, opts: CommonOpts): Promise<void>
 
 export async function advanceCommand(id: string, opts: CommonOpts): Promise<void> {
   const inst = openInstance(resolveInstanceRoot(opts.home), {
+    modelAdapter: await loadModelAdapter(opts.modelAdapter),
     organismId: opts.organism,
     actorId: opts.actor,
   });
@@ -418,6 +429,7 @@ export async function buildCommand(opts: BuildOpts): Promise<void> {
     requestedBy: opts.actor ?? PRINCIPAL_ID,
   };
   const inst = openInstance(resolveInstanceRoot(opts.home), {
+    modelAdapter: await loadModelAdapter(opts.modelAdapter),
     organismId: opts.organism,
     actorId: opts.actor,
   });
@@ -486,6 +498,7 @@ export interface JudgeUpgradeOpts extends CommonOpts {
 export async function judgeUpgradeCommand(opts: JudgeUpgradeOpts): Promise<void> {
   const regression = taskSubmissionFrom(opts.regressionTask, process.cwd());
   const inst = openInstance(resolveInstanceRoot(opts.home), {
+    modelAdapter: await loadModelAdapter(opts.modelAdapter),
     organismId: opts.organism,
     actorId: opts.actor,
   });
@@ -537,6 +550,7 @@ export async function datasetFreezeCommand(
   },
 ): Promise<void> {
   const inst = openInstance(resolveInstanceRoot(opts.home), {
+    modelAdapter: await loadModelAdapter(opts.modelAdapter),
     organismId: opts.organism,
     actorId: opts.actor,
   });
@@ -567,6 +581,7 @@ export async function datasetFreezeCommand(
 
 export async function datasetListCommand(opts: CommonOpts): Promise<void> {
   const inst = openInstance(resolveInstanceRoot(opts.home), {
+    modelAdapter: await loadModelAdapter(opts.modelAdapter),
     organismId: opts.organism,
     actorId: opts.actor,
   });
@@ -594,6 +609,7 @@ export async function datasetListCommand(opts: CommonOpts): Promise<void> {
 
 export async function datasetInspectCommand(id: string, opts: CommonOpts): Promise<void> {
   const inst = openInstance(resolveInstanceRoot(opts.home), {
+    modelAdapter: await loadModelAdapter(opts.modelAdapter),
     organismId: opts.organism,
     actorId: opts.actor,
   });
@@ -641,6 +657,7 @@ export async function consolidateCommand(datasetId: string, opts: ConsolidateOpt
     }>;
   }
   const inst = openInstance(resolveInstanceRoot(opts.home), {
+    modelAdapter: await loadModelAdapter(opts.modelAdapter),
     organismId: opts.organism,
     actorId: opts.actor,
   });
@@ -691,6 +708,7 @@ export async function validationRegisterCommand(opts: ValidationRegisterOpts): P
     requestedBy: opts.actor ?? PRINCIPAL_ID,
   };
   const inst = openInstance(resolveInstanceRoot(opts.home), {
+    modelAdapter: await loadModelAdapter(opts.modelAdapter),
     organismId: opts.organism,
     actorId: opts.actor,
   });
@@ -722,6 +740,7 @@ export async function evaluatePolicyCommand(
     ? (JSON.parse(readFileSync(resolve(opts.cases), "utf8")) as PolicyEvaluationPlan["cases"])
     : undefined;
   const inst = openInstance(resolveInstanceRoot(opts.home), {
+    modelAdapter: await loadModelAdapter(opts.modelAdapter),
     organismId: opts.organism,
     actorId: opts.actor,
   });
@@ -837,6 +856,7 @@ export async function consolidateSubmitCommand(
   const { params } = readConsolidationParams(opts);
   const mode = opts.mode === "llm" ? "llm" : "rule";
   const inst = openInstance(resolveInstanceRoot(opts.home), {
+    modelAdapter: await loadModelAdapter(opts.modelAdapter),
     organismId: opts.organism,
     actorId: opts.actor,
   });
@@ -869,6 +889,7 @@ export async function consolidateRunCommand(
 ): Promise<void> {
   const limit = opts.limit ? Number.parseInt(opts.limit, 10) : 1;
   const inst = openInstance(resolveInstanceRoot(opts.home), {
+    modelAdapter: await loadModelAdapter(opts.modelAdapter),
     organismId: opts.organism,
     actorId: opts.actor,
   });
@@ -902,6 +923,7 @@ export async function consolidateRunCommand(
 
 export async function consolidateRecoverCommand(opts: CommonOpts): Promise<void> {
   const inst = openInstance(resolveInstanceRoot(opts.home), {
+    modelAdapter: await loadModelAdapter(opts.modelAdapter),
     organismId: opts.organism,
     actorId: opts.actor,
   });
@@ -921,6 +943,7 @@ export async function consolidateJobsCommand(
   opts: CommonOpts,
 ): Promise<void> {
   const inst = openInstance(resolveInstanceRoot(opts.home), {
+    modelAdapter: await loadModelAdapter(opts.modelAdapter),
     organismId: opts.organism,
     actorId: opts.actor,
   });
@@ -949,6 +972,7 @@ export async function consolidateJobsCommand(
 
 export async function consolidateJobCommand(id: string, opts: CommonOpts): Promise<void> {
   const inst = openInstance(resolveInstanceRoot(opts.home), {
+    modelAdapter: await loadModelAdapter(opts.modelAdapter),
     organismId: opts.organism,
     actorId: opts.actor,
   });
@@ -963,6 +987,7 @@ export async function consolidateJobCommand(id: string, opts: CommonOpts): Promi
 
 export async function consolidateCancelCommand(id: string, opts: CommonOpts): Promise<void> {
   const inst = openInstance(resolveInstanceRoot(opts.home), {
+    modelAdapter: await loadModelAdapter(opts.modelAdapter),
     organismId: opts.organism,
     actorId: opts.actor,
   });
@@ -981,6 +1006,7 @@ export async function consolidateCancelCommand(id: string, opts: CommonOpts): Pr
 
 export async function candidatesCommand(id: string | undefined, opts: CommonOpts): Promise<void> {
   const inst = openInstance(resolveInstanceRoot(opts.home), {
+    modelAdapter: await loadModelAdapter(opts.modelAdapter),
     organismId: opts.organism,
     actorId: opts.actor,
   });
@@ -1037,6 +1063,7 @@ export async function candidatesCommand(id: string | undefined, opts: CommonOpts
 
 export async function inspectCommand(id: string, opts: CommonOpts): Promise<void> {
   const inst = openInstance(resolveInstanceRoot(opts.home), {
+    modelAdapter: await loadModelAdapter(opts.modelAdapter),
     organismId: opts.organism,
     actorId: opts.actor,
   });
@@ -1088,6 +1115,7 @@ export async function inspectCommand(id: string, opts: CommonOpts): Promise<void
 
 export async function recoverCommand(id: string | undefined, opts: CommonOpts): Promise<void> {
   const inst = openInstance(resolveInstanceRoot(opts.home), {
+    modelAdapter: await loadModelAdapter(opts.modelAdapter),
     organismId: opts.organism,
     actorId: opts.actor,
   });
@@ -1117,6 +1145,7 @@ export async function recoverCommand(id: string | undefined, opts: CommonOpts): 
 
 export async function reconcileCommand(id: string, opts: CommonOpts): Promise<void> {
   const inst = openInstance(resolveInstanceRoot(opts.home), {
+    modelAdapter: await loadModelAdapter(opts.modelAdapter),
     organismId: opts.organism,
     actorId: opts.actor,
   });
@@ -1196,6 +1225,7 @@ export interface EvaluateOpts extends CommonOpts {
 
 export async function evaluateCommand(id: string, opts: EvaluateOpts): Promise<void> {
   const inst = openInstance(resolveInstanceRoot(opts.home), {
+    modelAdapter: await loadModelAdapter(opts.modelAdapter),
     organismId: opts.organism,
     actorId: opts.actor,
   });
@@ -1243,6 +1273,7 @@ export interface PromoteOpts extends CommonOpts {
 
 export async function promoteCommand(id: string, opts: PromoteOpts): Promise<void> {
   const inst = openInstance(resolveInstanceRoot(opts.home), {
+    modelAdapter: await loadModelAdapter(opts.modelAdapter),
     organismId: opts.organism,
     actorId: opts.actor,
   });
@@ -1278,6 +1309,7 @@ export async function promoteCommand(id: string, opts: PromoteOpts): Promise<voi
 
 export async function rollbackCommand(opts: PromoteOpts & { to: string }): Promise<void> {
   const inst = openInstance(resolveInstanceRoot(opts.home), {
+    modelAdapter: await loadModelAdapter(opts.modelAdapter),
     organismId: opts.organism,
     actorId: opts.actor,
   });
@@ -1313,6 +1345,7 @@ export async function supersedeCommand(
   opts: CommonOpts & { note?: string },
 ): Promise<void> {
   const inst = openInstance(resolveInstanceRoot(opts.home), {
+    modelAdapter: await loadModelAdapter(opts.modelAdapter),
     organismId: opts.organism,
     actorId: opts.actor,
   });
@@ -1362,6 +1395,7 @@ export async function experimentRunCommand(opts: ExperimentRunOpts): Promise<voi
   const { v7: uuidv7 } = await import("uuid");
   const result = await runExperiment({
     home: resolveInstanceRoot(opts.home),
+    modelAdapter: await loadModelAdapter(opts.modelAdapter),
     organismId: opts.organism,
     actorId: opts.actor,
     datasetDir: resolve(opts.dataset),
@@ -1398,6 +1432,7 @@ export async function experimentReportCommand(
 ): Promise<void> {
   const { generateReport } = await import("./experiment/reporter.ts");
   const inst = openInstance(resolveInstanceRoot(opts.home), {
+    modelAdapter: await loadModelAdapter(opts.modelAdapter),
     organismId: opts.organism,
     actorId: opts.actor,
   });
@@ -1434,6 +1469,7 @@ export async function settleDecisionCommand(
   opts: CommonOpts & { note?: string },
 ): Promise<void> {
   const inst = openInstance(resolveInstanceRoot(opts.home), {
+    modelAdapter: await loadModelAdapter(opts.modelAdapter),
     organismId: opts.organism,
     actorId: opts.actor,
   });

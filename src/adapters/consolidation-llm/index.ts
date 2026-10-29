@@ -1,3 +1,4 @@
+import { checkedModelAdapter, type ModelAdapter } from "../../model/index.ts";
 import Anthropic from "@anthropic-ai/sdk";
 import type { RouteProposer } from "../../evolution/consolidation.ts";
 import { digestOf } from "../../storage/blobs.ts";
@@ -18,14 +19,26 @@ export const CONSOLIDATION_LLM_MODEL = "GLM-5.3-Flash";
 export class LlmRouteProposer implements RouteProposer {
   readonly name = "consolidation-llm";
   readonly remote = true;
-  private readonly client: Anthropic;
+  private readonly client?: Anthropic;
+  private readonly adapter?: ModelAdapter;
+  private readonly model: string;
   private readonly config: LlmAdapterConfig;
   /** 最近一次调用的 provenance（evolution 记入候选 sourceRefs） */
-  lastProvenance: { promptDigest: string; responseDigest: string; servedModel: string } | null =
-    null;
+  lastProvenance: {
+    promptDigest: string;
+    responseDigest: string;
+    servedModel: string | null;
+  } | null = null;
   lastUsage: { inputTokens: number; outputTokens: number } | null = null;
 
-  constructor(config: LlmAdapterConfig) {
+  constructor(config: LlmAdapterConfig | { adapter: ModelAdapter; model?: string }) {
+    this.model =
+      "adapter" in config ? (config.model ?? CONSOLIDATION_LLM_MODEL) : CONSOLIDATION_LLM_MODEL;
+    if ("adapter" in config) {
+      this.adapter = checkedModelAdapter(config.adapter);
+      this.config = { apiKey: "", baseUrl: this.adapter.serviceId };
+      return;
+    }
     this.config = config;
     this.client = new Anthropic({
       apiKey: config.apiKey,
@@ -47,28 +60,45 @@ export class LlmRouteProposer implements RouteProposer {
     this.lastUsage = null;
     if (input.gapSamples.length === 0) return [];
     const prompt = this.buildPrompt(input);
-    const response = await this.client.messages.create(
-      {
-        model: CONSOLIDATION_LLM_MODEL,
-        max_tokens: 512,
-        temperature: 0,
-        messages: [{ role: "user", content: prompt }],
-      },
-      { signal: options?.signal },
-    );
-    const text = response.content
-      .filter((block): block is Anthropic.TextBlock => block.type === "text")
-      .map((block) => block.text)
-      .join("");
+    const custom = this.adapter
+      ? await this.adapter.generate(
+          {
+            model: this.model,
+            maxOutputTokens: 512,
+            temperature: 0,
+            messages: [{ role: "user", content: prompt }],
+          },
+          { signal: options?.signal },
+        )
+      : undefined;
+    if (custom?.refusal) throw new Error("model_service_refusal");
+    const response = custom
+      ? undefined
+      : await this.client!.messages.create(
+          {
+            model: CONSOLIDATION_LLM_MODEL,
+            max_tokens: 512,
+            temperature: 0,
+            messages: [{ role: "user", content: prompt }],
+          },
+          { signal: options?.signal },
+        );
+    const text = custom
+      ? custom.text
+      : response!.content
+          .filter((block): block is Anthropic.TextBlock => block.type === "text")
+          .map((block) => block.text)
+          .join("");
     this.lastProvenance = {
       promptDigest: digestOf(prompt),
       responseDigest: digestOf(text),
-      servedModel: response.model,
+      servedModel: custom ? (custom.servedModel ?? null) : response!.model,
     };
-    this.lastUsage = {
-      inputTokens: response.usage.input_tokens,
-      outputTokens: response.usage.output_tokens,
-    };
+    this.lastUsage = custom
+      ? custom.inputTokens != null && custom.outputTokens != null
+        ? { inputTokens: custom.inputTokens, outputTokens: custom.outputTokens }
+        : null
+      : { inputTokens: response!.usage.input_tokens, outputTokens: response!.usage.output_tokens };
     return this.parseProposals(text, input);
   }
 

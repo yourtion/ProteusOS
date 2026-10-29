@@ -1,3 +1,4 @@
+import { checkedModelAdapter, type ModelAdapter, type ModelRequest } from "../../model/index.ts";
 import Anthropic from "@anthropic-ai/sdk";
 import { createHash } from "node:crypto";
 import type {
@@ -55,10 +56,16 @@ export function llmConfigFromEnv(): LlmAdapterConfig | null {
 export class LlmDecisionProvider implements DecisionProvider {
   readonly name = LLM_PROVIDER_NAME;
   readonly remote = true;
-  private readonly client: Anthropic;
+  private readonly client?: Anthropic;
+  private readonly adapter?: ModelAdapter;
   private readonly config: LlmAdapterConfig;
 
-  constructor(config: LlmAdapterConfig) {
+  constructor(config: LlmAdapterConfig | { adapter: ModelAdapter }) {
+    if ("adapter" in config) {
+      this.adapter = checkedModelAdapter(config.adapter);
+      this.config = { apiKey: "", baseUrl: this.adapter.serviceId };
+      return;
+    }
     this.config = { ...config, baseUrl: config.baseUrl ?? DEFAULT_LLM_BASE_URL };
     this.client = new Anthropic({
       apiKey: config.apiKey,
@@ -74,10 +81,12 @@ export class LlmDecisionProvider implements DecisionProvider {
 
   /** 服务计数是独立的无生成请求；兼容服务不支持时拒绝，不回退为字符估算。 */
   async countInputTokens(request: DecisionRequest): Promise<number> {
-    const body = isLlmDemosPolicy(request.policy.content)
-      ? resolveLlmDemosRequest(request)
-      : buildLlmChoiceBody(parseLlmPolicy(request.policy.content)!, request.view!, request.options);
-    const result = await this.client.messages.countTokens(
+    const body = this.resolveBody(request);
+    if (this.adapter) {
+      if (!this.adapter.countInputTokens) throw new Error("model_token_count_unsupported");
+      return this.adapter.countInputTokens(modelRequest(body), { signal: request.signal });
+    }
+    const result = await this.client!.messages.countTokens(
       {
         model: body.model,
         system: body.system,
@@ -112,9 +121,7 @@ export class LlmDecisionProvider implements DecisionProvider {
     }
     let body;
     try {
-      body = demos
-        ? resolveLlmDemosRequest(request)
-        : buildLlmChoiceBody(policy!, request.view, request.options);
+      body = this.resolveBody(request);
     } catch (error) {
       return {
         kind: "invalid_output",
@@ -125,13 +132,26 @@ export class LlmDecisionProvider implements DecisionProvider {
     }
 
     // 网络调用：自动重试关闭；取消经 signal 传播；错误向上抛（Runtime 分类 transport_error）
-    const response = await this.client.messages.create(body, { signal: request.signal });
+    const result = this.adapter
+      ? await this.adapter.generate(modelRequest(body), { signal: request.signal })
+      : undefined;
+    const response = result
+      ? {
+          model: result.servedModel,
+          stop_reason: result.refusal ? "refusal" : result.stopReason,
+          content: [{ type: "text", text: result.text }],
+          usage: { input_tokens: result.inputTokens, output_tokens: result.outputTokens },
+        }
+      : await this.client!.messages.create(body, { signal: request.signal });
 
     const text: string = extractText(response);
     const stopReason = readStopReason(response);
     const usageHint = {
       ...readUsage(response, readServedModel(response)),
-      serviceResponse: readServiceResponse(response, text),
+      serviceResponse: {
+        ...readServiceResponse(response, text),
+        ...(result ? { contentBlockTypes: result.contentBlockTypes ?? null } : {}),
+      },
     };
     // 服务 refusal 单独保存原始类型，映射为带明确来源的 abstain；
     // 网络错误/429/超时不在此路径（它们经异常抛出，绝不映射为 abstain）
@@ -174,15 +194,45 @@ export class LlmDecisionProvider implements DecisionProvider {
     };
   }
 
+  private resolveBody(request: DecisionRequest) {
+    if (this.adapter) {
+      const prepared = this.prepareRequest(request)!;
+      if (request.prepared && canonicalJson(request.prepared) !== canonicalJson(prepared))
+        throw new Error("冻结模型请求与适配器/策略/视图不一致");
+      return prepared.body.request as ReturnType<typeof buildLlmChoiceBody>;
+    }
+    return isLlmDemosPolicy(request.policy.content)
+      ? resolveLlmDemosRequest(request)
+      : buildLlmChoiceBody(parseLlmPolicy(request.policy.content)!, request.view!, request.options);
+  }
+
   prepareRequest(request: DecisionRequest) {
-    return isLlmDemosPolicy(request.policy.content) ? prepareLlmDemosRequest(request) : undefined;
+    const prepared = isLlmDemosPolicy(request.policy.content)
+      ? prepareLlmDemosRequest(request)
+      : undefined;
+    if (!this.adapter) return prepared;
+    return {
+      format: "custom-model-choice-request-v1",
+      body: {
+        adapter: this.adapter.id,
+        serviceId: this.adapter.serviceId,
+        sourceFormat: prepared?.format ?? "llm-choice-v1",
+        request:
+          prepared?.body ??
+          buildLlmChoiceBody(
+            parseLlmPolicy(request.policy.content)!,
+            request.view!,
+            request.options,
+          ),
+      },
+    };
   }
 
   callProvenance(request: DecisionRequest) {
     if (isLlmDemosPolicy(request.policy.content)) {
-      const body = resolveLlmDemosRequest(request);
+      const body = this.resolveBody(request);
       return {
-        adapter: "anthropic-messages@sdk-0.127.0",
+        adapter: this.adapter?.id ?? "anthropic-messages@sdk-0.127.0",
         serviceId: this.config.baseUrl ?? DEFAULT_LLM_BASE_URL,
         requestedModel: body.model,
         sampling: { temperature: body.temperature, maxOutputTokens: body.max_tokens },
@@ -192,7 +242,7 @@ export class LlmDecisionProvider implements DecisionProvider {
     }
     const policy = parseLlmPolicy(request.policy.content);
     return {
-      adapter: `anthropic-messages@sdk-0.127.0`,
+      adapter: this.adapter?.id ?? "anthropic-messages@sdk-0.127.0",
       serviceId: this.config.baseUrl ?? DEFAULT_LLM_BASE_URL,
       requestedModel: policy?.model ?? null,
       sampling: policy
@@ -308,4 +358,14 @@ function readUsage(response: unknown, servedModel: string | null) {
 
 function digest(text: string): string {
   return createHash("sha256").update(text, "utf8").digest("hex");
+}
+
+function modelRequest(body: ReturnType<typeof buildLlmChoiceBody>): ModelRequest {
+  return {
+    model: body.model,
+    system: body.system,
+    messages: body.messages,
+    temperature: body.temperature,
+    maxOutputTokens: body.max_tokens,
+  };
 }

@@ -1,7 +1,9 @@
+import { loadModelAdapter } from "../model-adapter.ts";
 import { startWorkbench } from "./server.ts";
 const server = startWorkbench(
   Number(process.env.PROTEUS_WEB_PORT ?? 4310),
   process.env.PROTEUS_HOME ?? ".proteus-web",
+  { modelAdapter: await loadModelAdapter() },
 );
 for (const signal of ["SIGINT", "SIGTERM"] as const)
   process.once(signal, () => {

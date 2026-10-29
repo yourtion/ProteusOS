@@ -1,3 +1,4 @@
+import type { ModelAdapter } from "../../model/index.ts";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createReadStream } from "node:fs";
 import { createInterface } from "node:readline";
@@ -28,6 +29,7 @@ export const FORMAL_WALL_CLOCK_LIMIT_MS = 60 * 60 * 1000;
 
 export interface RunExperimentOptions {
   organismId?: string;
+  modelAdapter?: ModelAdapter;
   actorId?: string;
   home: string;
   datasetDir: string;
@@ -112,7 +114,7 @@ export async function runExperiment(opts: RunExperimentOptions): Promise<Experim
   if (fakeProvider) decisions.set("decision-llm", fakeProvider);
   if (opts.llm === "real") {
     const config = llmConfigFromEnv();
-    if (!config) {
+    if (!config && !opts.modelAdapter) {
       return {
         status: "preflight_failed",
         experimentId: opts.experimentId,
@@ -125,7 +127,10 @@ export async function runExperiment(opts: RunExperimentOptions): Promise<Experim
         genomeBindingDiff: {},
       };
     }
-    decisions.set("decision-llm", new LlmDecisionProvider(config));
+    decisions.set(
+      "decision-llm",
+      new LlmDecisionProvider(opts.modelAdapter ? { adapter: opts.modelAdapter } : config!),
+    );
   }
   if (oracleProvider) decisions.set("decision-oracle", oracleProvider);
 

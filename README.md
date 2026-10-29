@@ -61,3 +61,7 @@ License：Apache-2.0
 ## 本地 Web 代码工作台
 
 运行 `pnpm web:build` 后执行 `pnpm web`，打开终端打印的完整地址。添加 Git 项目后，可提交代码任务、处理执行权限、查看结果和检查，审阅后应用修改。默认使用独立实例 `.proteus-web/`。输入限制、认证、恢复及 DSH 复用核对见 [Web 说明](./web/README.md)。
+
+## 自定义模型适配器
+
+使用 `pnpm proteus web --model-adapter ./my-model.mjs`，或设置 `PROTEUS_MODEL_ADAPTER`，在启动时加载自己的模型实现。模块可自行执行动态 token、请求签名等鉴权，供决策与 LLM 归纳复用。完整合同与生效范围见 [模型接入说明](./docs/model-adapters.md)，可从 [签名示例](./examples/model-adapter.mjs) 开始。

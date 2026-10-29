@@ -1,3 +1,4 @@
+import type { ModelAdapter } from "../../model/index.ts";
 import { randomUUID } from "node:crypto";
 import {
   existsSync,
@@ -40,6 +41,7 @@ import {
 
 export interface WorkbenchOptions {
   home: string;
+  modelAdapter?: ModelAdapter;
   executorFactory?: (name: string, permission: AcpPermissionPolicy) => ExecutorProvider;
 }
 export class Workbench {
@@ -74,6 +76,7 @@ export class Workbench {
     try {
       this.instance = openInstance(this.home, {
         workbenchOwner: true,
+        modelAdapter: options.modelAdapter,
         executors: new Map([
           ...buildExecutors(),
           [

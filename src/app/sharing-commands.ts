@@ -1,3 +1,4 @@
+import { loadModelAdapter } from "./model-adapter.ts";
 import { readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { createRegistryServer, RegistryClient } from "../federation/registry.ts";
@@ -6,8 +7,9 @@ import type { CommonOpts } from "./commands.ts";
 import { openInstance, resolveInstanceRoot } from "./instance.ts";
 import { ORGANISM_ID, PRINCIPAL_ID } from "./seed.ts";
 
-function open(opts: CommonOpts) {
+async function open(opts: CommonOpts) {
   return openInstance(resolveInstanceRoot(opts.home), {
+    modelAdapter: await loadModelAdapter(opts.modelAdapter),
     organismId: opts.organism,
     actorId: opts.actor,
   });
@@ -37,7 +39,7 @@ export async function accessCommand(
     (scope.startsWith("organism:") && opts.permission === "publish")
   )
     throw new Error("权限与目标 scope 不匹配");
-  const app = open(opts);
+  const app = await open(opts);
   try {
     app.storage.tx(() => {
       app.kernel.assertOrganismAccess(opts.organism ?? ORGANISM_ID, actor(opts));
@@ -64,7 +66,7 @@ export async function keyCreateCommand(
   teamId: string,
   opts: CommonOpts & { publicOut: string },
 ): Promise<void> {
-  const app = open(opts);
+  const app = await open(opts);
   try {
     const key = app.sharingTrust.createSigningKey(teamId, { createdBy: actor(opts) });
     writeFileSync(resolve(opts.publicOut), key.publicKey, { mode: 0o644, flag: "wx" });
@@ -78,7 +80,7 @@ export async function keyTrustCommand(
   teamId: string,
   opts: CommonOpts & { publisher: string; publicKey: string },
 ): Promise<void> {
-  const app = open(opts);
+  const app = await open(opts);
   try {
     print(
       app.sharingTrust.trustKey({
@@ -94,7 +96,7 @@ export async function keyTrustCommand(
 }
 
 export async function keyRevokeCommand(keyId: string, opts: CommonOpts): Promise<void> {
-  const app = open(opts);
+  const app = await open(opts);
   try {
     print(app.sharingTrust.revokeKey(keyId, { authorizedBy: actor(opts) }));
   } finally {
@@ -106,7 +108,7 @@ export async function publicationSignCommand(
   publicationId: string,
   opts: CommonOpts & { key: string; out: string },
 ): Promise<void> {
-  const app = open(opts);
+  const app = await open(opts);
   try {
     const pkg = app.sharingTrust.signPublication(publicationId, {
       keyId: opts.key,
@@ -124,7 +126,7 @@ export async function registryCredentialCommand(
 ): Promise<void> {
   if (!opts.permission.length || opts.permission.some((p) => p !== "read" && p !== "publish"))
     throw new Error("registry permission 必须为 read/publish");
-  const app = open(opts);
+  const app = await open(opts);
   try {
     const issued = app.sharingTrust.issueRegistryCredential({
       teamId: opts.team,
@@ -147,7 +149,7 @@ export async function registryCredentialCommand(
 }
 
 export async function registryRevokeCommand(id: string, opts: CommonOpts): Promise<void> {
-  const app = open(opts);
+  const app = await open(opts);
   try {
     app.sharingTrust.revokeRegistryCredential(id, { authorizedBy: actor(opts) });
     print({ id, state: "revoked" });
@@ -167,7 +169,7 @@ export async function registryPublishCommand(
   publicationId: string,
   opts: CommonOpts & { key: string; registry: string; tokenFile: string },
 ): Promise<void> {
-  const app = open(opts);
+  const app = await open(opts);
   try {
     const pkg = app.sharingTrust.signPublication(publicationId, {
       keyId: opts.key,
@@ -183,7 +185,7 @@ export async function registryImportCommand(
   digest: string,
   opts: CommonOpts & { registry: string; tokenFile?: string },
 ): Promise<void> {
-  const app = open(opts);
+  const app = await open(opts);
   try {
     const pkg = await client(opts).fetchPublication(digest);
     // Even a correctly authenticated transport cannot establish publication trust.
@@ -198,7 +200,7 @@ export async function registryServeCommand(opts: CommonOpts & { port: string }):
   const port = Number(opts.port);
   if (!Number.isSafeInteger(port) || port < 0 || port > 65535)
     throw new Error("port 必须是 0–65535 整数");
-  const app = open(opts);
+  const app = await open(opts);
   const owner = opts.organism ?? ORGANISM_ID;
   try {
     app.kernel.assertOrganismAccess(owner, actor(opts), "manage");

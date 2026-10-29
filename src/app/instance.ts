@@ -1,3 +1,6 @@
+import type { ModelAdapter } from "../model/index.ts";
+import { LlmDecisionProvider } from "../adapters/decision-llm/index.ts";
+import { LlmRouteProposer } from "../adapters/consolidation-llm/index.ts";
 import type { CompileBackend } from "../evolution/compile-types.ts";
 import { AdaptiveJournal } from "./experiment/journal.ts";
 import { AdaptiveRunSlots } from "./experiment/run-slots.ts";
@@ -131,6 +134,7 @@ export function openInstance(
   root: string,
   options: {
     workbenchOwner?: boolean;
+    modelAdapter?: ModelAdapter;
     organismId?: string;
     actorId?: string;
     routeProposer?: RouteProposer;
@@ -180,7 +184,14 @@ export function openInstance(
     organismId,
     executors: options.executors ?? buildExecutors(),
     onExecutionProgress: options.onExecutionProgress,
-    decisions: buildDecisions(options.decisions),
+    decisions: buildDecisions(
+      new Map([
+        ...(options.modelAdapter
+          ? [["decision-llm", new LlmDecisionProvider({ adapter: options.modelAdapter })] as const]
+          : []),
+        ...(options.decisions ?? []),
+      ]),
+    ),
     blobs,
     instanceRoot: root,
     clock,
@@ -192,7 +203,12 @@ export function openInstance(
   });
   const evolution = new Evolution({
     actorId,
-    routeProposer: options.routeProposer ?? llmProposerFromEnv() ?? undefined,
+    routeProposer:
+      options.routeProposer ??
+      (options.modelAdapter
+        ? new LlmRouteProposer({ adapter: options.modelAdapter })
+        : llmProposerFromEnv()) ??
+      undefined,
     compileBackend: options.compileBackend,
     learningCallTimeoutMs: options.learningCallTimeoutMs,
     kernel,
