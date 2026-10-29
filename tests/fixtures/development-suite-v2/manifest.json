@@ -1,0 +1,123 @@
+{
+  "version": "development-suite-v2",
+  "scope": "Developer-visible historical replay with fixed behavioral, repository type and API compatibility gates; no independent benefit claim",
+  "model": "GLM-5.3-Flash",
+  "endpoint": "https://open.bigmodel.cn/api/anthropic",
+  "repetitions": 3,
+  "maxTurns": 6,
+  "maxWallClockSeconds": 300,
+  "outputMaxTokens": 8192,
+  "cases": [
+    {
+      "id": "schema-own-properties",
+      "target": "src/runtime/schema-validator.ts",
+      "sourceCommit": "86efcedc0d64877a52303eee44a109c273b40b96",
+      "fixCommit": "d82402d75cb6d8f9ba0600c49959e48a1c344f4b",
+      "goal": "Fix the JSON Schema subset validator: required and properties must inspect own fields, never inherited prototype fields. Preserve supported keywords and error paths.",
+      "sourceDigest": "a0b7770521e4ce19ee622f014f282f08677aa372ff78d163ba2a406dd06ec549",
+      "checksDigest": "f2f6faa46f6c72c042db4132f281cd963067ccacc89ec519131d46d05fe30d1a",
+      "referenceDigest": "b916225f8d484e7c0e427b744001f45c56c623bd3c2f528884e89a5d8cd11ba1",
+      "stage": "offline-regression",
+      "contextFiles": [],
+      "api": {
+        "types": ["SchemaError"],
+        "values": ["validateSchema"],
+        "instances": []
+      }
+    },
+    {
+      "id": "snapshot-digest",
+      "target": "src/kernel/index.ts",
+      "sourceCommit": "4caa95a8db26ba514b80d5ef767246b50e03092f",
+      "fixCommit": "45605e50e53cad172b5dfb5eb52e23e25977cb1f",
+      "goal": "Make snapshotDigest depend on the slot and content digest, independent of instance-specific version IDs. Keep binding order irrelevant and preserve sensitivity to changed slot or content.",
+      "sourceDigest": "1a39a94907c4cade9f39775a2d43cb02fe651565fc9ff3363f5bbc074ec9aadb",
+      "checksDigest": "e5e7bc8a320b959762f9311c5bc1b05154753dec90be69e08656fa55d141a5f4",
+      "referenceDigest": "79cbcb5037f6dfeaaf847fdba7f48071a8c0fd824540d5f978e1286c6508e89a",
+      "stage": "gate",
+      "contextFiles": ["src/kernel/types.ts"],
+      "api": {
+        "types": [
+          "Principal",
+          "Organism",
+          "Lineage",
+          "Artifact",
+          "ArtifactVersion",
+          "GenomeSnapshot",
+          "KernelStore"
+        ],
+        "values": ["snapshotDigest"],
+        "instances": ["Kernel"]
+      }
+    },
+    {
+      "id": "capability-name",
+      "target": "src/runtime/capability.ts",
+      "sourceCommit": "c8c2a3a9959ff00e6c24bbef97a71a7fa658a8b8",
+      "fixCommit": "c77188ad2ce1b786996dfc81e842773d963461ab",
+      "goal": "Validate capability names at both parseCapabilityModule and capabilityModuleDir. Accept only portable single-segment slugs matching ^[a-z0-9](?:[a-z0-9._-]*[a-z0-9])?$. Invalid parse input must be rejected; invalid direct directory names must throw. Preserve valid modules and existing file traversal validation.",
+      "sourceDigest": "acccca9fde796eb71345dc9fe21dcad7fcfff39e9041d73d2ca35a88abd051ea",
+      "checksDigest": "39338c287778d76a3c2a20d0aadb69c412f572261071e60b6e85dac85a354662",
+      "referenceDigest": "73398749ebbeaba8a654a7dddf6ab414a933aed999302e1fee8ec7d7370a13d9",
+      "stage": "offline-regression",
+      "contextFiles": ["src/runtime/types.ts"],
+      "api": {
+        "types": ["CapabilityModule", "CapabilityModuleParse", "CapabilityModuleFile"],
+        "values": ["parseCapabilityModule", "capabilityModuleDir", "runCapabilityModule"],
+        "instances": []
+      }
+    },
+    {
+      "id": "evolution-capability-accumulation",
+      "target": "src/evolution/assets.ts",
+      "sourceCommit": "f71e519cea955752ee8066381b791fa9934868d9",
+      "fixCommit": "c8c2a3a9959ff00e6c24bbef97a71a7fa658a8b8",
+      "goal": "Fix capability accumulation in ensureCapabilityGenome: deriving a new genome must keep all previously bound capabilities usable in graph options and policy routes, merge new capabilities, deduplicate and sort capability names. Preserve unrelated bindings, replacement semantics, fallback routes, existing imports, public interfaces and other builder behavior. Only change the target file.",
+      "stage": "expansion",
+      "contextFiles": [
+        "src/kernel/index.ts",
+        "src/kernel/types.ts",
+        "src/runtime/capability.ts",
+        "src/storage/blobs.ts",
+        "src/storage/store.ts"
+      ],
+      "api": {
+        "types": ["EvolutionDeps", "CapabilityAsset", "CapabilityGenome"],
+        "values": [
+          "ensureCapabilityGenome",
+          "makeCapabilityGraphContent",
+          "makeCapabilityPolicyContent",
+          "evaluationProtocolDigest",
+          "ensureHybridEvaluatorVersion",
+          "ensureBuilderGenome",
+          "HYBRID_EVALUATOR_CONTENT",
+          "EVALUATION_PROTOCOL_CONTENT",
+          "EVOLUTION_LINEAGE_ID"
+        ],
+        "instances": []
+      },
+      "sourceDigest": "0f936fc4dfdd78287cc7259c0e5b86c0112d8ff06d9f833246de36f52b98531c",
+      "referenceDigest": "32bc891515a4a392e6a3879012778fc07066b7392505ce4d991c58793b85a123",
+      "checksDigest": "739c961e4aa061eec7ceece8f4d7921d9e77b3d78f48b4ce8f7d84357cc403ca",
+      "referenceKind": "task-specific hunk from historical fix; excludes unrelated builder/API migration",
+      "historicalReferenceDigest": "2ec70ed46030ea984c3e3993b6cdb7574ebfcfea326ab1339e1b4a4cea5c9110"
+    },
+    {
+      "id": "adapter-cached-token-accounting",
+      "target": "src/adapters/decision-llm/index.ts",
+      "sourceCommit": "9c02244c2ef9b8f3d65c0f3d0dcf840de689ba4c",
+      "fixCommit": "0b08bad00cf2a9a7096cddf123ceca333a15c363",
+      "goal": "Fix usage accounting in LlmDecisionProvider: consumed input includes uncached input plus cache-read and cache-creation tokens. Missing optional cache fields count as zero; missing core usage and invalid negative, fractional, unsafe or malformed counters must remain null, including overflow of summed input. Preserve decision/refusal behavior, public interfaces, provider configuration and existing imports. Only change the target file.",
+      "stage": "expansion",
+      "contextFiles": ["src/decision/index.ts", "src/adapters/decision-llm/request.ts"],
+      "api": {
+        "types": ["LlmAdapterConfig"],
+        "values": ["llmConfigFromEnv", "LLM_PROVIDER_NAME", "DEFAULT_LLM_BASE_URL"],
+        "instances": ["LlmDecisionProvider"]
+      },
+      "sourceDigest": "d7fdaf71d47b73d519d6df59f923a19127e128ba3ed13f567f14ac4568a52580",
+      "referenceDigest": "f8a1213b481ceaea9ac7a871618bac2f19e770e0f94f0b4556b4cf23416fbad8",
+      "checksDigest": "fd483f5b76c56ed97c6f0b17e4b345d82243658233dbbd81e41c7a3148a2fff8"
+    }
+  ]
+}

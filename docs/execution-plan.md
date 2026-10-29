@@ -249,3 +249,9 @@ env -u PROTEUS_E2E -u PROTEUS_SANDBOX PATH="/opt/homebrew/bin:$PATH" \
 [开发历史任务集 v1](./experiments/development-suite-v1.md) 冻结了三个不同真实缺陷：schema own-properties、snapshot digest、capability name。全部已验证旧代码失败及历史修复通过；用户明确授权 3×3 次、每次 6 轮/300 秒/8192 输出上限。按先记录门槛、再新样本顺序执行，结果归档与离线复验后更新本节。
 
 本阶段已完成：[三任务九次真实结果](./experiments/results/development-suite-v1.md)。9/9 固定功能验收通过，9/9 轨迹和用量完整、dropped=0；194,114 tokens、722.955 秒。追加的仓库类型/API 复核仅 6/9 通过：snapshot 三次均改写了未提供的领域类型。证据包解压后功能与类型复验一致，未调用模型，未应用候选代码。下一阶段优先把类型/API 兼容检查升级为固定验收，再提供必要依赖上下文、验证最小编辑，最后扩任务；继续保留收益 inconclusive。
+
+## 2026-10-29：仓库验收与上下文 v2
+
+`868c79c` 已将固定行为测试、历史仓库类型检查和公开接口兼容检查接入同一自动 verify；预置原始输出文件并提供明确列出的只读依赖上下文。全量回归 505 passed /5 skipped，格式、lint、类型检查通过。零模型调用重放 v1 九份候选，三个坏快照自动拒绝、其余六份通过，五项任务的红绿控制全部通过；证据见 [offline-validation.json](./experiments/results/development-suite-v2/offline-validation.json)。
+
+[v2 冻结方案](./experiments/development-suite-v2.md) 已获用户明确授权最多 9 次新会话，先运行 snapshot 三次门槛，全部通过后才扩至 evolution 能力累积和 decision-llm 缓存计量各三次。后两项为不同模块的真实历史缺陷，累计覆盖五个独立缺陷；保持开发方可见及收益 inconclusive。

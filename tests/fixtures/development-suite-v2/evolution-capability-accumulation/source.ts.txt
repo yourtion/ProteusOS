@@ -1,0 +1,307 @@
+import { createHash } from "node:crypto";
+import type { Artifact, ArtifactVersion, Clock, GenomeSnapshot, Kernel } from "../kernel/index.ts";
+import type { CapabilityModule } from "../runtime/capability.ts";
+import type { BlobStore } from "../storage/blobs.ts";
+import { canonicalJson } from "../storage/blobs.ts";
+import type { Storage } from "../storage/store.ts";
+
+/**
+ * Evolution 预注册资产（M2）：组合候选快照所需的固定版本。
+ * 图/策略按能力名由模板生成，裁判为基质预注册的 hybrid 版本——
+ * 它们不是 builder 产物，builder 只产出能力实现（capability-module）；
+ * 全部按内容摘要幂等注册，同内容在任何实例产生同摘要。
+ * 依赖方向：evolution → kernel / storage（repository.md），不依赖 runtime 与 app。
+ */
+
+export interface EvolutionDeps {
+  kernel: Kernel;
+  storage: Storage;
+  blobs: BlobStore;
+  clock: Pick<Clock, "now">;
+}
+
+/**
+ * 能力组合图：骨架与 G0 相同（route → work → check），仅 decision options
+ * 追加 capability/<name>。stats 形态任务（无能力声明）路由不变——回归语义。
+ */
+export function makeCapabilityGraphContent(capabilities: string[]): object {
+  return {
+    schemaVersion: 2,
+    kind: "dag-v1",
+    nodes: [
+      {
+        id: "route",
+        type: "decision",
+        provider: "decision-rule",
+        problem: "choice",
+        options: ["local-process", ...capabilities.map((c) => `capability/${c}`)],
+        context: { nodeType: "execute" },
+      },
+      { id: "work", type: "execute", executorFrom: "route", dependsOn: ["route"] },
+      {
+        id: "check",
+        type: "verify",
+        verifier: "stats-acceptance",
+        inputFrom: "work",
+        dependsOn: ["work"],
+      },
+    ],
+  };
+}
+
+/** 能力路由策略：声明能力的任务命中专属规则，兜底规则保持原行为 */
+export function makeCapabilityPolicyContent(capabilities: string[]): object {
+  return {
+    schemaVersion: 2,
+    kind: "rule-v1",
+    routes: [
+      ...capabilities.map((c) => ({
+        when: { [`capability:${c}`]: true },
+        choose: `capability/${c}`,
+      })),
+      { when: { nodeType: "execute" }, choose: "local-process" },
+    ],
+  };
+}
+
+/**
+ * hybrid 裁判（M2 预注册）：stats 形态输出走与 v1 等价的校验，
+ * 其余走纯 JSON Schema 校验。其与 v1 的判定等价性由 tests/evals 覆盖。
+ */
+export const HYBRID_EVALUATOR_CONTENT = {
+  schemaVersion: 1,
+  kind: "hybrid-acceptance-v1",
+  checks: ["json-schema", "totals-consistency(stats 形态输出)"],
+} as const;
+
+/**
+ * 评估协议（m2-bootstrap-eval-v1，构造候选前固定，避免事后移动标准）：
+ * 成功与回归为硬约束，质量/时延/成本分别比较，不合成总分。
+ */
+export const EVALUATION_PROTOCOL_CONTENT = {
+  schemaVersion: 1,
+  kind: "m2-bootstrap-eval-v1",
+  runs: [
+    { role: "new-capability", binding: "candidate", requisite: "succeeded" },
+    { role: "regression", binding: "candidate", requisite: "succeeded" },
+    { role: "baseline", binding: "base", requisite: "succeeded" },
+  ],
+  verdictRules: {
+    eligible: "三个 Run 全部 succeeded",
+    rejected: "候选绑定的新能力验收或回归失败（证据保留）",
+    inconclusive: "基线对照失败——评估环境不可信，不判 rejected，可重评",
+  },
+  evaluator: "按内容寻址钉住 hybrid-acceptance-v1（不取候选快照槽位）",
+  metrics: ["success", "regression", "latency"],
+} as const;
+
+export function evaluationProtocolDigest(): string {
+  return createHash("sha256")
+    .update(canonicalJson(EVALUATION_PROTOCOL_CONTENT), "utf8")
+    .digest("hex");
+}
+
+/**
+ * 评估计划钉住的裁判版本：按内容寻址注册 HYBRID_EVALUATOR_CONTENT。
+ * digest 幂等——与组合候选时注册的是同一版本；即使候选快照的
+ * acceptance-evaluator 槽位被换成放水裁判，评估裁判也不受影响。
+ */
+export function ensureHybridEvaluatorVersion(
+  deps: EvolutionDeps,
+  opts: { baseSnapshotId: string; createdBy: string },
+): ArtifactVersion {
+  return deps.storage.tx(() => {
+    const { versions } = deps.kernel.resolveSnapshot(opts.baseSnapshotId);
+    const baseEvaluator = versions.get("acceptance-evaluator");
+    if (!baseEvaluator) {
+      throw new Error(`基准快照 ${opts.baseSnapshotId} 缺少 acceptance-evaluator 槽位`);
+    }
+    deps.blobs.write(canonicalJson(EVALUATION_PROTOCOL_CONTENT));
+    return registerDerivedVersion(deps, {
+      slot: "acceptance-evaluator",
+      baseVersion: baseEvaluator,
+      content: HYBRID_EVALUATOR_CONTENT,
+      createdBy: opts.createdBy,
+    });
+  });
+}
+
+export const EVOLUTION_LINEAGE_ID = "lineage-evolution";
+
+/**
+ * builder 快照：固定 builder 图（dev → check）+ test-runner 裁判。
+ * 图骨架固定，执行器名与测试命令按参数注入；digest 幂等。
+ * 构建规范只授予写工作区之权，不涉及 seed 裁判与 kernel（roadmap M2 步骤 2）。
+ */
+export function ensureBuilderGenome(
+  deps: EvolutionDeps,
+  opts: {
+    executorName: string;
+    testCommand: string[];
+    createdBy: string;
+  },
+): { snapshot: GenomeSnapshot } {
+  return deps.storage.tx(() => {
+    deps.kernel.createLineage(EVOLUTION_LINEAGE_ID, opts.createdBy, "scope:evolution");
+    const now = deps.clock.now();
+    deps.storage.insertArtifact({
+      id: "builder-graph",
+      kind: "task-graph",
+      lineageId: EVOLUTION_LINEAGE_ID,
+      ownerId: opts.createdBy,
+      createdAt: now,
+    });
+    deps.storage.insertArtifact({
+      id: "builder-acceptance",
+      kind: "acceptance-evaluator",
+      lineageId: EVOLUTION_LINEAGE_ID,
+      ownerId: opts.createdBy,
+      createdAt: now,
+    });
+    const graphVersion = registerDerivedVersion(deps, {
+      slot: "task-graph",
+      baseVersion: undefined,
+      artifact: deps.storage.getArtifact("builder-graph")!,
+      content: {
+        schemaVersion: 2,
+        kind: "dag-v1",
+        nodes: [
+          { id: "dev", type: "execute", executor: opts.executorName, dependsOn: [] },
+          {
+            id: "check",
+            type: "verify",
+            verifier: "builder-acceptance",
+            inputFrom: "dev",
+            dependsOn: ["dev"],
+          },
+        ],
+      },
+      createdBy: opts.createdBy,
+    });
+    const evaluatorVersion = registerDerivedVersion(deps, {
+      slot: "acceptance-evaluator",
+      baseVersion: undefined,
+      artifact: deps.storage.getArtifact("builder-acceptance")!,
+      content: { schemaVersion: 1, kind: "test-runner-v1", command: opts.testCommand },
+      createdBy: opts.createdBy,
+    });
+    const snapshot = deps.kernel.createSnapshot(
+      { "task-graph": graphVersion.id, "acceptance-evaluator": evaluatorVersion.id },
+      opts.createdBy,
+    );
+    return { snapshot };
+  });
+}
+
+export interface CapabilityAsset {
+  name: string;
+  module: CapabilityModule;
+}
+
+export interface CapabilityGenome {
+  snapshot: GenomeSnapshot;
+  versions: Map<string, ArtifactVersion>;
+  /** 评估计划钉住的裁判版本（= 快照 acceptance-evaluator 槽位） */
+  evaluatorVersion: ArtifactVersion;
+}
+
+/**
+ * 组合能力候选快照：基准快照 + capability/<name> 槽位 + 预注册的
+ * 图/策略/裁判新版本（parents 指向基准版本，血缘可追溯）。
+ * 幂等：同基准同内容产生同快照（digest 内容寻址）。
+ */
+export function ensureCapabilityGenome(
+  deps: EvolutionDeps,
+  opts: {
+    baseSnapshotId: string;
+    capabilities: CapabilityAsset[];
+    createdBy: string;
+  },
+): CapabilityGenome {
+  return deps.storage.tx(() => {
+    const { snapshot: base, versions: baseVersions } = deps.kernel.resolveSnapshot(
+      opts.baseSnapshotId,
+    );
+    for (const slot of ["task-graph", "routing-policy", "acceptance-evaluator"] as const) {
+      if (!baseVersions.has(slot)) {
+        throw new Error(`基准快照 ${opts.baseSnapshotId} 缺少槽位 ${slot}，无法组合能力候选`);
+      }
+    }
+    deps.kernel.createLineage(EVOLUTION_LINEAGE_ID, opts.createdBy, "scope:evolution");
+
+    const names = opts.capabilities.map((c) => c.name);
+    const bindings: Record<string, string> = { ...base.bindings };
+
+    bindings["task-graph"] = registerDerivedVersion(deps, {
+      slot: "task-graph",
+      baseVersion: baseVersions.get("task-graph")!,
+      content: makeCapabilityGraphContent(names),
+      createdBy: opts.createdBy,
+    }).id;
+    bindings["routing-policy"] = registerDerivedVersion(deps, {
+      slot: "routing-policy",
+      baseVersion: baseVersions.get("routing-policy")!,
+      content: makeCapabilityPolicyContent(names),
+      createdBy: opts.createdBy,
+    }).id;
+    const evaluatorVersion = registerDerivedVersion(deps, {
+      slot: "acceptance-evaluator",
+      baseVersion: baseVersions.get("acceptance-evaluator")!,
+      content: HYBRID_EVALUATOR_CONTENT,
+      createdBy: opts.createdBy,
+    });
+    bindings["acceptance-evaluator"] = evaluatorVersion.id;
+
+    for (const asset of opts.capabilities) {
+      const artifactId = `capability/${asset.name}`;
+      const principal = { id: opts.createdBy };
+      deps.storage.insertArtifact({
+        id: artifactId,
+        kind: artifactId,
+        lineageId: EVOLUTION_LINEAGE_ID,
+        ownerId: principal.id,
+        createdAt: deps.clock.now(),
+      });
+      const artifact = deps.storage.getArtifact(artifactId)!;
+      const version = registerDerivedVersion(deps, {
+        slot: artifactId,
+        baseVersion: undefined,
+        artifact,
+        content: asset.module,
+        createdBy: opts.createdBy,
+      });
+      bindings[artifactId] = version.id;
+    }
+
+    const snapshot = deps.kernel.createSnapshot(bindings, opts.createdBy);
+    return {
+      snapshot,
+      versions: deps.kernel.resolveSnapshot(snapshot.id).versions,
+      evaluatorVersion,
+    };
+  });
+}
+
+/** 注册派生版本：内容写入 blob，parents 指向基准版本；digest 幂等 */
+function registerDerivedVersion(
+  deps: EvolutionDeps,
+  opts: {
+    slot: string;
+    baseVersion: ArtifactVersion | undefined;
+    artifact?: Artifact;
+    content: unknown;
+    createdBy: string;
+  },
+): ArtifactVersion {
+  const artifact = opts.artifact ?? deps.storage.getArtifact(opts.baseVersion!.artifactId)!;
+  const { digest, ref } = deps.blobs.write(canonicalJson(opts.content));
+  return deps.kernel.registerVersion({
+    artifact,
+    schemaVersion: 2,
+    contentDigest: digest,
+    contentRef: ref,
+    parents: opts.baseVersion ? [opts.baseVersion.id] : [],
+    dependencies: [],
+    createdBy: opts.createdBy,
+  });
+}

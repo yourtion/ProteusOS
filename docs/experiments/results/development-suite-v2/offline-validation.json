@@ -1,0 +1,944 @@
+{
+  "version": "development-suite-v2-offline",
+  "manifestDigest": "a2775f48e0716191be06c18f2035ad1c6158055c4f884faa6c673bdc58be2898",
+  "modelCalls": 0,
+  "controls": [
+    {
+      "id": "schema-own-properties",
+      "baselineChecks": [
+        {
+          "name": "missing-required-constructor",
+          "passed": false,
+          "detail": "AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:\n\n0 !== 1\n"
+        },
+        {
+          "name": "missing-required-toString",
+          "passed": false,
+          "detail": "AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:\n\n0 !== 1\n"
+        },
+        {
+          "name": "missing-required-__proto__",
+          "passed": false,
+          "detail": "AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:\n\n0 !== 1\n"
+        },
+        {
+          "name": "missing-required-hasOwnProperty",
+          "passed": false,
+          "detail": "AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:\n\n0 !== 1\n"
+        },
+        {
+          "name": "optional-inherited-property-is-absent",
+          "passed": false,
+          "detail": "AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   {\n+     message: '期望 type=string，实际 function',\n+     path: '$.toString'\n+   }\n+ ]\n- []\n"
+        },
+        {
+          "name": "custom-inherited-required-property-is-absent",
+          "passed": false,
+          "detail": "AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:\n\n0 !== 1\n"
+        },
+        {
+          "name": "custom-inherited-optional-property-is-absent",
+          "passed": false,
+          "detail": "AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:\n+ actual - expected\n\n+ [\n+   {\n+     message: '期望 type=string，实际 number',\n+     path: '$.result'\n+   }\n+ ]\n- []\n"
+        },
+        {
+          "name": "own-special-names-are-valid",
+          "passed": true
+        },
+        {
+          "name": "own-special-name-still-checks-type",
+          "passed": true
+        },
+        {
+          "name": "null-prototype-object",
+          "passed": true
+        },
+        {
+          "name": "nested-missing-inherited-name",
+          "passed": false,
+          "detail": "AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:\n\n0 !== 1\n"
+        },
+        {
+          "name": "existing-subset-regression",
+          "passed": true
+        }
+      ],
+      "baselineTypes": true,
+      "baselineApi": true,
+      "referencePassed": true
+    },
+    {
+      "id": "snapshot-digest",
+      "baselineChecks": [
+        {
+          "name": "same-content-across-instances",
+          "passed": false,
+          "error": "AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:\n+ actual - expected\n\n+ '99c5620a811171a8ccb3f151c9351df6a087d3392ef986ca2a9ac68accbeea96'\n- 'b985969b7aa9659ab09b57ed90f6f825b9d8b3c14bee268462b95821a255a349'\n"
+        },
+        {
+          "name": "binding-order-does-not-matter",
+          "passed": true
+        },
+        {
+          "name": "changed-content-is-distinct",
+          "passed": true
+        },
+        {
+          "name": "changed-slot-is-distinct",
+          "passed": true
+        },
+        {
+          "name": "digest-shape",
+          "passed": true
+        }
+      ],
+      "baselineTypes": true,
+      "baselineApi": true,
+      "referencePassed": true
+    },
+    {
+      "id": "capability-name",
+      "baselineChecks": [
+        {
+          "name": "valid-slugs-still-parse",
+          "passed": true
+        },
+        {
+          "name": "path-traversal-name-rejected",
+          "passed": false,
+          "error": "AssertionError [ERR_ASSERTION]: ../../escape\n\ntrue !== false\n"
+        },
+        {
+          "name": "nonportable-names-rejected",
+          "passed": false,
+          "error": "AssertionError [ERR_ASSERTION]: HasUppercase\n\ntrue !== false\n"
+        },
+        {
+          "name": "direct-directory-escape-rejected",
+          "passed": false,
+          "error": "AssertionError [ERR_ASSERTION]: Missing expected exception."
+        },
+        {
+          "name": "normal-directory-preserved",
+          "passed": true
+        },
+        {
+          "name": "file-traversal-still-rejected",
+          "passed": true
+        }
+      ],
+      "baselineTypes": true,
+      "baselineApi": true,
+      "referencePassed": true
+    },
+    {
+      "id": "evolution-capability-accumulation",
+      "baselineChecks": [
+        {
+          "name": "regression: first capability keeps local-process fallback and graph dependencies",
+          "passed": true
+        },
+        {
+          "name": "bug: second capability retains both prior and new routes",
+          "passed": false,
+          "error": "Expected values to be strictly deep-equal:\n+ actual - expected\n\n  [\n    'local-process',\n-   'capability/summarize',\n    'capability/translate'\n  ]\n"
+        },
+        {
+          "name": "bug: composing without an increment keeps prior routes usable",
+          "passed": false,
+          "error": "Expected values to be strictly deep-equal:\n+ actual - expected\n\n  [\n    'local-process',\n-   'capability/summarize',\n-   'capability/translate'\n  ]\n"
+        },
+        {
+          "name": "bug: replacing an existing capability does not duplicate or reorder routes",
+          "passed": false,
+          "error": "Expected values to be strictly deep-equal:\n+ actual - expected\n\n  [\n    'local-process',\n+   'capability/zeta',\n-   'capability/alpha',\n    'capability/beta',\n-   'capability/zeta'\n  ]\n"
+        },
+        {
+          "name": "regression: graph and policy templates preserve empty capability fallback",
+          "passed": true
+        }
+      ],
+      "baselineTypes": true,
+      "baselineApi": true,
+      "referencePassed": true
+    },
+    {
+      "id": "adapter-cached-token-accounting",
+      "baselineChecks": [
+        {
+          "name": "regression: uncached valid usage and choice remain unchanged",
+          "passed": true
+        },
+        {
+          "name": "bug: cached reads and cache creation count toward consumed input",
+          "passed": false,
+          "error": "Expected values to be strictly equal:\n\n11 !== 210\n"
+        },
+        {
+          "name": "bug: fully cached request still has nonzero consumed input",
+          "passed": false,
+          "error": "Expected values to be strictly equal:\n\n0 !== 2048\n"
+        },
+        {
+          "name": "bug: invalid negative, fractional or unsafe token values become unknown",
+          "passed": false,
+          "error": "Expected values to be strictly equal:\n\n-1 !== null\n"
+        },
+        {
+          "name": "bug: malformed cache component and unsafe summed input become unknown",
+          "passed": false,
+          "error": "Expected values to be strictly equal:\n\n5 !== null\n"
+        },
+        {
+          "name": "regression: missing usage remains unknown while explicit zero stays zero",
+          "passed": true
+        },
+        {
+          "name": "regression: refusal keeps service origin and independently measured usage",
+          "passed": true
+        }
+      ],
+      "baselineTypes": true,
+      "baselineApi": true,
+      "referencePassed": true
+    }
+  ],
+  "replay": [
+    {
+      "id": "schema-own-properties-1",
+      "expected": true,
+      "passed": true,
+      "runId": "01a186f8-3e11-7798-a526-d994152fd447",
+      "state": "succeeded",
+      "verification": {
+        "passed": true,
+        "checksIntact": true,
+        "inputsIntact": true,
+        "outputDigest": "d69934d30df85e95bcd8dde1dc10e075a237b627915c40b0a9ea3fb4e2b7e8b2",
+        "testExitCode": 0,
+        "testOutput": "{\n  \"passed\": true,\n  \"results\": [\n    {\n      \"name\": \"missing-required-constructor\",\n      \"passed\": true\n    },\n    {\n      \"name\": \"missing-required-toString\",\n      \"passed\": true\n    },\n    {\n      \"name\": \"missing-required-__proto__\",\n      \"passed\": true\n    },\n    {\n      \"name\": \"missing-required-hasOwnProperty\",\n      \"passed\": true\n    },\n    {\n      \"name\": \"optional-inherited-property-is-absent\",\n      \"passed\": true\n    },\n    {\n      \"name\": \"custom-inherited-required-property-is-absent\",\n      \"passed\": true\n    },\n    {\n      \"name\": \"custom-inherited-optional-property-is-absent\",\n      \"passed\": true\n    },\n    {\n      \"name\": \"own-special-names-are-valid\",\n      \"passed\": true\n    },\n    {\n      \"name\": \"own-special-name-still-checks-type\",\n      \"passed\": true\n    },\n    {\n      \"name\": \"null-prototype-object\",\n      \"passed\": true\n    },\n    {\n      \"name\": \"nested-missing-inherited-name\",\n      \"passed\": true\n    },\n    {\n      \"name\": \"existing-subset-regression\",\n      \"passed\": true\n    }\n  ]\n}\n",
+        "repository": {
+          "version": "development-repository-review-v1",
+          "passed": true,
+          "repositoryIntact": true,
+          "outputDigest": "d69934d30df85e95bcd8dde1dc10e075a237b627915c40b0a9ea3fb4e2b7e8b2",
+          "functional": {
+            "exitCode": 0,
+            "stdout": "{\n  \"passed\": true,\n  \"results\": [\n    {\n      \"name\": \"missing-required-constructor\",\n      \"passed\": true\n    },\n    {\n      \"name\": \"missing-required-toString\",\n      \"passed\": true\n    },\n    {\n      \"name\": \"missing-required-__proto__\",\n      \"passed\": true\n    },\n    {\n      \"name\": \"missing-required-hasOwnProperty\",\n      \"passed\": true\n    },\n    {\n      \"name\": \"optional-inherited-property-is-absent\",\n      \"passed\": true\n    },\n    {\n      \"name\": \"custom-inherited-required-property-is-absent\",\n      \"passed\": true\n    },\n    {\n      \"name\": \"custom-inherited-optional-property-is-absent\",\n      \"passed\": true\n    },\n    {\n      \"name\": \"own-special-names-are-valid\",\n      \"passed\": true\n    },\n    {\n      \"name\": \"own-special-name-still-checks-type\",\n      \"passed\": true\n    },\n    {\n      \"name\": \"null-prototype-object\",\n      \"passed\": true\n    },\n    {\n      \"name\": \"nested-missing-inherited-name\",\n      \"passed\": true\n    },\n    {\n      \"name\": \"existing-subset-regression\",\n      \"passed\": true\n    }\n  ]\n}\n",
+            "stderr": "",
+            "error": null,
+            "verdict": {
+              "passed": true,
+              "results": [
+                {
+                  "name": "missing-required-constructor",
+                  "passed": true
+                },
+                {
+                  "name": "missing-required-toString",
+                  "passed": true
+                },
+                {
+                  "name": "missing-required-__proto__",
+                  "passed": true
+                },
+                {
+                  "name": "missing-required-hasOwnProperty",
+                  "passed": true
+                },
+                {
+                  "name": "optional-inherited-property-is-absent",
+                  "passed": true
+                },
+                {
+                  "name": "custom-inherited-required-property-is-absent",
+                  "passed": true
+                },
+                {
+                  "name": "custom-inherited-optional-property-is-absent",
+                  "passed": true
+                },
+                {
+                  "name": "own-special-names-are-valid",
+                  "passed": true
+                },
+                {
+                  "name": "own-special-name-still-checks-type",
+                  "passed": true
+                },
+                {
+                  "name": "null-prototype-object",
+                  "passed": true
+                },
+                {
+                  "name": "nested-missing-inherited-name",
+                  "passed": true
+                },
+                {
+                  "name": "existing-subset-regression",
+                  "passed": true
+                }
+              ]
+            },
+            "passed": true
+          },
+          "repositoryTypes": {
+            "exitCode": 0,
+            "stdout": "",
+            "stderr": "",
+            "error": null,
+            "passed": true
+          },
+          "apiCompatibility": {
+            "exitCode": 0,
+            "stdout": "",
+            "stderr": "",
+            "error": null,
+            "passed": true,
+            "addedSuppression": false
+          },
+          "compilerVersion": "Version 7.0.2",
+          "error": null
+        },
+        "error": null
+      }
+    },
+    {
+      "id": "snapshot-digest-1",
+      "expected": false,
+      "passed": false,
+      "runId": "01a186f8-4380-7017-928e-39f7e80d5e64",
+      "state": "failed",
+      "verification": {
+        "passed": false,
+        "checksIntact": true,
+        "inputsIntact": true,
+        "outputDigest": "e9a9819bacd20a3a51f6afe2c592129c9021412358581c0d8321ee37c7cfe951",
+        "testExitCode": 0,
+        "testOutput": "{\"passed\":true,\"results\":[{\"name\":\"same-content-across-instances\",\"passed\":true},{\"name\":\"binding-order-does-not-matter\",\"passed\":true},{\"name\":\"changed-content-is-distinct\",\"passed\":true},{\"name\":\"changed-slot-is-distinct\",\"passed\":true},{\"name\":\"digest-shape\",\"passed\":true}]}\n",
+        "repository": {
+          "version": "development-repository-review-v1",
+          "passed": false,
+          "repositoryIntact": true,
+          "outputDigest": "e9a9819bacd20a3a51f6afe2c592129c9021412358581c0d8321ee37c7cfe951",
+          "functional": {
+            "exitCode": 0,
+            "stdout": "{\"passed\":true,\"results\":[{\"name\":\"same-content-across-instances\",\"passed\":true},{\"name\":\"binding-order-does-not-matter\",\"passed\":true},{\"name\":\"changed-content-is-distinct\",\"passed\":true},{\"name\":\"changed-slot-is-distinct\",\"passed\":true},{\"name\":\"digest-shape\",\"passed\":true}]}\n",
+            "stderr": "",
+            "error": null,
+            "verdict": {
+              "passed": true,
+              "results": [
+                {
+                  "name": "same-content-across-instances",
+                  "passed": true
+                },
+                {
+                  "name": "binding-order-does-not-matter",
+                  "passed": true
+                },
+                {
+                  "name": "changed-content-is-distinct",
+                  "passed": true
+                },
+                {
+                  "name": "changed-slot-is-distinct",
+                  "passed": true
+                },
+                {
+                  "name": "digest-shape",
+                  "passed": true
+                }
+              ]
+            },
+            "passed": true
+          },
+          "repositoryTypes": {
+            "exitCode": 0,
+            "stdout": "",
+            "stderr": "",
+            "error": null,
+            "passed": true
+          },
+          "apiCompatibility": {
+            "exitCode": 1,
+            "stdout": "src/kernel/__proteus_api_contract__.ts(5,28): error TS2344: Type 'false' does not satisfy the constraint 'true'.\nsrc/kernel/__proteus_api_contract__.ts(8,28): error TS2344: Type 'false' does not satisfy the constraint 'true'.\nsrc/kernel/__proteus_api_contract__.ts(11,28): error TS2344: Type 'false' does not satisfy the constraint 'true'.\nsrc/kernel/__proteus_api_contract__.ts(13,32): error TS2344: Type 'false' does not satisfy the constraint 'true'.\n",
+            "stderr": "",
+            "error": null,
+            "passed": false,
+            "addedSuppression": false
+          },
+          "compilerVersion": "Version 7.0.2",
+          "error": null
+        },
+        "error": "AssertionError [ERR_ASSERTION]: repository acceptance failed\n\n1 !== 0\n"
+      }
+    },
+    {
+      "id": "capability-name-1",
+      "expected": true,
+      "passed": true,
+      "runId": "01a186f8-47e2-754b-998a-180c9d9f46f4",
+      "state": "succeeded",
+      "verification": {
+        "passed": true,
+        "checksIntact": true,
+        "inputsIntact": true,
+        "outputDigest": "8e55fa87b375330525fc204b0cb7c7bfdb47d9f8ceb6060d7b24de3f296b0243",
+        "testExitCode": 0,
+        "testOutput": "{\"passed\":true,\"results\":[{\"name\":\"valid-slugs-still-parse\",\"passed\":true},{\"name\":\"path-traversal-name-rejected\",\"passed\":true},{\"name\":\"nonportable-names-rejected\",\"passed\":true},{\"name\":\"direct-directory-escape-rejected\",\"passed\":true},{\"name\":\"normal-directory-preserved\",\"passed\":true},{\"name\":\"file-traversal-still-rejected\",\"passed\":true}]}\n",
+        "repository": {
+          "version": "development-repository-review-v1",
+          "passed": true,
+          "repositoryIntact": true,
+          "outputDigest": "8e55fa87b375330525fc204b0cb7c7bfdb47d9f8ceb6060d7b24de3f296b0243",
+          "functional": {
+            "exitCode": 0,
+            "stdout": "{\"passed\":true,\"results\":[{\"name\":\"valid-slugs-still-parse\",\"passed\":true},{\"name\":\"path-traversal-name-rejected\",\"passed\":true},{\"name\":\"nonportable-names-rejected\",\"passed\":true},{\"name\":\"direct-directory-escape-rejected\",\"passed\":true},{\"name\":\"normal-directory-preserved\",\"passed\":true},{\"name\":\"file-traversal-still-rejected\",\"passed\":true}]}\n",
+            "stderr": "",
+            "error": null,
+            "verdict": {
+              "passed": true,
+              "results": [
+                {
+                  "name": "valid-slugs-still-parse",
+                  "passed": true
+                },
+                {
+                  "name": "path-traversal-name-rejected",
+                  "passed": true
+                },
+                {
+                  "name": "nonportable-names-rejected",
+                  "passed": true
+                },
+                {
+                  "name": "direct-directory-escape-rejected",
+                  "passed": true
+                },
+                {
+                  "name": "normal-directory-preserved",
+                  "passed": true
+                },
+                {
+                  "name": "file-traversal-still-rejected",
+                  "passed": true
+                }
+              ]
+            },
+            "passed": true
+          },
+          "repositoryTypes": {
+            "exitCode": 0,
+            "stdout": "",
+            "stderr": "",
+            "error": null,
+            "passed": true
+          },
+          "apiCompatibility": {
+            "exitCode": 0,
+            "stdout": "",
+            "stderr": "",
+            "error": null,
+            "passed": true,
+            "addedSuppression": false
+          },
+          "compilerVersion": "Version 7.0.2",
+          "error": null
+        },
+        "error": null
+      }
+    },
+    {
+      "id": "schema-own-properties-2",
+      "expected": true,
+      "passed": true,
+      "runId": "01a186f8-4d8b-71f8-80b2-1f276d3b7c2d",
+      "state": "succeeded",
+      "verification": {
+        "passed": true,
+        "checksIntact": true,
+        "inputsIntact": true,
+        "outputDigest": "ddc0997eea373b0b7582ee6a0740cbdea6fce1045c2b74e2364b87b1b4149c72",
+        "testExitCode": 0,
+        "testOutput": "{\n  \"passed\": true,\n  \"results\": [\n    {\n      \"name\": \"missing-required-constructor\",\n      \"passed\": true\n    },\n    {\n      \"name\": \"missing-required-toString\",\n      \"passed\": true\n    },\n    {\n      \"name\": \"missing-required-__proto__\",\n      \"passed\": true\n    },\n    {\n      \"name\": \"missing-required-hasOwnProperty\",\n      \"passed\": true\n    },\n    {\n      \"name\": \"optional-inherited-property-is-absent\",\n      \"passed\": true\n    },\n    {\n      \"name\": \"custom-inherited-required-property-is-absent\",\n      \"passed\": true\n    },\n    {\n      \"name\": \"custom-inherited-optional-property-is-absent\",\n      \"passed\": true\n    },\n    {\n      \"name\": \"own-special-names-are-valid\",\n      \"passed\": true\n    },\n    {\n      \"name\": \"own-special-name-still-checks-type\",\n      \"passed\": true\n    },\n    {\n      \"name\": \"null-prototype-object\",\n      \"passed\": true\n    },\n    {\n      \"name\": \"nested-missing-inherited-name\",\n      \"passed\": true\n    },\n    {\n      \"name\": \"existing-subset-regression\",\n      \"passed\": true\n    }\n  ]\n}\n",
+        "repository": {
+          "version": "development-repository-review-v1",
+          "passed": true,
+          "repositoryIntact": true,
+          "outputDigest": "ddc0997eea373b0b7582ee6a0740cbdea6fce1045c2b74e2364b87b1b4149c72",
+          "functional": {
+            "exitCode": 0,
+            "stdout": "{\n  \"passed\": true,\n  \"results\": [\n    {\n      \"name\": \"missing-required-constructor\",\n      \"passed\": true\n    },\n    {\n      \"name\": \"missing-required-toString\",\n      \"passed\": true\n    },\n    {\n      \"name\": \"missing-required-__proto__\",\n      \"passed\": true\n    },\n    {\n      \"name\": \"missing-required-hasOwnProperty\",\n      \"passed\": true\n    },\n    {\n      \"name\": \"optional-inherited-property-is-absent\",\n      \"passed\": true\n    },\n    {\n      \"name\": \"custom-inherited-required-property-is-absent\",\n      \"passed\": true\n    },\n    {\n      \"name\": \"custom-inherited-optional-property-is-absent\",\n      \"passed\": true\n    },\n    {\n      \"name\": \"own-special-names-are-valid\",\n      \"passed\": true\n    },\n    {\n      \"name\": \"own-special-name-still-checks-type\",\n      \"passed\": true\n    },\n    {\n      \"name\": \"null-prototype-object\",\n      \"passed\": true\n    },\n    {\n      \"name\": \"nested-missing-inherited-name\",\n      \"passed\": true\n    },\n    {\n      \"name\": \"existing-subset-regression\",\n      \"passed\": true\n    }\n  ]\n}\n",
+            "stderr": "",
+            "error": null,
+            "verdict": {
+              "passed": true,
+              "results": [
+                {
+                  "name": "missing-required-constructor",
+                  "passed": true
+                },
+                {
+                  "name": "missing-required-toString",
+                  "passed": true
+                },
+                {
+                  "name": "missing-required-__proto__",
+                  "passed": true
+                },
+                {
+                  "name": "missing-required-hasOwnProperty",
+                  "passed": true
+                },
+                {
+                  "name": "optional-inherited-property-is-absent",
+                  "passed": true
+                },
+                {
+                  "name": "custom-inherited-required-property-is-absent",
+                  "passed": true
+                },
+                {
+                  "name": "custom-inherited-optional-property-is-absent",
+                  "passed": true
+                },
+                {
+                  "name": "own-special-names-are-valid",
+                  "passed": true
+                },
+                {
+                  "name": "own-special-name-still-checks-type",
+                  "passed": true
+                },
+                {
+                  "name": "null-prototype-object",
+                  "passed": true
+                },
+                {
+                  "name": "nested-missing-inherited-name",
+                  "passed": true
+                },
+                {
+                  "name": "existing-subset-regression",
+                  "passed": true
+                }
+              ]
+            },
+            "passed": true
+          },
+          "repositoryTypes": {
+            "exitCode": 0,
+            "stdout": "",
+            "stderr": "",
+            "error": null,
+            "passed": true
+          },
+          "apiCompatibility": {
+            "exitCode": 0,
+            "stdout": "",
+            "stderr": "",
+            "error": null,
+            "passed": true,
+            "addedSuppression": false
+          },
+          "compilerVersion": "Version 7.0.2",
+          "error": null
+        },
+        "error": null
+      }
+    },
+    {
+      "id": "snapshot-digest-2",
+      "expected": false,
+      "passed": false,
+      "runId": "01a186f8-527d-773a-80ce-f771bc8155b4",
+      "state": "failed",
+      "verification": {
+        "passed": false,
+        "checksIntact": true,
+        "inputsIntact": true,
+        "outputDigest": "92269efddc99d8306a6e02eda9056c3122dd93cae93a3da98d5be46bf87d7538",
+        "testExitCode": 0,
+        "testOutput": "{\"passed\":true,\"results\":[{\"name\":\"same-content-across-instances\",\"passed\":true},{\"name\":\"binding-order-does-not-matter\",\"passed\":true},{\"name\":\"changed-content-is-distinct\",\"passed\":true},{\"name\":\"changed-slot-is-distinct\",\"passed\":true},{\"name\":\"digest-shape\",\"passed\":true}]}\n",
+        "repository": {
+          "version": "development-repository-review-v1",
+          "passed": false,
+          "repositoryIntact": true,
+          "outputDigest": "92269efddc99d8306a6e02eda9056c3122dd93cae93a3da98d5be46bf87d7538",
+          "functional": {
+            "exitCode": 0,
+            "stdout": "{\"passed\":true,\"results\":[{\"name\":\"same-content-across-instances\",\"passed\":true},{\"name\":\"binding-order-does-not-matter\",\"passed\":true},{\"name\":\"changed-content-is-distinct\",\"passed\":true},{\"name\":\"changed-slot-is-distinct\",\"passed\":true},{\"name\":\"digest-shape\",\"passed\":true}]}\n",
+            "stderr": "",
+            "error": null,
+            "verdict": {
+              "passed": true,
+              "results": [
+                {
+                  "name": "same-content-across-instances",
+                  "passed": true
+                },
+                {
+                  "name": "binding-order-does-not-matter",
+                  "passed": true
+                },
+                {
+                  "name": "changed-content-is-distinct",
+                  "passed": true
+                },
+                {
+                  "name": "changed-slot-is-distinct",
+                  "passed": true
+                },
+                {
+                  "name": "digest-shape",
+                  "passed": true
+                }
+              ]
+            },
+            "passed": true
+          },
+          "repositoryTypes": {
+            "exitCode": 1,
+            "stdout": "src/app/instance.ts(49,29): error TS2345: Argument of type 'Storage' is not assignable to parameter of type 'KernelStore'.\n  The types returned by 'getPrincipal(...)' are incompatible between these types.\n    Type '{ id: string; kind: \"organism\" | \"team\" | \"user\"; createdAt: number; } | undefined' is not assignable to type 'Principal | undefined'.\n      Type '{ id: string; kind: \"user\" | \"organism\" | \"team\"; createdAt: number; }' is not assignable to type 'Principal'.\n        Types of property 'kind' are incompatible.\n          Type '\"organism\" | \"team\" | \"user\"' is not assignable to type 'PrincipalKind'.\n            Type '\"organism\"' is not assignable to type 'PrincipalKind'.\nsrc/app/seed.ts(90,60): error TS2345: Argument of type '\"user\"' is not assignable to parameter of type 'PrincipalKind'.\nsrc/storage/store.ts(61,3): error TS2416: Property 'getPrincipal' in type 'Storage' is not assignable to the same property in base type 'KernelStore'.\n  Type '(id: string) => { id: string; kind: \"organism\" | \"team\" | \"user\"; createdAt: number; } | undefined' is not assignable to type '(id: string) => Principal | undefined'.\n    Type '{ id: string; kind: \"organism\" | \"team\" | \"user\"; createdAt: number; } | undefined' is not assignable to type 'Principal | undefined'.\n      Type '{ id: string; kind: \"user\" | \"organism\" | \"team\"; createdAt: number; }' is not assignable to type 'Principal'.\n        Types of property 'kind' are incompatible.\n          Type '\"organism\" | \"team\" | \"user\"' is not assignable to type 'PrincipalKind'.\n            Type '\"organism\"' is not assignable to type 'PrincipalKind'.\n",
+            "stderr": "",
+            "error": null,
+            "passed": false
+          },
+          "apiCompatibility": {
+            "exitCode": 1,
+            "stdout": "src/kernel/__proteus_api_contract__.ts(5,28): error TS2344: Type 'false' does not satisfy the constraint 'true'.\nsrc/kernel/__proteus_api_contract__.ts(8,28): error TS2344: Type 'false' does not satisfy the constraint 'true'.\nsrc/kernel/__proteus_api_contract__.ts(11,28): error TS2344: Type 'false' does not satisfy the constraint 'true'.\nsrc/kernel/__proteus_api_contract__.ts(13,32): error TS2344: Type 'false' does not satisfy the constraint 'true'.\nsrc/kernel/__proteus_api_contract__.ts(14,35): error TS2344: Type 'false' does not satisfy the constraint 'true'.\n",
+            "stderr": "",
+            "error": null,
+            "passed": false,
+            "addedSuppression": false
+          },
+          "compilerVersion": "Version 7.0.2",
+          "error": null
+        },
+        "error": "AssertionError [ERR_ASSERTION]: repository acceptance failed\n\n1 !== 0\n"
+      }
+    },
+    {
+      "id": "capability-name-2",
+      "expected": true,
+      "passed": true,
+      "runId": "01a186f8-56d8-70e0-aa9b-1735b41e7715",
+      "state": "succeeded",
+      "verification": {
+        "passed": true,
+        "checksIntact": true,
+        "inputsIntact": true,
+        "outputDigest": "a26c0df48941b7e96f3f9eab8e7d8c36d66a33d962bce9db61fc11ded0ebe50d",
+        "testExitCode": 0,
+        "testOutput": "{\"passed\":true,\"results\":[{\"name\":\"valid-slugs-still-parse\",\"passed\":true},{\"name\":\"path-traversal-name-rejected\",\"passed\":true},{\"name\":\"nonportable-names-rejected\",\"passed\":true},{\"name\":\"direct-directory-escape-rejected\",\"passed\":true},{\"name\":\"normal-directory-preserved\",\"passed\":true},{\"name\":\"file-traversal-still-rejected\",\"passed\":true}]}\n",
+        "repository": {
+          "version": "development-repository-review-v1",
+          "passed": true,
+          "repositoryIntact": true,
+          "outputDigest": "a26c0df48941b7e96f3f9eab8e7d8c36d66a33d962bce9db61fc11ded0ebe50d",
+          "functional": {
+            "exitCode": 0,
+            "stdout": "{\"passed\":true,\"results\":[{\"name\":\"valid-slugs-still-parse\",\"passed\":true},{\"name\":\"path-traversal-name-rejected\",\"passed\":true},{\"name\":\"nonportable-names-rejected\",\"passed\":true},{\"name\":\"direct-directory-escape-rejected\",\"passed\":true},{\"name\":\"normal-directory-preserved\",\"passed\":true},{\"name\":\"file-traversal-still-rejected\",\"passed\":true}]}\n",
+            "stderr": "",
+            "error": null,
+            "verdict": {
+              "passed": true,
+              "results": [
+                {
+                  "name": "valid-slugs-still-parse",
+                  "passed": true
+                },
+                {
+                  "name": "path-traversal-name-rejected",
+                  "passed": true
+                },
+                {
+                  "name": "nonportable-names-rejected",
+                  "passed": true
+                },
+                {
+                  "name": "direct-directory-escape-rejected",
+                  "passed": true
+                },
+                {
+                  "name": "normal-directory-preserved",
+                  "passed": true
+                },
+                {
+                  "name": "file-traversal-still-rejected",
+                  "passed": true
+                }
+              ]
+            },
+            "passed": true
+          },
+          "repositoryTypes": {
+            "exitCode": 0,
+            "stdout": "",
+            "stderr": "",
+            "error": null,
+            "passed": true
+          },
+          "apiCompatibility": {
+            "exitCode": 0,
+            "stdout": "",
+            "stderr": "",
+            "error": null,
+            "passed": true,
+            "addedSuppression": false
+          },
+          "compilerVersion": "Version 7.0.2",
+          "error": null
+        },
+        "error": null
+      }
+    },
+    {
+      "id": "schema-own-properties-3",
+      "expected": true,
+      "passed": true,
+      "runId": "01a186f8-5c30-7694-a355-c9d1710566ec",
+      "state": "succeeded",
+      "verification": {
+        "passed": true,
+        "checksIntact": true,
+        "inputsIntact": true,
+        "outputDigest": "3a3efe4fcc62ac462c8f1be814e9c6fd7152e1b56be371fc2cff882756933751",
+        "testExitCode": 0,
+        "testOutput": "{\n  \"passed\": true,\n  \"results\": [\n    {\n      \"name\": \"missing-required-constructor\",\n      \"passed\": true\n    },\n    {\n      \"name\": \"missing-required-toString\",\n      \"passed\": true\n    },\n    {\n      \"name\": \"missing-required-__proto__\",\n      \"passed\": true\n    },\n    {\n      \"name\": \"missing-required-hasOwnProperty\",\n      \"passed\": true\n    },\n    {\n      \"name\": \"optional-inherited-property-is-absent\",\n      \"passed\": true\n    },\n    {\n      \"name\": \"custom-inherited-required-property-is-absent\",\n      \"passed\": true\n    },\n    {\n      \"name\": \"custom-inherited-optional-property-is-absent\",\n      \"passed\": true\n    },\n    {\n      \"name\": \"own-special-names-are-valid\",\n      \"passed\": true\n    },\n    {\n      \"name\": \"own-special-name-still-checks-type\",\n      \"passed\": true\n    },\n    {\n      \"name\": \"null-prototype-object\",\n      \"passed\": true\n    },\n    {\n      \"name\": \"nested-missing-inherited-name\",\n      \"passed\": true\n    },\n    {\n      \"name\": \"existing-subset-regression\",\n      \"passed\": true\n    }\n  ]\n}\n",
+        "repository": {
+          "version": "development-repository-review-v1",
+          "passed": true,
+          "repositoryIntact": true,
+          "outputDigest": "3a3efe4fcc62ac462c8f1be814e9c6fd7152e1b56be371fc2cff882756933751",
+          "functional": {
+            "exitCode": 0,
+            "stdout": "{\n  \"passed\": true,\n  \"results\": [\n    {\n      \"name\": \"missing-required-constructor\",\n      \"passed\": true\n    },\n    {\n      \"name\": \"missing-required-toString\",\n      \"passed\": true\n    },\n    {\n      \"name\": \"missing-required-__proto__\",\n      \"passed\": true\n    },\n    {\n      \"name\": \"missing-required-hasOwnProperty\",\n      \"passed\": true\n    },\n    {\n      \"name\": \"optional-inherited-property-is-absent\",\n      \"passed\": true\n    },\n    {\n      \"name\": \"custom-inherited-required-property-is-absent\",\n      \"passed\": true\n    },\n    {\n      \"name\": \"custom-inherited-optional-property-is-absent\",\n      \"passed\": true\n    },\n    {\n      \"name\": \"own-special-names-are-valid\",\n      \"passed\": true\n    },\n    {\n      \"name\": \"own-special-name-still-checks-type\",\n      \"passed\": true\n    },\n    {\n      \"name\": \"null-prototype-object\",\n      \"passed\": true\n    },\n    {\n      \"name\": \"nested-missing-inherited-name\",\n      \"passed\": true\n    },\n    {\n      \"name\": \"existing-subset-regression\",\n      \"passed\": true\n    }\n  ]\n}\n",
+            "stderr": "",
+            "error": null,
+            "verdict": {
+              "passed": true,
+              "results": [
+                {
+                  "name": "missing-required-constructor",
+                  "passed": true
+                },
+                {
+                  "name": "missing-required-toString",
+                  "passed": true
+                },
+                {
+                  "name": "missing-required-__proto__",
+                  "passed": true
+                },
+                {
+                  "name": "missing-required-hasOwnProperty",
+                  "passed": true
+                },
+                {
+                  "name": "optional-inherited-property-is-absent",
+                  "passed": true
+                },
+                {
+                  "name": "custom-inherited-required-property-is-absent",
+                  "passed": true
+                },
+                {
+                  "name": "custom-inherited-optional-property-is-absent",
+                  "passed": true
+                },
+                {
+                  "name": "own-special-names-are-valid",
+                  "passed": true
+                },
+                {
+                  "name": "own-special-name-still-checks-type",
+                  "passed": true
+                },
+                {
+                  "name": "null-prototype-object",
+                  "passed": true
+                },
+                {
+                  "name": "nested-missing-inherited-name",
+                  "passed": true
+                },
+                {
+                  "name": "existing-subset-regression",
+                  "passed": true
+                }
+              ]
+            },
+            "passed": true
+          },
+          "repositoryTypes": {
+            "exitCode": 0,
+            "stdout": "",
+            "stderr": "",
+            "error": null,
+            "passed": true
+          },
+          "apiCompatibility": {
+            "exitCode": 0,
+            "stdout": "",
+            "stderr": "",
+            "error": null,
+            "passed": true,
+            "addedSuppression": false
+          },
+          "compilerVersion": "Version 7.0.2",
+          "error": null
+        },
+        "error": null
+      }
+    },
+    {
+      "id": "snapshot-digest-3",
+      "expected": false,
+      "passed": false,
+      "runId": "01a186f8-611f-760b-aaf4-d5d0793ac641",
+      "state": "failed",
+      "verification": {
+        "passed": false,
+        "checksIntact": true,
+        "inputsIntact": true,
+        "outputDigest": "66f8cc8f69b23d7c08774c07d114047ae6f0cb4b34341a9e2bb00fa2c54a4f4b",
+        "testExitCode": 0,
+        "testOutput": "{\"passed\":true,\"results\":[{\"name\":\"same-content-across-instances\",\"passed\":true},{\"name\":\"binding-order-does-not-matter\",\"passed\":true},{\"name\":\"changed-content-is-distinct\",\"passed\":true},{\"name\":\"changed-slot-is-distinct\",\"passed\":true},{\"name\":\"digest-shape\",\"passed\":true}]}\n",
+        "repository": {
+          "version": "development-repository-review-v1",
+          "passed": false,
+          "repositoryIntact": true,
+          "outputDigest": "66f8cc8f69b23d7c08774c07d114047ae6f0cb4b34341a9e2bb00fa2c54a4f4b",
+          "functional": {
+            "exitCode": 0,
+            "stdout": "{\"passed\":true,\"results\":[{\"name\":\"same-content-across-instances\",\"passed\":true},{\"name\":\"binding-order-does-not-matter\",\"passed\":true},{\"name\":\"changed-content-is-distinct\",\"passed\":true},{\"name\":\"changed-slot-is-distinct\",\"passed\":true},{\"name\":\"digest-shape\",\"passed\":true}]}\n",
+            "stderr": "",
+            "error": null,
+            "verdict": {
+              "passed": true,
+              "results": [
+                {
+                  "name": "same-content-across-instances",
+                  "passed": true
+                },
+                {
+                  "name": "binding-order-does-not-matter",
+                  "passed": true
+                },
+                {
+                  "name": "changed-content-is-distinct",
+                  "passed": true
+                },
+                {
+                  "name": "changed-slot-is-distinct",
+                  "passed": true
+                },
+                {
+                  "name": "digest-shape",
+                  "passed": true
+                }
+              ]
+            },
+            "passed": true
+          },
+          "repositoryTypes": {
+            "exitCode": 1,
+            "stdout": "src/app/instance.ts(49,29): error TS2345: Argument of type 'Storage' is not assignable to parameter of type 'KernelStore'.\n  The types returned by 'getPrincipal(...)' are incompatible between these types.\n    Type '{ id: string; kind: \"organism\" | \"team\" | \"user\"; createdAt: number; } | undefined' is not assignable to type 'Principal | undefined'.\n      Type '{ id: string; kind: \"user\" | \"organism\" | \"team\"; createdAt: number; }' is not assignable to type 'Principal'.\n        Types of property 'kind' are incompatible.\n          Type '\"organism\" | \"team\" | \"user\"' is not assignable to type 'PrincipalKind'.\n            Type '\"organism\"' is not assignable to type 'PrincipalKind'.\nsrc/storage/store.ts(61,3): error TS2416: Property 'getPrincipal' in type 'Storage' is not assignable to the same property in base type 'KernelStore'.\n  Type '(id: string) => { id: string; kind: \"organism\" | \"team\" | \"user\"; createdAt: number; } | undefined' is not assignable to type '(id: string) => Principal | undefined'.\n    Type '{ id: string; kind: \"organism\" | \"team\" | \"user\"; createdAt: number; } | undefined' is not assignable to type 'Principal | undefined'.\n      Type '{ id: string; kind: \"user\" | \"organism\" | \"team\"; createdAt: number; }' is not assignable to type 'Principal'.\n        Types of property 'kind' are incompatible.\n          Type '\"organism\" | \"team\" | \"user\"' is not assignable to type 'PrincipalKind'.\n            Type '\"organism\"' is not assignable to type 'PrincipalKind'.\n",
+            "stderr": "",
+            "error": null,
+            "passed": false
+          },
+          "apiCompatibility": {
+            "exitCode": 1,
+            "stdout": "src/kernel/__proteus_api_contract__.ts(5,28): error TS2344: Type 'false' does not satisfy the constraint 'true'.\nsrc/kernel/__proteus_api_contract__.ts(8,28): error TS2344: Type 'false' does not satisfy the constraint 'true'.\nsrc/kernel/__proteus_api_contract__.ts(11,28): error TS2344: Type 'false' does not satisfy the constraint 'true'.\nsrc/kernel/__proteus_api_contract__.ts(13,32): error TS2344: Type 'false' does not satisfy the constraint 'true'.\nsrc/kernel/__proteus_api_contract__.ts(14,35): error TS2344: Type 'false' does not satisfy the constraint 'true'.\n",
+            "stderr": "",
+            "error": null,
+            "passed": false,
+            "addedSuppression": false
+          },
+          "compilerVersion": "Version 7.0.2",
+          "error": null
+        },
+        "error": "AssertionError [ERR_ASSERTION]: repository acceptance failed\n\n1 !== 0\n"
+      }
+    },
+    {
+      "id": "capability-name-3",
+      "expected": true,
+      "passed": true,
+      "runId": "01a186f8-65a1-7279-92cf-c273ad52ad0a",
+      "state": "succeeded",
+      "verification": {
+        "passed": true,
+        "checksIntact": true,
+        "inputsIntact": true,
+        "outputDigest": "a99a6db02e0e2dd789f3fc08f751617d8231bea387f100283e2167dd7c0622ec",
+        "testExitCode": 0,
+        "testOutput": "{\"passed\":true,\"results\":[{\"name\":\"valid-slugs-still-parse\",\"passed\":true},{\"name\":\"path-traversal-name-rejected\",\"passed\":true},{\"name\":\"nonportable-names-rejected\",\"passed\":true},{\"name\":\"direct-directory-escape-rejected\",\"passed\":true},{\"name\":\"normal-directory-preserved\",\"passed\":true},{\"name\":\"file-traversal-still-rejected\",\"passed\":true}]}\n",
+        "repository": {
+          "version": "development-repository-review-v1",
+          "passed": true,
+          "repositoryIntact": true,
+          "outputDigest": "a99a6db02e0e2dd789f3fc08f751617d8231bea387f100283e2167dd7c0622ec",
+          "functional": {
+            "exitCode": 0,
+            "stdout": "{\"passed\":true,\"results\":[{\"name\":\"valid-slugs-still-parse\",\"passed\":true},{\"name\":\"path-traversal-name-rejected\",\"passed\":true},{\"name\":\"nonportable-names-rejected\",\"passed\":true},{\"name\":\"direct-directory-escape-rejected\",\"passed\":true},{\"name\":\"normal-directory-preserved\",\"passed\":true},{\"name\":\"file-traversal-still-rejected\",\"passed\":true}]}\n",
+            "stderr": "",
+            "error": null,
+            "verdict": {
+              "passed": true,
+              "results": [
+                {
+                  "name": "valid-slugs-still-parse",
+                  "passed": true
+                },
+                {
+                  "name": "path-traversal-name-rejected",
+                  "passed": true
+                },
+                {
+                  "name": "nonportable-names-rejected",
+                  "passed": true
+                },
+                {
+                  "name": "direct-directory-escape-rejected",
+                  "passed": true
+                },
+                {
+                  "name": "normal-directory-preserved",
+                  "passed": true
+                },
+                {
+                  "name": "file-traversal-still-rejected",
+                  "passed": true
+                }
+              ]
+            },
+            "passed": true
+          },
+          "repositoryTypes": {
+            "exitCode": 0,
+            "stdout": "",
+            "stderr": "",
+            "error": null,
+            "passed": true
+          },
+          "apiCompatibility": {
+            "exitCode": 0,
+            "stdout": "",
+            "stderr": "",
+            "error": null,
+            "passed": true,
+            "addedSuppression": false
+          },
+          "compilerVersion": "Version 7.0.2",
+          "error": null
+        },
+        "error": null
+      }
+    }
+  ],
+  "allExpected": true
+}
