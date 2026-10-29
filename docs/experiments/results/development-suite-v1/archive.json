@@ -1,0 +1,8 @@
+{
+  "file": "evidence.tar.gz",
+  "sha256": "48e0f1a6fc1039edb47bd2bcdb4d04de0c23cda22aaa20017ee75170e991127f",
+  "bytes": 836410,
+  "functionalReplayIdentical": true,
+  "typeReviewReplayIdentical": true,
+  "modelCallsDuringReplay": 0
+}

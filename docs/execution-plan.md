@@ -247,3 +247,5 @@ env -u PROTEUS_E2E -u PROTEUS_SANDBOX PATH="/opt/homebrew/bin:$PATH" \
 `86264fe` 已实现实时进度持久化、流式文字聚合、结束事件保留、Claude 数值计量凭据去重和摘要校验。独立导出的提交版本通过类型检查及 38 项定向测试；工作目录全量检查的本机端口限制项已单独放开限制复跑通过。旧报告保留原始 partial/unknown。
 
 [开发历史任务集 v1](./experiments/development-suite-v1.md) 冻结了三个不同真实缺陷：schema own-properties、snapshot digest、capability name。全部已验证旧代码失败及历史修复通过；用户明确授权 3×3 次、每次 6 轮/300 秒/8192 输出上限。按先记录门槛、再新样本顺序执行，结果归档与离线复验后更新本节。
+
+本阶段已完成：[三任务九次真实结果](./experiments/results/development-suite-v1.md)。9/9 固定功能验收通过，9/9 轨迹和用量完整、dropped=0；194,114 tokens、722.955 秒。追加的仓库类型/API 复核仅 6/9 通过：snapshot 三次均改写了未提供的领域类型。证据包解压后功能与类型复验一致，未调用模型，未应用候选代码。下一阶段优先把类型/API 兼容检查升级为固定验收，再提供必要依赖上下文、验证最小编辑，最后扩任务；继续保留收益 inconclusive。

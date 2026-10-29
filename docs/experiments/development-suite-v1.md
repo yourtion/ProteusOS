@@ -35,3 +35,5 @@
 本地先执行 `tests/experiments/run-development-suite.ts --preflight`：验证全部冻结摘要，并用只读进程确认每项红/绿对照。真实入口为同脚本 `--output NEW_DIR --claude-settings FILE`，先落盘注册清单，再逐次写 summary、manifest、baseline、Run/Attempt、公开轨迹、数值计量凭据、固定验收和候选补丁。
 
 完成后按任务报告成功率、墙钟耗时、token 总量、响应数、轨迹完整性；重复运行不能冒充更多独立任务。归档后在没有凭据和网络的条件下重放固定测试，并复核输入、输出、轨迹及计量摘要。不能据此声称相对人工或直接 Agent 的收益。
+
+已完成，见 [真实运行结果与类型兼容性缺口](./results/development-suite-v1.md)：观测和固定功能验收 9/9 通过，但附加类型/API 复核仅 6/9 通过。下一轮先加强验收，不扩大本轮成绩口径。

@@ -4,6 +4,7 @@ import { openInstance, resolveInstanceRoot, type AppInstance } from "./instance.
 import { ORGANISM_ID, PRINCIPAL_ID, installSeed } from "./seed.ts";
 import type { PolicyEvaluationPlan } from "../evolution/index.ts";
 import { loadTaskFile, resolveFrom } from "./task-file.ts";
+import type { RunSummary } from "../runtime/types.ts";
 
 export interface CommonOpts {
   home?: string;
@@ -222,6 +223,13 @@ export async function submitCommand(taskPath: string, opts: CommonOpts): Promise
   const inst = openInstance(resolveInstanceRoot(opts.home), {
     organismId: opts.organism,
     actorId: opts.actor,
+    onExecutionProgress: opts.json
+      ? undefined
+      : ({ progress }) => {
+          process.stderr.write(
+            `执行 ${progress.phase} · ${(progress.elapsedMs / 1000).toFixed(1)} 秒 · ${progress.messageChars} 字符 · ${progress.toolCalls} 个工具调用\n`,
+          );
+        },
   });
   try {
     const summary = await inst.runtime.submitTask({
@@ -264,6 +272,7 @@ export async function submitCommand(taskPath: string, opts: CommonOpts): Promise
     }
     for (const a of summary.attempts) {
       console.log(`  attempt#${a.ordinal}  ${a.state} (exit=${a.exitCode})`);
+      printExecutionObservation(a);
     }
     for (const c of summary.checks) {
       console.log(
@@ -275,6 +284,22 @@ export async function submitCommand(taskPath: string, opts: CommonOpts): Promise
   } finally {
     inst.close();
   }
+}
+
+function printExecutionObservation(attempt: RunSummary["attempts"][number]): void {
+  if (attempt.progress)
+    console.log(
+      `  progress   ${attempt.progress.phase} · ${(attempt.progress.elapsedMs / 1000).toFixed(1)} 秒`,
+    );
+  if (attempt.evidence)
+    console.log(
+      `  trace      ${attempt.evidence.traceStatus} · dropped=${attempt.evidence.droppedEvents}`,
+    );
+  const usage = attempt.evidence?.accounting;
+  if (usage)
+    console.log(
+      `  usage      ${usage.tokenStatus} · tokens=${usage.totals?.totalTokens ?? "未知"} · 观察到的响应=${usage.observedModelResponses ?? "未知"} · 实际费用未知`,
+    );
 }
 
 export async function runsCommand(id: string | undefined, opts: CommonOpts): Promise<void> {
@@ -308,9 +333,12 @@ export async function runsCommand(id: string | undefined, opts: CommonOpts): Pro
     const attempts = processes.flatMap((p) => inst.storage.listAttempts(p.id));
     const events = inst.storage.listEvents({ runId: run.id }, 100);
     const experience = inst.storage.getExperienceByRun(run.id);
+    const summary = inst.runtime.getRunSummary(run.id);
 
     if (opts.json) {
-      console.log(JSON.stringify({ run, processes, attempts, events, experience }, null, 2));
+      console.log(
+        JSON.stringify({ run, processes, attempts, events, experience, summary }, null, 2),
+      );
       return;
     }
     console.log(`run        ${run.id}`);
@@ -320,6 +348,8 @@ export async function runsCommand(id: string | undefined, opts: CommonOpts): Pro
     console.log(`created    ${new Date(run.createdAt).toISOString()}`);
     for (const a of attempts) {
       console.log(`attempt#${a.ordinal}  ${a.state} exit=${a.exitCode} dispatch=${a.dispatchId}`);
+      const observed = summary.attempts.find((attempt) => attempt.id === a.id);
+      if (observed) printExecutionObservation(observed);
     }
     console.log(`experience ${experience?.id ?? "—"}`);
     console.log(`events (${events.length}):`);

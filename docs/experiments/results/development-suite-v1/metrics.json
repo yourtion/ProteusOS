@@ -1,0 +1,43 @@
+{
+  "tasks": [
+    {
+      "task": "schema-own-properties",
+      "runs": 3,
+      "functionalPassed": 3,
+      "postHocTypesPassed": 3,
+      "medianSeconds": 58.917,
+      "medianTokens": 16171,
+      "tokens": 47939
+    },
+    {
+      "task": "snapshot-digest",
+      "runs": 3,
+      "functionalPassed": 3,
+      "postHocTypesPassed": 0,
+      "medianSeconds": 103.325,
+      "medianTokens": 29962,
+      "tokens": 90230
+    },
+    {
+      "task": "capability-name",
+      "runs": 3,
+      "functionalPassed": 3,
+      "postHocTypesPassed": 3,
+      "medianSeconds": 79.371,
+      "medianTokens": 18879,
+      "tokens": 55945
+    }
+  ],
+  "totalSeconds": 722.955,
+  "totalTokens": {
+    "uncachedInputTokens": 76484,
+    "outputTokens": 31870,
+    "cachedReadTokens": 85760,
+    "cachedWriteTokens": 0,
+    "inputTokens": 162244,
+    "totalTokens": 194114
+  },
+  "observedModelResponses": 30,
+  "actualCost": null,
+  "benefit": "inconclusive"
+}
