@@ -5,6 +5,7 @@ import type { AcpPermissionPolicy } from "../adapters/executor-acp/index.ts";
 export function developmentPilotPermission(
   workspace: string,
   target = "src/runtime/schema-validator.ts",
+  includeContext = false,
 ): AcpPermissionPolicy {
   if (
     !/^[a-zA-Z0-9_./-]+\.(?:ts|mjs|js)$/.test(target) ||
@@ -13,9 +14,12 @@ export function developmentPilotPermission(
   )
     throw new Error("target must be a safe relative module path");
   const readable = new Set(
-    ["inputs/source.ts", "inputs/checks.mjs", `output/${target}`].map((path) =>
-      join(workspace, path),
-    ),
+    [
+      "inputs/source.ts",
+      "inputs/checks.mjs",
+      `output/${target}`,
+      ...(includeContext ? ["inputs/context.json"] : []),
+    ].map((path) => join(workspace, path)),
   );
   const writable = join(workspace, "output", target);
   return (request) => {

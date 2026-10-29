@@ -1,10 +1,15 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { cpSync, existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
 import type { ExecutorProvider } from "../runtime/types.ts";
 import { canonicalJson, digestOf } from "../storage/blobs.ts";
 import { openInstance } from "./instance.ts";
 import type { RuntimeDeps } from "../runtime/index.ts";
+import {
+  prepareDevelopmentRepository,
+  reviewDevelopmentRepository,
+  type DevelopmentRepositoryPlan,
+} from "./development-repository.ts";
 import { installSeed, LINEAGE_ID, ORGANISM_ID, PRINCIPAL_ID } from "./seed.ts";
 
 /** Fixed host verifier, embedded in the immutable evaluator version. It never runs worker tests. */
@@ -17,7 +22,7 @@ import { spawnSync } from "node:child_process";
 const config = JSON.parse(process.argv[1]);
 const workspace = process.cwd();
 const hash = (path) => createHash("sha256").update(readFileSync(path)).digest("hex");
-const record = { passed: false, checksIntact: false, inputsIntact: false, outputDigest: null, testExitCode: null, testOutput: null, error: null };
+const record = { passed: false, checksIntact: false, inputsIntact: false, outputDigest: null, testExitCode: null, testOutput: null, repository: null, error: null };
 try {
   assert.equal(hash(config.checksPath), config.checksDigest, "frozen checks changed");
   record.checksIntact = true;
@@ -41,6 +46,21 @@ try {
   const candidate = resolve(workspace, "output", config.target);
   assert.ok(existsSync(candidate) && lstatSync(candidate).isFile(), "missing implementation");
   record.outputDigest = hash(candidate);
+  if (config.repository) {
+    const repository = config.repository;
+    assert.equal(hash(repository.checkerPath), repository.checkerDigest, "frozen repository checker changed");
+    const result = spawnSync(process.execPath, [repository.checkerPath, JSON.stringify(repository.config), candidate], {
+      encoding: "utf8", timeout: 85000, maxBuffer: 2 * 1024 * 1024, env: { LANG: "C.UTF-8" }
+    });
+    if (result.error) throw result.error;
+    record.repository = JSON.parse(result.stdout);
+    record.testExitCode = record.repository.functional?.exitCode ?? null;
+    record.testOutput = record.repository.functional?.stdout ?? null;
+    assert.equal(result.status, 0, "repository acceptance failed");
+    assert.equal(record.repository.passed, true, "repository acceptance did not confirm success");
+    assert.equal(record.repository.outputDigest, record.outputDigest, "repository candidate digest mismatch");
+    assert.equal(hash(repository.checkerPath), repository.checkerDigest, "repository checker changed during verification");
+  } else {
   const result = spawnSync(process.execPath, ["--permission", "--allow-fs-read=" + config.checksPath, "--allow-fs-read=" + candidate, config.checksPath, candidate], {
     cwd: workspace, encoding: "utf8", timeout: 15000, maxBuffer: 256 * 1024, env: { LANG: "C.UTF-8" }
   });
@@ -52,6 +72,7 @@ try {
   assert.equal(verdict.passed, true, "fixed tests did not confirm success");
   assert.deepEqual(verdict.results.map((item) => item.name), config.expectedChecks, "fixed check set changed");
   assert.ok(verdict.results.every((item) => item.passed === true), "some fixed checks failed");
+  }
   assert.equal(hash(candidate), record.outputDigest, "implementation changed during verification");
   record.passed = true;
 } catch (error) { record.error = String(error); }
@@ -71,6 +92,7 @@ export interface DevelopmentPilotPlan {
   executor: ExecutorProvider;
   maxWallClockSeconds: number;
   onProgress?: RuntimeDeps["onExecutionProgress"];
+  repository?: DevelopmentRepositoryPlan;
   /** Public, non-secret description only; secrets belong in the executor's environment. */
   provenance: {
     mode: "real" | "fixture";
@@ -114,16 +136,47 @@ export async function runDevelopmentPilot(plan: DevelopmentPilotPlan) {
   const checksPath = join(frozen, "checks.mjs");
   writeFileSync(sourcePath, source);
   writeFileSync(checksPath, checks);
-  const baseline = spawnSync(
-    process.execPath,
-    ["--permission", `--allow-fs-read=${frozen}`, checksPath, sourcePath],
-    {
-      encoding: "utf8",
-      timeout: 15_000,
-      maxBuffer: 256 * 1024,
-      env: { LANG: "C.UTF-8" },
-    },
-  );
+  const repository = plan.repository
+    ? prepareDevelopmentRepository(
+        plan.repository,
+        frozen,
+        plan.target,
+        digestOf(source),
+        checksPath,
+      )
+    : null;
+  const repositoryBaseline = repository
+    ? reviewDevelopmentRepository(repository, sourcePath)
+    : null;
+  if (repositoryBaseline)
+    writeFileSync(
+      join(root, "repository-baseline.json"),
+      JSON.stringify(repositoryBaseline, null, 2),
+    );
+  if (
+    repositoryBaseline &&
+    (!repositoryBaseline.repositoryIntact ||
+      !repositoryBaseline.repositoryTypes?.passed ||
+      !repositoryBaseline.apiCompatibility?.passed)
+  )
+    throw new Error("historical repository must pass types and API contracts before delegation");
+  const baseline = repositoryBaseline
+    ? {
+        status: repositoryBaseline.functional?.exitCode ?? null,
+        stdout: repositoryBaseline.functional?.stdout ?? "",
+        stderr: repositoryBaseline.functional?.stderr ?? "",
+        error: repositoryBaseline.error ?? repositoryBaseline.functional?.error,
+      }
+    : spawnSync(
+        process.execPath,
+        ["--permission", `--allow-fs-read=${frozen}`, checksPath, sourcePath],
+        {
+          encoding: "utf8",
+          timeout: 15_000,
+          maxBuffer: 256 * 1024,
+          env: { LANG: "C.UTF-8" },
+        },
+      );
   writeFileSync(
     join(root, "baseline.json"),
     JSON.stringify(
@@ -150,9 +203,12 @@ export async function runDevelopmentPilot(plan: DevelopmentPilotPlan) {
     throw new Error(
       "baseline must include both a reproduced failure and healthy regression checks",
     );
+  if (repository) repository.config.expectedChecks = red.results.map((r) => r.name);
   const goal = [
     plan.goal,
-    `Read inputs/source.ts and inputs/checks.mjs. Write the complete corrected implementation to output/${plan.target}.`,
+    repository
+      ? `Read output/${plan.target}, inputs/checks.mjs and inputs/context.json. The output file is preloaded with the original source; inputs/source.ts is its frozen reference. Make the smallest necessary edit to the output file. Preserve existing type imports, public types and function signatures. Use the supplied dependency context; do not invent or inline missing declarations. The host runs repository type checks and API compatibility checks as well as the fixed behavioral tests.`
+      : `Read inputs/source.ts and inputs/checks.mjs. Write the complete corrected implementation to output/${plan.target}.`,
     "Only that output file may be created or changed. Do not modify inputs, tests, configuration or files outside this workspace.",
     "The host runs the frozen tests after your response. No shell, network or additional agent tools are provided. Explain the minimal change briefly and finish.",
   ].join("\n");
@@ -161,10 +217,25 @@ export async function runDevelopmentPilot(plan: DevelopmentPilotPlan) {
     checksDigest: digestOf(checks),
     target: plan.target,
     expectedChecks: red.results.map((r) => r.name),
-    inputs: { "source.ts": digestOf(source), "checks.mjs": digestOf(checks) },
+    inputs: {
+      "source.ts": digestOf(source),
+      "checks.mjs": digestOf(checks),
+      ...(repository
+        ? { "context.json": digestOf(readFileSync(repository.contextPath, "utf8")) }
+        : {}),
+    },
+    ...(repository
+      ? {
+          repository: {
+            checkerPath: repository.checkerPath,
+            checkerDigest: repository.checkerDigest,
+            config: repository.config,
+          },
+        }
+      : {}),
   };
   const manifest = {
-    version: "development-pilot-v1",
+    version: repository ? "development-pilot-v2" : "development-pilot-v1",
     ...plan.provenance,
     target: plan.target,
     goal,
@@ -174,11 +245,43 @@ export async function runDevelopmentPilot(plan: DevelopmentPilotPlan) {
     sourceDigest: digestOf(source),
     checksDigest: digestOf(checks),
     verifierDigest: digestOf(DEVELOPMENT_VERIFIER),
+    ...(repository
+      ? {
+          repository: {
+            digest: repository.repositoryDigest,
+            files: repository.config.files,
+            api: repository.config.api,
+            contextFiles: plan.repository!.contextFiles,
+            contextDigest: verifierConfig.inputs["context.json"],
+            checkerDigest: repository.checkerDigest,
+            compiler: repository.config.compiler,
+            dependencyLock: repository.config.dependencyLock,
+          },
+          outputSeedDigest: digestOf(source),
+        }
+      : {}),
     createdAt: new Date().toISOString(),
   };
   writeFileSync(join(root, "manifest.json"), JSON.stringify(manifest, null, 2));
   const app = openInstance(join(root, "instance"), {
-    executors: new Map([[plan.executor.name, plan.executor]]),
+    executors: new Map([
+      [
+        plan.executor.name,
+        repository
+          ? {
+              name: plan.executor.name,
+              recoveryPolicy: plan.executor.recoveryPolicy,
+              async start(request) {
+                const target = join(request.workspaceDir, "output", plan.target);
+                if (existsSync(target)) throw new Error("initial candidate already exists");
+                mkdirSync(dirname(target), { recursive: true });
+                cpSync(sourcePath, target);
+                return plan.executor.start(request);
+              },
+            }
+          : plan.executor,
+      ],
+    ]),
     onExecutionProgress: plan.onProgress,
   });
   try {
@@ -244,7 +347,7 @@ export async function runDevelopmentPilot(plan: DevelopmentPilotPlan) {
       {
         requestedBy: PRINCIPAL_ID,
         goal,
-        inputs: [sourcePath, checksPath],
+        inputs: [sourcePath, checksPath, ...(repository ? [repository.contextPath] : [])],
         budget: { maxAttempts: 1, maxWallClockSeconds: plan.maxWallClockSeconds },
         acceptance: { verifier: "development-pilot-acceptance", outputSchema: schemaPath },
       },
@@ -287,7 +390,7 @@ export async function runDevelopmentPilot(plan: DevelopmentPilotPlan) {
     }
     const activeUnchanged = app.kernel.getOrganism(ORGANISM_ID)!.activeGenomeId === seed.snapshotId;
     const report = {
-      version: "development-pilot-v1",
+      version: repository ? "development-pilot-v2" : "development-pilot-v1",
       manifestDigest: digestOf(canonicalJson(manifest)),
       summary,
       elapsedMs: Date.now() - startedAt,

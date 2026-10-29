@@ -22,6 +22,21 @@ function request(name: string, filePath: string): RequestPermissionRequest {
   };
 }
 describe("development pilot ACP permissions", () => {
+  it("dependency context is explicitly opt-in and always read-only", async () => {
+    const withContext = developmentPilotPermission(workspace, "src/kernel/index.ts", true);
+    expect(await withContext(request("Read", "inputs/context.json"))).toMatchObject({
+      outcome: { outcome: "selected" },
+    });
+    expect(await withContext(request("Write", "inputs/context.json"))).toEqual({
+      outcome: { outcome: "cancelled" },
+    });
+    expect(
+      await withContext(request("Read", "../../frozen/repository/src/kernel/types.ts")),
+    ).toEqual({ outcome: { outcome: "cancelled" } });
+    expect(
+      await developmentPilotPermission(workspace)(request("Read", "inputs/context.json")),
+    ).toEqual({ outcome: { outcome: "cancelled" } });
+  });
   it("expands to exactly one registered target and rejects traversal in the target itself", async () => {
     const policy = developmentPilotPermission(workspace, "src/kernel/index.ts");
     expect(await policy(request("Write", "output/src/kernel/index.ts"))).toEqual({
