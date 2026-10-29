@@ -1,0 +1,395 @@
+{
+  "metadata": {
+    "version": "routing-reliability-new-development-design-v1",
+    "visibility": "developer-visible",
+    "permission": "synthetic",
+    "datasetPurpose": "development",
+    "semanticIndependence": "unverified",
+    "benefit": "inconclusive",
+    "realModel": "not_run",
+    "caseCount": 20,
+    "familyCount": 10,
+    "variantsPerFamily": 2,
+    "routeCounts": {
+      "local-process": 10,
+      "capability/changed-file-summary": 10
+    },
+    "criticalCases": 8,
+    "assumptions": [
+      "cases is an exact ObservedCase[]; outer design data must not be passed into observedCaseSchema. All splits are search/development, never held out.",
+      "10 families represent distinct operational intents and contract decision mechanisms. They are not proof of statistical/semantic independence; both variants share one family, and all tasks share only two deterministic capabilities.",
+      "Every task requests exactly one existing capability and its complete existing schema. Secondary context is explicit background; no new executor behavior or multi-capability composition is required.",
+      "Stats inputs are flat names; only lowercase .txt/.md are scanned; JSON and uppercase .MD are excluded. Empty text files remain file entries.",
+      "Stats words use JavaScript whitespace splitting, not language-specific segmentation; bytes are UTF-8; lines split LF and exclude phantom final line; headings count startsWith(\"#\"), including fences.",
+      "Changed output follows the current literal implementation, preserves entries and order, counts duplicates and deleted entries, and uses case-sensitive test precedence before extensions.",
+      "Changed-file schema minItems=1 excludes an empty changed list despite classifyChanges([]) accepting it; empty manifest is intentionally not labeled as a positive acceptance case.",
+      "summary.total is the total input entry count, not a per-category aggregation. Per-category counts are review-only caseDesign metadata, not output fields.",
+      "Rationale and markers are review metadata and should not be exposed to the router or placed inside strict ObservedCase objects. ExpectedChoice/schema/expected remain evaluator-only.",
+      "No real model is called. Gold outputs are computed deterministically from existing contracts; no independent custody or formal evaluation claim is made."
+    ],
+    "sources": [
+      "src/app/experiment/diagnostic-data.ts",
+      "src/app/experiment/observed-plan.ts",
+      "src/adapters/executor-process/stats-worker.mjs",
+      "tests/contract/stats-worker.test.ts",
+      "tests/fixtures/changed-file-summary/implementation.mjs",
+      "tests/fixtures/changed-file-summary/spec/changed-file-summary-spec.md",
+      "tests/fixtures/changed-file-summary/tests/changed-file-summary.test.mjs",
+      "tests/fixtures/decision/dev/schemas/stats-summary.schema.json",
+      "tests/fixtures/decision/dev/schemas/changed-file-summary.schema.json",
+      "tests/fixtures/decision/dev/cases.json"
+    ]
+  },
+  "families": [
+    {
+      "familyId": "reliability-new-utf8-budget",
+      "name": "传输字节预算核对",
+      "expectedChoice": "local-process",
+      "rationale": "检查传输配额所依据的 UTF-8 字节与可见字符并不等价；重音组合、汉字和 emoji 改变 bytes 而不要求新的处理能力。",
+      "distinctDecision": "传输编码成本核对：原样读取文本，保留 UTF-8 多字节和组合字符。",
+      "variants": 2
+    },
+    {
+      "familyId": "reliability-new-record-framing",
+      "name": "记录终止符核对",
+      "expectedChoice": "local-process",
+      "rationale": "目标是排查导出记录尾行和 CRLF 框架，区分空行、末尾换行和未终止记录，不是文档篇幅改写。",
+      "distinctDecision": "LF 记录边界：保留空行，末尾 LF 不制造额外行，CRLF 中 CR 属于字节。",
+      "variants": 2
+    },
+    {
+      "familyId": "reliability-new-token-boundaries",
+      "name": "空白词法扫描核对",
+      "expectedChoice": "local-process",
+      "rationale": "目标是验证索引分词器的空白边界，标点和连续汉字不拆分；与编码、换行和标题任务有独立词法规则。",
+      "distinctDecision": "空白词法：tab、NBSP、全角空格为分隔符，标点与汉字连续串不拆。",
+      "variants": 2
+    },
+    {
+      "familyId": "reliability-new-outline-lexer",
+      "name": "轻量标题扫描器验收",
+      "expectedChoice": "local-process",
+      "rationale": "目标是验证现成行首 # 扫描器，而不是要求 Markdown AST；围栏内、无空格 # 与缩进 # 的差别是新判别机制。",
+      "distinctDecision": "标题词法：任何第一列 # 均计数，包括围栏内和无空格文本；缩进 # 不计。",
+      "variants": 2
+    },
+    {
+      "familyId": "reliability-new-bundle-completeness",
+      "name": "附件完整性与合计对账",
+      "expectedChoice": "local-process",
+      "rationale": "目标是检查零内容附件是否仍登记和多文件合计能否对账；文件数不是文本长度、也不是变更路径数量。",
+      "distinctDecision": "附件完整性：空 .txt/.md 仍占一个 files 项；非文本附件不入统计，files 排序。",
+      "variants": 2
+    },
+    {
+      "familyId": "reliability-new-test-ownership",
+      "name": "测试资源归属审计",
+      "expectedChoice": "capability/changed-file-summary",
+      "rationale": "目标是确定测试目录里的各种资源属于测试所有权；测试路径优先级覆盖 docs/config/source 扩展名。",
+      "distinctDecision": "测试归属优先：/tests/ 和 /__tests__/ 段将文档、配置、二进制资源归入 test。",
+      "variants": 2
+    },
+    {
+      "familyId": "reliability-new-suffix-dispatch",
+      "name": "文件后缀与目录名冲突核对",
+      "expectedChoice": "capability/changed-file-summary",
+      "rationale": "目标是排查按目录猜类别的错误；配置目录里的源码、源码目录里的文档由实际后缀决定。",
+      "distinctDecision": "后缀分派：source/docs/config 等词出现在目录名不构成类别规则。",
+      "variants": 2
+    },
+    {
+      "familyId": "reliability-new-test-name-boundary",
+      "name": "测试命名迁移审计",
+      "expectedChoice": "capability/changed-file-summary",
+      "rationale": "目标是检查 .test 命名迁移的精确模式，不能把 .spec、.test.ts 或大写后缀按广义测试语义推断。",
+      "distinctDecision": "精确测试命名：仅 .test.[cm]?js 命名模式；.test.ts 和 .spec.js 仍按源码扩展名。",
+      "variants": 2
+    },
+    {
+      "familyId": "reliability-new-manifest-conservation",
+      "name": "清单条目守恒对账",
+      "expectedChoice": "capability/changed-file-summary",
+      "rationale": "目标是确认汇总是输入条目计数而非去重路径、只选 modified 或磁盘现存文件；changeType 不影响分类。",
+      "distinctDecision": "条目守恒：重复路径保留、added/modified/deleted 均计入，输出原顺序，total 等于条目数。",
+      "variants": 2
+    },
+    {
+      "familyId": "reliability-new-literal-path-interop",
+      "name": "跨平台字面路径兼容性核对",
+      "expectedChoice": "capability/changed-file-summary",
+      "rationale": "目标是检查分类器是否按输入字符串机械匹配；不规范化反斜杠、不补根斜杠、不将大小写折叠。",
+      "distinctDecision": "原串路径互操作：大小写敏感；反斜杠不是 /tests/ 段；顶层 tests/ 不含前导 /。",
+      "variants": 2
+    }
+  ],
+  "caseDesign": {
+    "reliability-new-utf8-budget-1": {
+      "markers": [
+        "utf8-cjk",
+        "emoji-four-byte",
+        "combining-accent",
+        "two-files",
+        "changed-files-decoy"
+      ],
+      "purpose": "传输编码成本核对：原样读取文本，保留 UTF-8 多字节和组合字符。",
+      "categoryCounts": null
+    },
+    "reliability-new-utf8-budget-2": {
+      "markers": [
+        "utf8-composed-vs-decomposed",
+        "emoji-adjacent",
+        "unterminated-text"
+      ],
+      "purpose": "传输编码成本核对：原样读取文本，保留 UTF-8 多字节和组合字符。",
+      "categoryCounts": null
+    },
+    "reliability-new-record-framing-1": {
+      "markers": [
+        "crlf",
+        "internal-empty-line",
+        "trailing-empty-line",
+        "unterminated-record"
+      ],
+      "purpose": "LF 记录边界：保留空行，末尾 LF 不制造额外行，CRLF 中 CR 属于字节。",
+      "categoryCounts": null
+    },
+    "reliability-new-record-framing-2": {
+      "markers": [
+        "no-final-lf",
+        "only-blank-lines",
+        "two-files"
+      ],
+      "purpose": "LF 记录边界：保留空行，末尾 LF 不制造额外行，CRLF 中 CR 属于字节。",
+      "categoryCounts": null
+    },
+    "reliability-new-token-boundaries-1": {
+      "markers": [
+        "tabs",
+        "nbsp",
+        "ideographic-space",
+        "punctuation-not-separator",
+        "cjk-not-segmented"
+      ],
+      "purpose": "空白词法：tab、NBSP、全角空格为分隔符，标点与汉字连续串不拆。",
+      "categoryCounts": null
+    },
+    "reliability-new-token-boundaries-2": {
+      "markers": [
+        "repeated-whitespace",
+        "leading-trailing-whitespace",
+        "slash-dot-tokens"
+      ],
+      "purpose": "空白词法：tab、NBSP、全角空格为分隔符，标点与汉字连续串不拆。",
+      "categoryCounts": null
+    },
+    "reliability-new-outline-lexer-1": {
+      "markers": [
+        "hash-without-space",
+        "fenced-hash",
+        "indented-hash",
+        "txt-headings"
+      ],
+      "purpose": "标题词法：任何第一列 # 均计数，包括围栏内和无空格文本；缩进 # 不计。",
+      "categoryCounts": null
+    },
+    "reliability-new-outline-lexer-2": {
+      "markers": [
+        "fenced-hash",
+        "hash-only-line",
+        "inline-hash",
+        "indented-hash"
+      ],
+      "purpose": "标题词法：任何第一列 # 均计数，包括围栏内和无空格文本；缩进 # 不计。",
+      "categoryCounts": null
+    },
+    "reliability-new-bundle-completeness-1": {
+      "markers": [
+        "empty-file-retained",
+        "sorted-output",
+        "json-excluded",
+        "files-not-manifest-count"
+      ],
+      "purpose": "附件完整性：空 .txt/.md 仍占一个 files 项；非文本附件不入统计，files 排序。",
+      "categoryCounts": null
+    },
+    "reliability-new-bundle-completeness-2": {
+      "markers": [
+        "empty-markdown-retained",
+        "three-text-files",
+        "uppercase-extension-excluded",
+        "sorted-output"
+      ],
+      "purpose": "附件完整性：空 .txt/.md 仍占一个 files 项；非文本附件不入统计，files 排序。",
+      "categoryCounts": null
+    },
+    "reliability-new-test-ownership-1": {
+      "markers": [
+        "test-over-docs",
+        "test-over-config",
+        "test-over-other",
+        "six-entries"
+      ],
+      "purpose": "测试归属优先：/tests/ 和 /__tests__/ 段将文档、配置、二进制资源归入 test。",
+      "categoryCounts": {
+        "source": 1,
+        "test": 3,
+        "docs": 1,
+        "config": 1,
+        "other": 0
+      }
+    },
+    "reliability-new-test-ownership-2": {
+      "markers": [
+        "test-over-config",
+        "test-over-other",
+        "test-over-source",
+        "five-entries"
+      ],
+      "purpose": "测试归属优先：/tests/ 和 /__tests__/ 段将文档、配置、二进制资源归入 test。",
+      "categoryCounts": {
+        "source": 1,
+        "test": 3,
+        "docs": 1,
+        "config": 0,
+        "other": 0
+      }
+    },
+    "reliability-new-suffix-dispatch-1": {
+      "markers": [
+        "misleading-docs-directory",
+        "misleading-src-directory",
+        "misleading-config-directory",
+        "six-entries"
+      ],
+      "purpose": "后缀分派：source/docs/config 等词出现在目录名不构成类别规则。",
+      "categoryCounts": {
+        "source": 3,
+        "test": 0,
+        "docs": 1,
+        "config": 1,
+        "other": 1
+      }
+    },
+    "reliability-new-suffix-dispatch-2": {
+      "markers": [
+        "directory-word-decoys",
+        "mjs-cjs-source",
+        "archive-other",
+        "five-entries"
+      ],
+      "purpose": "后缀分派：source/docs/config 等词出现在目录名不构成类别规则。",
+      "categoryCounts": {
+        "source": 2,
+        "test": 0,
+        "docs": 1,
+        "config": 1,
+        "other": 1
+      }
+    },
+    "reliability-new-test-name-boundary-1": {
+      "markers": [
+        "test-js",
+        "test-mjs",
+        "test-cjs",
+        "test-ts-is-source",
+        "spec-js-is-source",
+        "test-jsx-is-source"
+      ],
+      "purpose": "精确测试命名：仅 .test.[cm]?js 命名模式；.test.ts 和 .spec.js 仍按源码扩展名。",
+      "categoryCounts": {
+        "source": 3,
+        "test": 3,
+        "docs": 0,
+        "config": 0,
+        "other": 0
+      }
+    },
+    "reliability-new-test-name-boundary-2": {
+      "markers": [
+        "test-tsx-is-source",
+        "contains-test-not-test",
+        "spec-mjs-is-source",
+        "source-map-other",
+        "six-entries"
+      ],
+      "purpose": "精确测试命名：仅 .test.[cm]?js 命名模式；.test.ts 和 .spec.js 仍按源码扩展名。",
+      "categoryCounts": {
+        "source": 3,
+        "test": 2,
+        "docs": 0,
+        "config": 0,
+        "other": 1
+      }
+    },
+    "reliability-new-manifest-conservation-1": {
+      "markers": [
+        "duplicates-retained",
+        "deleted-retained",
+        "mixed-change-types",
+        "seven-entries",
+        "nonuniform-category-counts"
+      ],
+      "purpose": "条目守恒：重复路径保留、added/modified/deleted 均计入，输出原顺序，total 等于条目数。",
+      "categoryCounts": {
+        "source": 3,
+        "test": 0,
+        "docs": 1,
+        "config": 1,
+        "other": 2
+      }
+    },
+    "reliability-new-manifest-conservation-2": {
+      "markers": [
+        "duplicates-retained",
+        "deleted-retained",
+        "eight-entries",
+        "two-other",
+        "category-imbalance"
+      ],
+      "purpose": "条目守恒：重复路径保留、added/modified/deleted 均计入，输出原顺序，total 等于条目数。",
+      "categoryCounts": {
+        "source": 2,
+        "test": 0,
+        "docs": 1,
+        "config": 3,
+        "other": 2
+      }
+    },
+    "reliability-new-literal-path-interop-1": {
+      "markers": [
+        "top-level-tests-is-source",
+        "nested-tests-is-test",
+        "backslash-not-test",
+        "case-sensitive",
+        "uppercase-ext-other",
+        "seven-entries"
+      ],
+      "purpose": "原串路径互操作：大小写敏感；反斜杠不是 /tests/ 段；顶层 tests/ 不含前导 /。",
+      "categoryCounts": {
+        "source": 2,
+        "test": 2,
+        "docs": 0,
+        "config": 1,
+        "other": 2
+      }
+    },
+    "reliability-new-literal-path-interop-2": {
+      "markers": [
+        "top-level-dunder-tests-is-docs",
+        "nested-dunder-tests-is-test",
+        "backslash-source-extension",
+        "case-sensitive-directory",
+        "uppercase-json-other",
+        "seven-entries"
+      ],
+      "purpose": "原串路径互操作：大小写敏感；反斜杠不是 /tests/ 段；顶层 tests/ 不含前导 /。",
+      "categoryCounts": {
+        "source": 2,
+        "test": 1,
+        "docs": 1,
+        "config": 0,
+        "other": 3
+      }
+    }
+  }
+}

@@ -21,6 +21,7 @@ import { observedSnapshotDigest, type ObservedTransport } from "./observed.ts";
 import { captureTaskProjection } from "./development.ts";
 import { adaptiveTaskInputDigest } from "./task-input.ts";
 import { auditRunVerification } from "./run-verification.ts";
+import { RELIABILITY_BASELINE } from "./reliability-baseline.ts";
 
 const id = z.string().min(1);
 const sha = z.string().regex(/^[a-f0-9]{64}$/);
@@ -40,6 +41,7 @@ const planSchema = z.strictObject({
     "routing-output-cap-v1",
     "routing-layout-v1",
     "routing-demo-increment-v1",
+    "routing-reliability-v1",
   ]),
   maxService5xx: z.literal(2).optional(),
   stage: z.enum(["matrix", "confirmation"]),
@@ -51,7 +53,7 @@ const planSchema = z.strictObject({
   model: id,
   repeats: z.number().int().min(1).max(3),
   cases: z.array(observedCaseSchema).min(2).max(20),
-  conditions: z.array(conditionSchema).min(2).max(8),
+  conditions: z.array(conditionSchema).min(1).max(8),
   prior: z.strictObject({
     experimentId: id,
     report: blobSchema,
@@ -141,17 +143,18 @@ export function freezeDiagnosticPlan(input: unknown) {
     "explicit fixed-output failure policy required",
   );
   const capComparison = plan.protocol === "routing-output-cap-v1";
+  const reliability = plan.protocol === "routing-reliability-v1";
   const factorComparison =
     plan.protocol === "routing-layout-v1" || plan.protocol === "routing-demo-increment-v1";
   check(
-    capComparison || factorComparison
+    capComparison || factorComparison || reliability
       ? plan.runMs === 90000 && plan.decisionMs === 85000
       : plan.runMs === 30000 &&
           plan.decisionMs === 28000 &&
           plan.conditions.every((c) => c.output === 256 || c.output === 512),
     "protocol output/time bounds drift",
   );
-  if (plan.protocol !== "routing-diagnostic-v1" && !factorComparison) {
+  if (plan.protocol !== "routing-diagnostic-v1" && !factorComparison && !reliability) {
     check(
       plan.stage === "confirmation" &&
         same(
@@ -183,6 +186,19 @@ export function freezeDiagnosticPlan(input: unknown) {
       "factor comparison conditions drift",
     );
   }
+  if (reliability)
+    check(
+      plan.stage === "confirmation" &&
+        plan.conditions.length === 1 &&
+        plan.conditions[0]!.id === "v2-t1024-d0" &&
+        plan.conditions[0]!.layout === 2 &&
+        plan.conditions[0]!.output === 1024 &&
+        plan.conditions[0]!.demos === 0 &&
+        plan.conditions[0]!.snapshotDigest === RELIABILITY_BASELINE.snapshotDigest &&
+        plan.model === RELIABILITY_BASELINE.model &&
+        plan.serviceId === RELIABILITY_BASELINE.endpoint,
+      "reliability candidate drift",
+    );
   check(new Set(plan.cases.map((c) => c.id)).size === plan.cases.length, "duplicate case");
   check(
     new Set(plan.conditions.map((c) => c.id)).size === plan.conditions.length,
@@ -202,7 +218,8 @@ export function freezeDiagnosticPlan(input: unknown) {
         new Set(plan.conditions.map((c) => `${c.layout}/${c.output}/${c.demos}`)).size === 8,
       "complete factorial matrix required",
     );
-  } else check(plan.conditions.length === 2, "confirmation requires two frozen conditions");
+  } else
+    check(plan.conditions.length === (reliability ? 1 : 2), "confirmation condition count drift");
   if (plan.mode === "real") {
     check(plan.cases.length === (plan.stage === "matrix" ? 10 : 20), "real case count drift");
     check(plan.repeats === (plan.stage === "matrix" ? 2 : 3), "real repeat count drift");
@@ -859,6 +876,7 @@ export class DiagnosticExperiment {
       p.protocol !== "routing-output-cap-v1" &&
       p.protocol !== "routing-layout-v1" &&
       p.protocol !== "routing-demo-increment-v1" &&
+      p.protocol !== "routing-reliability-v1" &&
       complete &&
       metrics[0]!.jsonValidRate >= 0.95 - 1e-12 &&
       metrics[0]!.successRate >= 0.9 - 1e-12 &&
@@ -980,6 +998,16 @@ export class DiagnosticExperiment {
               service5xxPolicy: "up-to-two-failed-slots-counted-unknown-no-retry",
             };
           })()
+        : {}),
+      ...(p.protocol === "routing-reliability-v1"
+        ? {
+            reliabilityPassed:
+              !!complete &&
+              metrics[0]!.jsonValidRate >= 0.95 - 1e-12 &&
+              metrics[0]!.successRate >= 0.9 - 1e-12 &&
+              metrics[0]!.misrouteRate <= 0.05 + 1e-12 &&
+              metrics[0]!.criticalFailures === 0,
+          }
         : {}),
       receipts,
       partialRuns: s.admitted

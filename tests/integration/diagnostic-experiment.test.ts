@@ -10,6 +10,8 @@ import {
   openDiagnosticRunner,
 } from "../../src/app/experiment/diagnostic-runner.ts";
 import { DiagnosticExperiment, freezeDiagnosticPlan } from "../../src/app/experiment/diagnostic.ts";
+import { reliabilityDataset } from "../../src/app/experiment/reliability-data.ts";
+import { RELIABILITY_BASELINE } from "../../src/app/experiment/reliability-baseline.ts";
 import { diagnosticDataset } from "../../src/app/experiment/diagnostic-data.ts";
 import { openInstance, type AppInstance } from "../../src/app/instance.ts";
 import { canonicalJson, digestOf } from "../../src/storage/blobs.ts";
@@ -32,9 +34,11 @@ class Model extends LlmDecisionProvider {
     if (this.fault === "service5xx")
       throw Object.assign(new Error("503 overloaded"), { status: 503 });
     if (this.fault === "lost") throw new Error("lost service response");
-    const c = [...diagnosticDataset("matrix"), ...diagnosticDataset("confirmation")].find(
-      (c) => c.task.goal === r.view!.goal,
-    )!;
+    const c = [
+      ...diagnosticDataset("matrix"),
+      ...diagnosticDataset("confirmation"),
+      ...reliabilityDataset(),
+    ].find((c) => c.task.goal === r.view!.goal)!;
     const output = resolveLlmDemosRequest(r).max_tokens;
     const truncated =
       this.fault === "all-empty" ||
@@ -64,6 +68,7 @@ class Model extends LlmDecisionProvider {
 let parent: string;
 let fixedParent: string;
 let capParent: string;
+let reliabilityParent: string;
 const opened = new Set<AppInstance>();
 const roots: string[] = [];
 beforeAll(() => {
@@ -98,7 +103,17 @@ beforeAll(() => {
     capParent,
   ]);
 });
+beforeAll(() => {
+  reliabilityParent = mkdtempSync(join(tmpdir(), "proteus-reliability-parent-"));
+  execFileSync("tar", [
+    "-xzf",
+    "docs/experiments/results/routing-demo-increment-v1/evidence.tar.gz",
+    "-C",
+    reliabilityParent,
+  ]);
+});
 afterAll(() => {
+  rmSync(reliabilityParent, { recursive: true, force: true });
   rmSync(capParent, { recursive: true, force: true });
   rmSync(parent, { recursive: true, force: true });
   rmSync(fixedParent, { recursive: true, force: true });
@@ -107,7 +122,13 @@ function fixture(
   mode: Model["fault"] = "none",
   opts?: {
     parent?: string;
-    stage?: "confirmation" | "fixed-output" | "output-cap" | "layout" | "demo-increment";
+    stage?:
+      | "confirmation"
+      | "fixed-output"
+      | "output-cap"
+      | "layout"
+      | "demo-increment"
+      | "reliability";
     small?: boolean;
   },
 ) {
@@ -150,6 +171,44 @@ async function stoppedServiceParent() {
 }
 
 describe("O2 原始诊断：冻结额度、同正文计数和受约束执行", () => {
+  it("新资料复用原候选快照，单臂完整计量并保留历史未知", async () => {
+    const h = fixture("none", { parent: reliabilityParent, stage: "reliability" });
+    expect(h.frozen.plan.conditions).toHaveLength(1);
+    expect(h.frozen.plan.conditions[0]).toMatchObject({
+      id: RELIABILITY_BASELINE.conditionId,
+      snapshotDigest: RELIABILITY_BASELINE.snapshotDigest,
+    });
+    expect(() =>
+      freezeDiagnosticPlan({
+        ...h.frozen.plan,
+        conditions: [{ ...h.frozen.plan.conditions[0], snapshotDigest: "f".repeat(64) }],
+      }),
+    ).toThrow(/candidate drift/);
+    const r = await finish(h);
+    expect(r).toMatchObject({
+      engineering: "passed",
+      reliabilityPassed: true,
+      plannedRuns: 2,
+      sentModelCalls: 2,
+      totalUnknownUsageCallsIncludingHistory: 2,
+      activeUnchanged: true,
+    });
+    expect(h.transport.decisionDeadlines.every((ms) => ms > 28000 && ms <= 85000)).toBe(true);
+  });
+  it("新资料未知使用量不返还、不重发且不能标通过", async () => {
+    const h = fixture("service5xx", { parent: reliabilityParent, stage: "reliability" });
+    await h.experiment.runNext();
+    h.transport.fault = "none";
+    const r = await finish(h);
+    expect(r).toMatchObject({
+      dispatchComplete: true,
+      engineering: "incomplete",
+      reliabilityPassed: false,
+      unknownUsageCalls: 1,
+      totalUnknownUsageCallsIncludingHistory: 3,
+    });
+    expect(h.transport.calls).toBe(2);
+  });
   it("布局与示例分阶段冻结，平局选零示例且继承累计未知", async () => {
     const layout = fixture("none", { parent: capParent, stage: "layout" });
     expect(layout.frozen.plan.conditions.map((c) => c.id)).toEqual(["v1-t1024-d0", "v2-t1024-d0"]);

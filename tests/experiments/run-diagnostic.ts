@@ -8,6 +8,7 @@ import { LlmDecisionProvider } from "../../src/adapters/decision-llm/index.ts";
 import { experimentServiceConfig } from "../../src/app/experiment/service-config.ts";
 import { prepareDiagnosticRunner } from "../../src/app/experiment/diagnostic-runner.ts";
 import { DiagnosticExperiment } from "../../src/app/experiment/diagnostic.ts";
+import { reliabilityDataset } from "../../src/app/experiment/reliability-data.ts";
 import { diagnosticDataset } from "../../src/app/experiment/diagnostic-data.ts";
 import { canonicalJson, digestOf } from "../../src/storage/blobs.ts";
 import type { DecisionRequest, DecisionResult } from "../../src/decision/index.ts";
@@ -27,7 +28,7 @@ if (args[0] === "--report" && args.length === 2) {
 } else {
   if (!["--fixture", "--real"].includes(args[0] ?? ""))
     throw new Error(
-      "Use --real|--fixture --output NEW_DIR --parent SEALED_DIR --stage matrix|confirmation|fixed-output|output-cap|layout|demo-increment [--claude-settings FILE]",
+      "Use --real|--fixture --output NEW_DIR --parent SEALED_DIR --stage matrix|confirmation|fixed-output|output-cap|layout|demo-increment|reliability [--claude-settings FILE]",
     );
   const extra = new Map<string, string>();
   for (let i = 1; i < args.length; i += 2) {
@@ -49,7 +50,8 @@ if (args[0] === "--report" && args.length === 2) {
     stage !== "fixed-output" &&
     stage !== "output-cap" &&
     stage !== "layout" &&
-    stage !== "demo-increment"
+    stage !== "demo-increment" &&
+    stage !== "reliability"
   )
     throw new Error("invalid stage");
   const mode = args[0] === "--real" ? "real" : "fixture";
@@ -59,14 +61,17 @@ if (args[0] === "--report" && args.length === 2) {
   }).trim();
   if (mode === "real" && sourceTreeDirty)
     throw new Error("Commit implementation before real generation");
-  const fixtureDataset = diagnosticDataset(
-    stage === "fixed-output" ||
-      stage === "output-cap" ||
-      stage === "layout" ||
-      stage === "demo-increment"
-      ? "confirmation"
-      : stage,
-  );
+  const fixtureDataset =
+    stage === "reliability"
+      ? reliabilityDataset()
+      : diagnosticDataset(
+          stage === "fixed-output" ||
+            stage === "output-cap" ||
+            stage === "layout" ||
+            stage === "demo-increment"
+            ? "confirmation"
+            : stage,
+        );
   class Fixture extends LlmDecisionProvider {
     readonly labels = new Map(fixtureDataset.map((c) => [c.task.goal, c.expectedChoice]));
     constructor() {
@@ -102,7 +107,10 @@ if (args[0] === "--report" && args.length === 2) {
       ? new LlmDecisionProvider({
           ...experimentServiceConfig(extra.get("--claude-settings")).config,
           requestTimeoutMs:
-            stage === "output-cap" || stage === "layout" || stage === "demo-increment"
+            stage === "output-cap" ||
+            stage === "layout" ||
+            stage === "demo-increment" ||
+            stage === "reliability"
               ? 85000
               : 28000,
         })

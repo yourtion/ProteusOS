@@ -19,6 +19,8 @@ import { observedSnapshotDigest, type ObservedTransport } from "./observed.ts";
 import { auditRunVerification } from "./run-verification.ts";
 import { DiagnosticExperiment, type DiagnosticCondition } from "./diagnostic.ts";
 import { diagnosticDataset } from "./diagnostic-data.ts";
+import { reliabilityDataset } from "./reliability-data.ts";
+import { RELIABILITY_BASELINE } from "./reliability-baseline.ts";
 
 export function openDiagnosticRunner(
   root: string,
@@ -63,7 +65,14 @@ export function prepareDiagnosticRunner(
   transport: ObservedTransport,
   opts: {
     parent: string;
-    stage: "matrix" | "confirmation" | "fixed-output" | "output-cap" | "layout" | "demo-increment";
+    stage:
+      | "matrix"
+      | "confirmation"
+      | "fixed-output"
+      | "output-cap"
+      | "layout"
+      | "demo-increment"
+      | "reliability";
     mode: "real" | "fixture";
     sourceCommit: string;
     small?: boolean;
@@ -145,6 +154,14 @@ export function prepareDiagnosticRunner(
           : ["v1-t1024-d0", "v2-t1024-d0"].includes(prior.developmentRecommendation ?? "")),
       "factor comparison requires qualified sealed parent",
     );
+  else if (opts.stage === "reliability")
+    check(
+      prior.protocol === "routing-demo-increment-v1" &&
+        prior.engineering === "passed" &&
+        prior.dispatchComplete &&
+        prior.developmentRecommendation === RELIABILITY_BASELINE.conditionId,
+      "reliability requires qualified sealed baseline parent",
+    );
   else
     check(
       prior.protocol === "routing-diagnostic-v1" &&
@@ -160,7 +177,8 @@ export function prepareDiagnosticRunner(
   cpSync(join(opts.parent, "instance", "blobs"), join(root, "blobs"), { recursive: true });
   const capComparison = opts.stage === "output-cap";
   const factorComparison = opts.stage === "layout" || opts.stage === "demo-increment";
-  const extended = capComparison || factorComparison;
+  const reliability = opts.stage === "reliability";
+  const extended = capComparison || factorComparison || reliability;
   if (extended)
     check(
       digestOf(canonicalJson(parentManifest)) === prior.manifestDigest,
@@ -191,9 +209,18 @@ export function prepareDiagnosticRunner(
     const parentSnapshot =
       opts.stage === "fixed-output" || extended
         ? prior.metrics!.find(
-            (c) => c.id === (factorComparison ? prior.developmentRecommendation : "v1-t512-d0"),
+            (c) =>
+              c.id ===
+              (factorComparison || reliability ? prior.developmentRecommendation : "v1-t512-d0"),
           )!.snapshotId
         : (prior.selection?.snapshotId ?? prior.selected!.snapshotId);
+    if (reliability)
+      check(
+        observedSnapshotDigest(app, parentSnapshot) === RELIABILITY_BASELINE.snapshotDigest &&
+          parentManifest.model === RELIABILITY_BASELINE.model &&
+          parentManifest.serviceId === RELIABILITY_BASELINE.endpoint,
+        "frozen candidate baseline drift",
+      );
     const base = app.kernel.resolveSnapshot(parentSnapshot);
     const routing = base.versions.get("routing-policy")!;
     const old = parseLlmDemosPolicy(JSON.parse(app.blobs.read(routing.contentRef)));
@@ -234,11 +261,13 @@ export function prepareDiagnosticRunner(
       );
     }
     const conditions: DiagnosticCondition[] = [];
-    for (const output of factorComparison
-      ? ([1024] as const)
-      : capComparison
-        ? ([1024, 2048] as const)
-        : ([256, 512] as const)) {
+    for (const output of reliability
+      ? ([] as const)
+      : factorComparison
+        ? ([1024] as const)
+        : capComparison
+          ? ([1024, 2048] as const)
+          : ([256, 512] as const)) {
       const original = app.storage.getArtifactVersion(old.fixed.basePolicy.versionId)!;
       const content = {
         ...old.fixed.basePolicy.content,
@@ -255,12 +284,14 @@ export function prepareDiagnosticRunner(
         scope: "organism:organism-default",
         createdBy: "principal-local",
       });
-      for (const layout of capComparison
-        ? ([1] as const)
-        : factorComparison && opts.stage === "demo-increment"
-          ? ([prior.developmentRecommendation!.startsWith("v2") ? 2 : 1] as const)
-          : ([1, 2] as const))
-        for (const demos of capComparison || opts.stage === "layout"
+      for (const layout of reliability
+        ? ([2] as const)
+        : capComparison
+          ? ([1] as const)
+          : factorComparison && opts.stage === "demo-increment"
+            ? ([prior.developmentRecommendation!.startsWith("v2") ? 2 : 1] as const)
+            : ([1, 2] as const))
+        for (const demos of reliability || capComparison || opts.stage === "layout"
           ? ([0] as const)
           : ([0, 2] as const)) {
           const policy = createLlmDemosPolicy({
@@ -296,7 +327,21 @@ export function prepareDiagnosticRunner(
           });
         }
     }
-    let selectedConditions = conditions;
+    const candidate = reliability
+      ? prior.metrics!.find((c) => c.id === RELIABILITY_BASELINE.conditionId)!
+      : null;
+    let selectedConditions = candidate
+      ? [
+          {
+            id: candidate.id,
+            layout: candidate.layout,
+            output: candidate.output,
+            demos: candidate.demos,
+            snapshotId: candidate.snapshotId,
+            snapshotDigest: candidate.snapshotDigest,
+          },
+        ]
+      : conditions;
     if (opts.stage === "fixed-output") {
       selectedConditions = [
         conditions.find((c) => c.id === "v1-t512-d0")!,
@@ -348,18 +393,24 @@ export function prepareDiagnosticRunner(
         ? "confirmation"
         : (opts.stage as "matrix" | "confirmation");
     // Reuse the parent's frozen tasks and judges; do not regenerate a post-observation cohort.
-    const data = extended ? parentManifest.cases : diagnosticDataset(stage);
+    const data = reliability
+      ? reliabilityDataset()
+      : extended
+        ? parentManifest.cases
+        : diagnosticDataset(stage);
     if (extended) check(Array.isArray(data) && data.length >= 2, "parent cases missing");
     const frozen = experiment.register({
-      protocol: factorComparison
-        ? opts.stage === "layout"
-          ? "routing-layout-v1"
-          : "routing-demo-increment-v1"
-        : capComparison
-          ? "routing-output-cap-v1"
-          : opts.stage === "fixed-output"
-            ? "routing-fixed-output-v1"
-            : "routing-diagnostic-v1",
+      protocol: reliability
+        ? "routing-reliability-v1"
+        : factorComparison
+          ? opts.stage === "layout"
+            ? "routing-layout-v1"
+            : "routing-demo-increment-v1"
+          : capComparison
+            ? "routing-output-cap-v1"
+            : opts.stage === "fixed-output"
+              ? "routing-fixed-output-v1"
+              : "routing-diagnostic-v1",
       ...(opts.stage === "fixed-output" || extended ? { maxService5xx: 2 } : {}),
       stage,
       mode: opts.mode,

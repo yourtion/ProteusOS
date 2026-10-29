@@ -1,0 +1,494 @@
+[
+  {
+    "id": "reliability-new-utf8-budget-1",
+    "familyId": "reliability-new-utf8-budget",
+    "split": "search",
+    "critical": true,
+    "task": {
+      "goal": "传输配额核对：为 payload.txt 和 legend.md 生成原始文本度量，逐文件列出 UTF-8 字节、空白词、行、行首 # 数，并给总计；emoji 和组合音标不得当作单字节。changed-files.json 是无关路径附件。",
+      "inputs": [
+        {
+          "name": "payload.txt",
+          "content": "你好 café é 🙂\n"
+        },
+        {
+          "name": "legend.md",
+          "content": "# Payload\n字节 budget\n"
+        },
+        {
+          "name": "changed-files.json",
+          "content": "{\"changes\":[{\"path\":\"src/word-count.test.ts\",\"changeType\":\"modified\"},{\"path\":\"docs/changed-files.md\",\"changeType\":\"added\"},{\"path\":\"config/lines.yaml\",\"changeType\":\"deleted\"}]}"
+        }
+      ]
+    },
+    "expectedChoice": "local-process",
+    "schema": "{\n  \"$schema\": \"https://json-schema.org/draft/2020-12/schema\",\n  \"type\": \"object\",\n  \"required\": [\"files\", \"totals\"],\n  \"additionalProperties\": false,\n  \"properties\": {\n    \"files\": {\n      \"type\": \"array\",\n      \"minItems\": 1,\n      \"items\": {\n        \"type\": \"object\",\n        \"required\": [\"path\", \"bytes\", \"lines\", \"words\", \"headings\"],\n        \"additionalProperties\": false,\n        \"properties\": {\n          \"path\": { \"type\": \"string\" },\n          \"bytes\": { \"type\": \"integer\", \"minimum\": 0 },\n          \"lines\": { \"type\": \"integer\", \"minimum\": 0 },\n          \"words\": { \"type\": \"integer\", \"minimum\": 0 },\n          \"headings\": { \"type\": \"integer\", \"minimum\": 0 }\n        }\n      }\n    },\n    \"totals\": {\n      \"type\": \"object\",\n      \"required\": [\"files\", \"bytes\", \"lines\", \"words\", \"headings\"],\n      \"additionalProperties\": false,\n      \"properties\": {\n        \"files\": { \"type\": \"integer\", \"minimum\": 1 },\n        \"bytes\": { \"type\": \"integer\", \"minimum\": 0 },\n        \"lines\": { \"type\": \"integer\", \"minimum\": 0 },\n        \"words\": { \"type\": \"integer\", \"minimum\": 0 },\n        \"headings\": { \"type\": \"integer\", \"minimum\": 0 }\n      }\n    }\n  }\n}\n",
+    "expected": "{\"files\":[{\"path\":\"legend.md\",\"bytes\":24,\"lines\":2,\"words\":4,\"headings\":1},{\"path\":\"payload.txt\",\"bytes\":22,\"lines\":1,\"words\":4,\"headings\":0}],\"totals\":{\"files\":2,\"bytes\":46,\"lines\":3,\"words\":8,\"headings\":1}}"
+  },
+  {
+    "id": "reliability-new-utf8-budget-2",
+    "familyId": "reliability-new-utf8-budget",
+    "split": "search",
+    "critical": false,
+    "task": {
+      "goal": "核算消息封装的存储开销：对 packet.md 与 units.txt 输出完整逐文件文本统计及总计，bytes 必须按 UTF-8 原串，words 以空白分隔，lines 按 LF，headings 按行首 #；路径清单只作背景。",
+      "inputs": [
+        {
+          "name": "packet.md",
+          "content": "# 数据包\n🚀🚀 naïve\n"
+        },
+        {
+          "name": "units.txt",
+          "content": "é é\n配置 source test"
+        },
+        {
+          "name": "changed-files.json",
+          "content": "{\"changes\":[{\"path\":\"src/word-count.test.ts\",\"changeType\":\"modified\"},{\"path\":\"docs/changed-files.md\",\"changeType\":\"added\"},{\"path\":\"config/lines.yaml\",\"changeType\":\"deleted\"}]}"
+        }
+      ]
+    },
+    "expectedChoice": "local-process",
+    "schema": "{\n  \"$schema\": \"https://json-schema.org/draft/2020-12/schema\",\n  \"type\": \"object\",\n  \"required\": [\"files\", \"totals\"],\n  \"additionalProperties\": false,\n  \"properties\": {\n    \"files\": {\n      \"type\": \"array\",\n      \"minItems\": 1,\n      \"items\": {\n        \"type\": \"object\",\n        \"required\": [\"path\", \"bytes\", \"lines\", \"words\", \"headings\"],\n        \"additionalProperties\": false,\n        \"properties\": {\n          \"path\": { \"type\": \"string\" },\n          \"bytes\": { \"type\": \"integer\", \"minimum\": 0 },\n          \"lines\": { \"type\": \"integer\", \"minimum\": 0 },\n          \"words\": { \"type\": \"integer\", \"minimum\": 0 },\n          \"headings\": { \"type\": \"integer\", \"minimum\": 0 }\n        }\n      }\n    },\n    \"totals\": {\n      \"type\": \"object\",\n      \"required\": [\"files\", \"bytes\", \"lines\", \"words\", \"headings\"],\n      \"additionalProperties\": false,\n      \"properties\": {\n        \"files\": { \"type\": \"integer\", \"minimum\": 1 },\n        \"bytes\": { \"type\": \"integer\", \"minimum\": 0 },\n        \"lines\": { \"type\": \"integer\", \"minimum\": 0 },\n        \"words\": { \"type\": \"integer\", \"minimum\": 0 },\n        \"headings\": { \"type\": \"integer\", \"minimum\": 0 }\n      }\n    }\n  }\n}\n",
+    "expected": "{\"files\":[{\"path\":\"packet.md\",\"bytes\":28,\"lines\":2,\"words\":4,\"headings\":1},{\"path\":\"units.txt\",\"bytes\":25,\"lines\":2,\"words\":5,\"headings\":0}],\"totals\":{\"files\":2,\"bytes\":53,\"lines\":4,\"words\":9,\"headings\":1}}"
+  },
+  {
+    "id": "reliability-new-record-framing-1",
+    "familyId": "reliability-new-record-framing",
+    "split": "search",
+    "critical": true,
+    "task": {
+      "goal": "导出器记录框架验收：对 frames.txt 与 trailing.md 原样统计全部文本指标和总计，以 LF 分行，末尾 LF 不新增一行，保留内部空行与 CR 字节。不要把 changed-files.json 当记录正文或执行文件分类。",
+      "inputs": [
+        {
+          "name": "frames.txt",
+          "content": "first\r\n\r\nthird"
+        },
+        {
+          "name": "trailing.md",
+          "content": "# end\n\n"
+        },
+        {
+          "name": "changed-files.json",
+          "content": "{\"changes\":[{\"path\":\"src/word-count.test.ts\",\"changeType\":\"modified\"},{\"path\":\"docs/changed-files.md\",\"changeType\":\"added\"},{\"path\":\"config/lines.yaml\",\"changeType\":\"deleted\"}]}"
+        }
+      ]
+    },
+    "expectedChoice": "local-process",
+    "schema": "{\n  \"$schema\": \"https://json-schema.org/draft/2020-12/schema\",\n  \"type\": \"object\",\n  \"required\": [\"files\", \"totals\"],\n  \"additionalProperties\": false,\n  \"properties\": {\n    \"files\": {\n      \"type\": \"array\",\n      \"minItems\": 1,\n      \"items\": {\n        \"type\": \"object\",\n        \"required\": [\"path\", \"bytes\", \"lines\", \"words\", \"headings\"],\n        \"additionalProperties\": false,\n        \"properties\": {\n          \"path\": { \"type\": \"string\" },\n          \"bytes\": { \"type\": \"integer\", \"minimum\": 0 },\n          \"lines\": { \"type\": \"integer\", \"minimum\": 0 },\n          \"words\": { \"type\": \"integer\", \"minimum\": 0 },\n          \"headings\": { \"type\": \"integer\", \"minimum\": 0 }\n        }\n      }\n    },\n    \"totals\": {\n      \"type\": \"object\",\n      \"required\": [\"files\", \"bytes\", \"lines\", \"words\", \"headings\"],\n      \"additionalProperties\": false,\n      \"properties\": {\n        \"files\": { \"type\": \"integer\", \"minimum\": 1 },\n        \"bytes\": { \"type\": \"integer\", \"minimum\": 0 },\n        \"lines\": { \"type\": \"integer\", \"minimum\": 0 },\n        \"words\": { \"type\": \"integer\", \"minimum\": 0 },\n        \"headings\": { \"type\": \"integer\", \"minimum\": 0 }\n      }\n    }\n  }\n}\n",
+    "expected": "{\"files\":[{\"path\":\"frames.txt\",\"bytes\":14,\"lines\":3,\"words\":2,\"headings\":0},{\"path\":\"trailing.md\",\"bytes\":7,\"lines\":2,\"words\":2,\"headings\":1}],\"totals\":{\"files\":2,\"bytes\":21,\"lines\":5,\"words\":4,\"headings\":1}}"
+  },
+  {
+    "id": "reliability-new-record-framing-2",
+    "familyId": "reliability-new-record-framing",
+    "split": "search",
+    "critical": false,
+    "task": {
+      "goal": "核对流式记录落盘的最后一帧：统计 stream.txt、blank.md 的 bytes/lines/words/headings 和整体汇总；按实际 LF 及尾行处理，不按视觉段落计数，伴随路径列表无须处理。",
+      "inputs": [
+        {
+          "name": "stream.txt",
+          "content": "one\ntwo\nlast"
+        },
+        {
+          "name": "blank.md",
+          "content": "\n\n"
+        },
+        {
+          "name": "changed-files.json",
+          "content": "{\"changes\":[{\"path\":\"src/word-count.test.ts\",\"changeType\":\"modified\"},{\"path\":\"docs/changed-files.md\",\"changeType\":\"added\"},{\"path\":\"config/lines.yaml\",\"changeType\":\"deleted\"}]}"
+        }
+      ]
+    },
+    "expectedChoice": "local-process",
+    "schema": "{\n  \"$schema\": \"https://json-schema.org/draft/2020-12/schema\",\n  \"type\": \"object\",\n  \"required\": [\"files\", \"totals\"],\n  \"additionalProperties\": false,\n  \"properties\": {\n    \"files\": {\n      \"type\": \"array\",\n      \"minItems\": 1,\n      \"items\": {\n        \"type\": \"object\",\n        \"required\": [\"path\", \"bytes\", \"lines\", \"words\", \"headings\"],\n        \"additionalProperties\": false,\n        \"properties\": {\n          \"path\": { \"type\": \"string\" },\n          \"bytes\": { \"type\": \"integer\", \"minimum\": 0 },\n          \"lines\": { \"type\": \"integer\", \"minimum\": 0 },\n          \"words\": { \"type\": \"integer\", \"minimum\": 0 },\n          \"headings\": { \"type\": \"integer\", \"minimum\": 0 }\n        }\n      }\n    },\n    \"totals\": {\n      \"type\": \"object\",\n      \"required\": [\"files\", \"bytes\", \"lines\", \"words\", \"headings\"],\n      \"additionalProperties\": false,\n      \"properties\": {\n        \"files\": { \"type\": \"integer\", \"minimum\": 1 },\n        \"bytes\": { \"type\": \"integer\", \"minimum\": 0 },\n        \"lines\": { \"type\": \"integer\", \"minimum\": 0 },\n        \"words\": { \"type\": \"integer\", \"minimum\": 0 },\n        \"headings\": { \"type\": \"integer\", \"minimum\": 0 }\n      }\n    }\n  }\n}\n",
+    "expected": "{\"files\":[{\"path\":\"blank.md\",\"bytes\":2,\"lines\":2,\"words\":0,\"headings\":0},{\"path\":\"stream.txt\",\"bytes\":12,\"lines\":3,\"words\":3,\"headings\":0}],\"totals\":{\"files\":2,\"bytes\":14,\"lines\":5,\"words\":3,\"headings\":0}}"
+  },
+  {
+    "id": "reliability-new-token-boundaries-1",
+    "familyId": "reliability-new-token-boundaries",
+    "split": "search",
+    "critical": true,
+    "task": {
+      "goal": "检索词法预检：为 tokens.txt 和 terms.md 出具完整文本统计表及总计，词只按空白拆分；逗号、连字符与连续汉字不另拆，tab 和不换行空格仍是分隔符。忽略随附变更路径的类别。",
+      "inputs": [
+        {
+          "name": "tokens.txt",
+          "content": "alpha,beta\tgamma-delta 中文词串\n"
+        },
+        {
+          "name": "terms.md",
+          "content": "#Index\nsource/test/docs　config other"
+        },
+        {
+          "name": "changed-files.json",
+          "content": "{\"changes\":[{\"path\":\"src/word-count.test.ts\",\"changeType\":\"modified\"},{\"path\":\"docs/changed-files.md\",\"changeType\":\"added\"},{\"path\":\"config/lines.yaml\",\"changeType\":\"deleted\"}]}"
+        }
+      ]
+    },
+    "expectedChoice": "local-process",
+    "schema": "{\n  \"$schema\": \"https://json-schema.org/draft/2020-12/schema\",\n  \"type\": \"object\",\n  \"required\": [\"files\", \"totals\"],\n  \"additionalProperties\": false,\n  \"properties\": {\n    \"files\": {\n      \"type\": \"array\",\n      \"minItems\": 1,\n      \"items\": {\n        \"type\": \"object\",\n        \"required\": [\"path\", \"bytes\", \"lines\", \"words\", \"headings\"],\n        \"additionalProperties\": false,\n        \"properties\": {\n          \"path\": { \"type\": \"string\" },\n          \"bytes\": { \"type\": \"integer\", \"minimum\": 0 },\n          \"lines\": { \"type\": \"integer\", \"minimum\": 0 },\n          \"words\": { \"type\": \"integer\", \"minimum\": 0 },\n          \"headings\": { \"type\": \"integer\", \"minimum\": 0 }\n        }\n      }\n    },\n    \"totals\": {\n      \"type\": \"object\",\n      \"required\": [\"files\", \"bytes\", \"lines\", \"words\", \"headings\"],\n      \"additionalProperties\": false,\n      \"properties\": {\n        \"files\": { \"type\": \"integer\", \"minimum\": 1 },\n        \"bytes\": { \"type\": \"integer\", \"minimum\": 0 },\n        \"lines\": { \"type\": \"integer\", \"minimum\": 0 },\n        \"words\": { \"type\": \"integer\", \"minimum\": 0 },\n        \"headings\": { \"type\": \"integer\", \"minimum\": 0 }\n      }\n    }\n  }\n}\n",
+    "expected": "{\"files\":[{\"path\":\"terms.md\",\"bytes\":38,\"lines\":2,\"words\":4,\"headings\":1},{\"path\":\"tokens.txt\",\"bytes\":37,\"lines\":1,\"words\":3,\"headings\":0}],\"totals\":{\"files\":2,\"bytes\":75,\"lines\":3,\"words\":7,\"headings\":1}}"
+  },
+  {
+    "id": "reliability-new-token-boundaries-2",
+    "familyId": "reliability-new-token-boundaries",
+    "split": "search",
+    "critical": false,
+    "task": {
+      "goal": "为搜索入口核验空白分词口径：对 lexicon.md、spacing.txt 生成 files 与 totals 的全套字节、行、词、标题指标；x/y、a.b、中文串各保持一个词，任意空白才分隔，changed-files.json 不参与度量。",
+      "inputs": [
+        {
+          "name": "lexicon.md",
+          "content": "#Terms\nx/y a.b 中文连续\n"
+        },
+        {
+          "name": "spacing.txt",
+          "content": "  first\t\tsecond third  \n"
+        },
+        {
+          "name": "changed-files.json",
+          "content": "{\"changes\":[{\"path\":\"src/word-count.test.ts\",\"changeType\":\"modified\"},{\"path\":\"docs/changed-files.md\",\"changeType\":\"added\"},{\"path\":\"config/lines.yaml\",\"changeType\":\"deleted\"}]}"
+        }
+      ]
+    },
+    "expectedChoice": "local-process",
+    "schema": "{\n  \"$schema\": \"https://json-schema.org/draft/2020-12/schema\",\n  \"type\": \"object\",\n  \"required\": [\"files\", \"totals\"],\n  \"additionalProperties\": false,\n  \"properties\": {\n    \"files\": {\n      \"type\": \"array\",\n      \"minItems\": 1,\n      \"items\": {\n        \"type\": \"object\",\n        \"required\": [\"path\", \"bytes\", \"lines\", \"words\", \"headings\"],\n        \"additionalProperties\": false,\n        \"properties\": {\n          \"path\": { \"type\": \"string\" },\n          \"bytes\": { \"type\": \"integer\", \"minimum\": 0 },\n          \"lines\": { \"type\": \"integer\", \"minimum\": 0 },\n          \"words\": { \"type\": \"integer\", \"minimum\": 0 },\n          \"headings\": { \"type\": \"integer\", \"minimum\": 0 }\n        }\n      }\n    },\n    \"totals\": {\n      \"type\": \"object\",\n      \"required\": [\"files\", \"bytes\", \"lines\", \"words\", \"headings\"],\n      \"additionalProperties\": false,\n      \"properties\": {\n        \"files\": { \"type\": \"integer\", \"minimum\": 1 },\n        \"bytes\": { \"type\": \"integer\", \"minimum\": 0 },\n        \"lines\": { \"type\": \"integer\", \"minimum\": 0 },\n        \"words\": { \"type\": \"integer\", \"minimum\": 0 },\n        \"headings\": { \"type\": \"integer\", \"minimum\": 0 }\n      }\n    }\n  }\n}\n",
+    "expected": "{\"files\":[{\"path\":\"lexicon.md\",\"bytes\":28,\"lines\":2,\"words\":4,\"headings\":1},{\"path\":\"spacing.txt\",\"bytes\":25,\"lines\":1,\"words\":3,\"headings\":0}],\"totals\":{\"files\":2,\"bytes\":53,\"lines\":3,\"words\":7,\"headings\":1}}"
+  },
+  {
+    "id": "reliability-new-outline-lexer-1",
+    "familyId": "reliability-new-outline-lexer",
+    "split": "search",
+    "critical": true,
+    "task": {
+      "goal": "轻量大纲扫描器验收：对 outline.md 与 captions.txt 输出逐文件和总计的 bytes、lines、words、headings；headings 严格按第一列 # 扫描，围栏中的 # 和 #nospace 也计数，缩进标题不计。变更清单仅为背景。",
+      "inputs": [
+        {
+          "name": "outline.md",
+          "content": "#Title\n ```\n# inside fence\n ```\n  # indented\n"
+        },
+        {
+          "name": "captions.txt",
+          "content": "### caption\ntext # inline\n"
+        },
+        {
+          "name": "changed-files.json",
+          "content": "{\"changes\":[{\"path\":\"src/word-count.test.ts\",\"changeType\":\"modified\"},{\"path\":\"docs/changed-files.md\",\"changeType\":\"added\"},{\"path\":\"config/lines.yaml\",\"changeType\":\"deleted\"}]}"
+        }
+      ]
+    },
+    "expectedChoice": "local-process",
+    "schema": "{\n  \"$schema\": \"https://json-schema.org/draft/2020-12/schema\",\n  \"type\": \"object\",\n  \"required\": [\"files\", \"totals\"],\n  \"additionalProperties\": false,\n  \"properties\": {\n    \"files\": {\n      \"type\": \"array\",\n      \"minItems\": 1,\n      \"items\": {\n        \"type\": \"object\",\n        \"required\": [\"path\", \"bytes\", \"lines\", \"words\", \"headings\"],\n        \"additionalProperties\": false,\n        \"properties\": {\n          \"path\": { \"type\": \"string\" },\n          \"bytes\": { \"type\": \"integer\", \"minimum\": 0 },\n          \"lines\": { \"type\": \"integer\", \"minimum\": 0 },\n          \"words\": { \"type\": \"integer\", \"minimum\": 0 },\n          \"headings\": { \"type\": \"integer\", \"minimum\": 0 }\n        }\n      }\n    },\n    \"totals\": {\n      \"type\": \"object\",\n      \"required\": [\"files\", \"bytes\", \"lines\", \"words\", \"headings\"],\n      \"additionalProperties\": false,\n      \"properties\": {\n        \"files\": { \"type\": \"integer\", \"minimum\": 1 },\n        \"bytes\": { \"type\": \"integer\", \"minimum\": 0 },\n        \"lines\": { \"type\": \"integer\", \"minimum\": 0 },\n        \"words\": { \"type\": \"integer\", \"minimum\": 0 },\n        \"headings\": { \"type\": \"integer\", \"minimum\": 0 }\n      }\n    }\n  }\n}\n",
+    "expected": "{\"files\":[{\"path\":\"captions.txt\",\"bytes\":26,\"lines\":2,\"words\":5,\"headings\":1},{\"path\":\"outline.md\",\"bytes\":45,\"lines\":5,\"words\":8,\"headings\":2}],\"totals\":{\"files\":2,\"bytes\":71,\"lines\":7,\"words\":13,\"headings\":3}}"
+  },
+  {
+    "id": "reliability-new-outline-lexer-2",
+    "familyId": "reliability-new-outline-lexer",
+    "split": "search",
+    "critical": false,
+    "task": {
+      "goal": "核对逐行标题索引的扫描约定：对 markers.txt、sections.md 生成完整文本度量及汇总；行首 # 算标题，行内或空格后的 # 不算，不需要 Markdown 语法解析，也不用分类 changed-files.json。",
+      "inputs": [
+        {
+          "name": "markers.txt",
+          "content": "##raw\n #space\nword #tail\n"
+        },
+        {
+          "name": "sections.md",
+          "content": "```md\n# literal\n```\n####\n"
+        },
+        {
+          "name": "changed-files.json",
+          "content": "{\"changes\":[{\"path\":\"src/word-count.test.ts\",\"changeType\":\"modified\"},{\"path\":\"docs/changed-files.md\",\"changeType\":\"added\"},{\"path\":\"config/lines.yaml\",\"changeType\":\"deleted\"}]}"
+        }
+      ]
+    },
+    "expectedChoice": "local-process",
+    "schema": "{\n  \"$schema\": \"https://json-schema.org/draft/2020-12/schema\",\n  \"type\": \"object\",\n  \"required\": [\"files\", \"totals\"],\n  \"additionalProperties\": false,\n  \"properties\": {\n    \"files\": {\n      \"type\": \"array\",\n      \"minItems\": 1,\n      \"items\": {\n        \"type\": \"object\",\n        \"required\": [\"path\", \"bytes\", \"lines\", \"words\", \"headings\"],\n        \"additionalProperties\": false,\n        \"properties\": {\n          \"path\": { \"type\": \"string\" },\n          \"bytes\": { \"type\": \"integer\", \"minimum\": 0 },\n          \"lines\": { \"type\": \"integer\", \"minimum\": 0 },\n          \"words\": { \"type\": \"integer\", \"minimum\": 0 },\n          \"headings\": { \"type\": \"integer\", \"minimum\": 0 }\n        }\n      }\n    },\n    \"totals\": {\n      \"type\": \"object\",\n      \"required\": [\"files\", \"bytes\", \"lines\", \"words\", \"headings\"],\n      \"additionalProperties\": false,\n      \"properties\": {\n        \"files\": { \"type\": \"integer\", \"minimum\": 1 },\n        \"bytes\": { \"type\": \"integer\", \"minimum\": 0 },\n        \"lines\": { \"type\": \"integer\", \"minimum\": 0 },\n        \"words\": { \"type\": \"integer\", \"minimum\": 0 },\n        \"headings\": { \"type\": \"integer\", \"minimum\": 0 }\n      }\n    }\n  }\n}\n",
+    "expected": "{\"files\":[{\"path\":\"markers.txt\",\"bytes\":25,\"lines\":3,\"words\":4,\"headings\":1},{\"path\":\"sections.md\",\"bytes\":25,\"lines\":4,\"words\":5,\"headings\":2}],\"totals\":{\"files\":2,\"bytes\":50,\"lines\":7,\"words\":9,\"headings\":3}}"
+  },
+  {
+    "id": "reliability-new-bundle-completeness-1",
+    "familyId": "reliability-new-bundle-completeness",
+    "split": "search",
+    "critical": true,
+    "task": {
+      "goal": "附件交付对账：登记全部 .txt/.md（包括零字节附件），按路径排序给出逐文件 bytes/lines/words/headings 与 totals；文件数量来自文本附件本身，changed-files.json 与 metadata.json 均不参与统计。",
+      "inputs": [
+        {
+          "name": "z-empty.txt",
+          "content": ""
+        },
+        {
+          "name": "a-ready.md",
+          "content": "# Ready\none two\n"
+        },
+        {
+          "name": "metadata.json",
+          "content": "{\"words\":999,\"files\":88}"
+        },
+        {
+          "name": "changed-files.json",
+          "content": "{\"changes\":[{\"path\":\"src/word-count.test.ts\",\"changeType\":\"modified\"},{\"path\":\"docs/changed-files.md\",\"changeType\":\"added\"},{\"path\":\"config/lines.yaml\",\"changeType\":\"deleted\"}]}"
+        }
+      ]
+    },
+    "expectedChoice": "local-process",
+    "schema": "{\n  \"$schema\": \"https://json-schema.org/draft/2020-12/schema\",\n  \"type\": \"object\",\n  \"required\": [\"files\", \"totals\"],\n  \"additionalProperties\": false,\n  \"properties\": {\n    \"files\": {\n      \"type\": \"array\",\n      \"minItems\": 1,\n      \"items\": {\n        \"type\": \"object\",\n        \"required\": [\"path\", \"bytes\", \"lines\", \"words\", \"headings\"],\n        \"additionalProperties\": false,\n        \"properties\": {\n          \"path\": { \"type\": \"string\" },\n          \"bytes\": { \"type\": \"integer\", \"minimum\": 0 },\n          \"lines\": { \"type\": \"integer\", \"minimum\": 0 },\n          \"words\": { \"type\": \"integer\", \"minimum\": 0 },\n          \"headings\": { \"type\": \"integer\", \"minimum\": 0 }\n        }\n      }\n    },\n    \"totals\": {\n      \"type\": \"object\",\n      \"required\": [\"files\", \"bytes\", \"lines\", \"words\", \"headings\"],\n      \"additionalProperties\": false,\n      \"properties\": {\n        \"files\": { \"type\": \"integer\", \"minimum\": 1 },\n        \"bytes\": { \"type\": \"integer\", \"minimum\": 0 },\n        \"lines\": { \"type\": \"integer\", \"minimum\": 0 },\n        \"words\": { \"type\": \"integer\", \"minimum\": 0 },\n        \"headings\": { \"type\": \"integer\", \"minimum\": 0 }\n      }\n    }\n  }\n}\n",
+    "expected": "{\"files\":[{\"path\":\"a-ready.md\",\"bytes\":16,\"lines\":2,\"words\":4,\"headings\":1},{\"path\":\"z-empty.txt\",\"bytes\":0,\"lines\":0,\"words\":0,\"headings\":0}],\"totals\":{\"files\":2,\"bytes\":16,\"lines\":2,\"words\":4,\"headings\":1}}"
+  },
+  {
+    "id": "reliability-new-bundle-completeness-2",
+    "familyId": "reliability-new-bundle-completeness",
+    "split": "search",
+    "critical": false,
+    "task": {
+      "goal": "核验打包交付是否漏登空文件：对 zero.md、b.txt、a.md 的完整文本指标逐项和汇总对账，零内容也保留，输出按文件名升序；只统计 .md/.txt，路径清单和 preview.MD 均不是统计对象。",
+      "inputs": [
+        {
+          "name": "zero.md",
+          "content": ""
+        },
+        {
+          "name": "b.txt",
+          "content": "beta\n"
+        },
+        {
+          "name": "a.md",
+          "content": "# A\n"
+        },
+        {
+          "name": "preview.MD",
+          "content": "# do not count\n"
+        },
+        {
+          "name": "changed-files.json",
+          "content": "{\"changes\":[{\"path\":\"src/word-count.test.ts\",\"changeType\":\"modified\"},{\"path\":\"docs/changed-files.md\",\"changeType\":\"added\"},{\"path\":\"config/lines.yaml\",\"changeType\":\"deleted\"}]}"
+        }
+      ]
+    },
+    "expectedChoice": "local-process",
+    "schema": "{\n  \"$schema\": \"https://json-schema.org/draft/2020-12/schema\",\n  \"type\": \"object\",\n  \"required\": [\"files\", \"totals\"],\n  \"additionalProperties\": false,\n  \"properties\": {\n    \"files\": {\n      \"type\": \"array\",\n      \"minItems\": 1,\n      \"items\": {\n        \"type\": \"object\",\n        \"required\": [\"path\", \"bytes\", \"lines\", \"words\", \"headings\"],\n        \"additionalProperties\": false,\n        \"properties\": {\n          \"path\": { \"type\": \"string\" },\n          \"bytes\": { \"type\": \"integer\", \"minimum\": 0 },\n          \"lines\": { \"type\": \"integer\", \"minimum\": 0 },\n          \"words\": { \"type\": \"integer\", \"minimum\": 0 },\n          \"headings\": { \"type\": \"integer\", \"minimum\": 0 }\n        }\n      }\n    },\n    \"totals\": {\n      \"type\": \"object\",\n      \"required\": [\"files\", \"bytes\", \"lines\", \"words\", \"headings\"],\n      \"additionalProperties\": false,\n      \"properties\": {\n        \"files\": { \"type\": \"integer\", \"minimum\": 1 },\n        \"bytes\": { \"type\": \"integer\", \"minimum\": 0 },\n        \"lines\": { \"type\": \"integer\", \"minimum\": 0 },\n        \"words\": { \"type\": \"integer\", \"minimum\": 0 },\n        \"headings\": { \"type\": \"integer\", \"minimum\": 0 }\n      }\n    }\n  }\n}\n",
+    "expected": "{\"files\":[{\"path\":\"a.md\",\"bytes\":4,\"lines\":1,\"words\":2,\"headings\":1},{\"path\":\"b.txt\",\"bytes\":5,\"lines\":1,\"words\":1,\"headings\":0},{\"path\":\"zero.md\",\"bytes\":0,\"lines\":0,\"words\":0,\"headings\":0}],\"totals\":{\"files\":3,\"bytes\":9,\"lines\":2,\"words\":3,\"headings\":1}}"
+  },
+  {
+    "id": "reliability-new-test-ownership-1",
+    "familyId": "reliability-new-test-ownership",
+    "split": "search",
+    "critical": true,
+    "task": {
+      "goal": "测试所有权审计：按现有路径规则为 changed-files.json 每项标注 source/test/docs/config/other 并返回原顺序和 total；嵌套测试目录中的说明、配置和图片先判 test。不要测量 note.md 的篇幅。",
+      "inputs": [
+        {
+          "name": "note.md",
+          "content": "# Word count report\nSource test docs config other are vocabulary in this note.\n## 字节与行\nCount words lines bytes headings; this text is background.\n"
+        },
+        {
+          "name": "changed-files.json",
+          "content": "{\"changes\":[{\"path\":\"pkg/tests/readme.md\",\"changeType\":\"added\"},{\"path\":\"pkg/__tests__/fixture.json\",\"changeType\":\"modified\"},{\"path\":\"pkg/tests/diagram.svg\",\"changeType\":\"deleted\"},{\"path\":\"pkg/runtime.ts\",\"changeType\":\"added\"},{\"path\":\"docs/usage.md\",\"changeType\":\"modified\"},{\"path\":\"config/release.yml\",\"changeType\":\"deleted\"}]}"
+        }
+      ]
+    },
+    "expectedChoice": "capability/changed-file-summary",
+    "schema": "{\n  \"type\": \"object\",\n  \"required\": [\"summary\"],\n  \"additionalProperties\": false,\n  \"properties\": {\n    \"summary\": {\n      \"type\": \"object\",\n      \"required\": [\"total\", \"files\"],\n      \"additionalProperties\": false,\n      \"properties\": {\n        \"total\": { \"type\": \"number\", \"minimum\": 0 },\n        \"files\": {\n          \"type\": \"array\",\n          \"minItems\": 1,\n          \"items\": {\n            \"type\": \"object\",\n            \"required\": [\"path\", \"category\"],\n            \"additionalProperties\": false,\n            \"properties\": {\n              \"path\": { \"type\": \"string\" },\n              \"category\": {\n                \"type\": \"string\",\n                \"enum\": [\"source\", \"test\", \"docs\", \"config\", \"other\"]\n              }\n            }\n          }\n        }\n      }\n    }\n  }\n}\n",
+    "expected": "{\"summary\":{\"total\":6,\"files\":[{\"path\":\"pkg/tests/readme.md\",\"category\":\"test\"},{\"path\":\"pkg/__tests__/fixture.json\",\"category\":\"test\"},{\"path\":\"pkg/tests/diagram.svg\",\"category\":\"test\"},{\"path\":\"pkg/runtime.ts\",\"category\":\"source\"},{\"path\":\"docs/usage.md\",\"category\":\"docs\"},{\"path\":\"config/release.yml\",\"category\":\"config\"}]}}"
+  },
+  {
+    "id": "reliability-new-test-ownership-2",
+    "familyId": "reliability-new-test-ownership",
+    "split": "search",
+    "critical": false,
+    "task": {
+      "goal": "核查测试支持资产的归属：只为清单中的每一条路径输出现有五类别和 total，保留输入次序；/__tests__/ 与 /tests/ 的优先级高于文件后缀，附带的词数报告仅作背景。",
+      "inputs": [
+        {
+          "name": "note.md",
+          "content": "# Word count report\nSource test docs config other are vocabulary in this note.\n## 字节与行\nCount words lines bytes headings; this text is background.\n"
+        },
+        {
+          "name": "changed-files.json",
+          "content": "{\"changes\":[{\"path\":\"lib/__tests__/defaults.toml\",\"changeType\":\"added\"},{\"path\":\"lib/tests/expected.txt\",\"changeType\":\"modified\"},{\"path\":\"lib/tests/helper.cjs\",\"changeType\":\"deleted\"},{\"path\":\"lib/helper.cjs\",\"changeType\":\"added\"},{\"path\":\"guides/test-plan.md\",\"changeType\":\"modified\"}]}"
+        }
+      ]
+    },
+    "expectedChoice": "capability/changed-file-summary",
+    "schema": "{\n  \"type\": \"object\",\n  \"required\": [\"summary\"],\n  \"additionalProperties\": false,\n  \"properties\": {\n    \"summary\": {\n      \"type\": \"object\",\n      \"required\": [\"total\", \"files\"],\n      \"additionalProperties\": false,\n      \"properties\": {\n        \"total\": { \"type\": \"number\", \"minimum\": 0 },\n        \"files\": {\n          \"type\": \"array\",\n          \"minItems\": 1,\n          \"items\": {\n            \"type\": \"object\",\n            \"required\": [\"path\", \"category\"],\n            \"additionalProperties\": false,\n            \"properties\": {\n              \"path\": { \"type\": \"string\" },\n              \"category\": {\n                \"type\": \"string\",\n                \"enum\": [\"source\", \"test\", \"docs\", \"config\", \"other\"]\n              }\n            }\n          }\n        }\n      }\n    }\n  }\n}\n",
+    "expected": "{\"summary\":{\"total\":5,\"files\":[{\"path\":\"lib/__tests__/defaults.toml\",\"category\":\"test\"},{\"path\":\"lib/tests/expected.txt\",\"category\":\"test\"},{\"path\":\"lib/tests/helper.cjs\",\"category\":\"test\"},{\"path\":\"lib/helper.cjs\",\"category\":\"source\"},{\"path\":\"guides/test-plan.md\",\"category\":\"docs\"}]}}"
+  },
+  {
+    "id": "reliability-new-suffix-dispatch-1",
+    "familyId": "reliability-new-suffix-dispatch",
+    "split": "search",
+    "critical": true,
+    "task": {
+      "goal": "排查按目录名误派：为变更清单逐项给出实际类别和总项数，docs 目录里的 ts 仍按源码后缀，src 下的 md 按文档，config 下的 svg 归 other；保留顺序，不统计附带笔记。",
+      "inputs": [
+        {
+          "name": "note.md",
+          "content": "# Word count report\nSource test docs config other are vocabulary in this note.\n## 字节与行\nCount words lines bytes headings; this text is background.\n"
+        },
+        {
+          "name": "changed-files.json",
+          "content": "{\"changes\":[{\"path\":\"docs/compiler.ts\",\"changeType\":\"added\"},{\"path\":\"src/configuration.md\",\"changeType\":\"modified\"},{\"path\":\"config/logo.svg\",\"changeType\":\"deleted\"},{\"path\":\"assets/schema.json\",\"changeType\":\"added\"},{\"path\":\"docs/widget.tsx\",\"changeType\":\"modified\"},{\"path\":\"src/run.mjs\",\"changeType\":\"deleted\"}]}"
+        }
+      ]
+    },
+    "expectedChoice": "capability/changed-file-summary",
+    "schema": "{\n  \"type\": \"object\",\n  \"required\": [\"summary\"],\n  \"additionalProperties\": false,\n  \"properties\": {\n    \"summary\": {\n      \"type\": \"object\",\n      \"required\": [\"total\", \"files\"],\n      \"additionalProperties\": false,\n      \"properties\": {\n        \"total\": { \"type\": \"number\", \"minimum\": 0 },\n        \"files\": {\n          \"type\": \"array\",\n          \"minItems\": 1,\n          \"items\": {\n            \"type\": \"object\",\n            \"required\": [\"path\", \"category\"],\n            \"additionalProperties\": false,\n            \"properties\": {\n              \"path\": { \"type\": \"string\" },\n              \"category\": {\n                \"type\": \"string\",\n                \"enum\": [\"source\", \"test\", \"docs\", \"config\", \"other\"]\n              }\n            }\n          }\n        }\n      }\n    }\n  }\n}\n",
+    "expected": "{\"summary\":{\"total\":6,\"files\":[{\"path\":\"docs/compiler.ts\",\"category\":\"source\"},{\"path\":\"src/configuration.md\",\"category\":\"docs\"},{\"path\":\"config/logo.svg\",\"category\":\"other\"},{\"path\":\"assets/schema.json\",\"category\":\"config\"},{\"path\":\"docs/widget.tsx\",\"category\":\"source\"},{\"path\":\"src/run.mjs\",\"category\":\"source\"}]}}"
+  },
+  {
+    "id": "reliability-new-suffix-dispatch-2",
+    "familyId": "reliability-new-suffix-dispatch",
+    "split": "search",
+    "critical": false,
+    "task": {
+      "goal": "核对仓库目录重组后的类别账本：仅按既有分类合同列出每条变更路径与类别、total；路径中的 source、docs、config 字眼只是名称，不能替代后缀判断，note.md 不属于本次交付。",
+      "inputs": [
+        {
+          "name": "note.md",
+          "content": "# Word count report\nSource test docs config other are vocabulary in this note.\n## 字节与行\nCount words lines bytes headings; this text is background.\n"
+        },
+        {
+          "name": "changed-files.json",
+          "content": "{\"changes\":[{\"path\":\"source/readme.md\",\"changeType\":\"added\"},{\"path\":\"docs/settings.yaml\",\"changeType\":\"modified\"},{\"path\":\"configuration/launch.js\",\"changeType\":\"deleted\"},{\"path\":\"docs/archive.tar\",\"changeType\":\"added\"},{\"path\":\"assets/worker.cjs\",\"changeType\":\"modified\"}]}"
+        }
+      ]
+    },
+    "expectedChoice": "capability/changed-file-summary",
+    "schema": "{\n  \"type\": \"object\",\n  \"required\": [\"summary\"],\n  \"additionalProperties\": false,\n  \"properties\": {\n    \"summary\": {\n      \"type\": \"object\",\n      \"required\": [\"total\", \"files\"],\n      \"additionalProperties\": false,\n      \"properties\": {\n        \"total\": { \"type\": \"number\", \"minimum\": 0 },\n        \"files\": {\n          \"type\": \"array\",\n          \"minItems\": 1,\n          \"items\": {\n            \"type\": \"object\",\n            \"required\": [\"path\", \"category\"],\n            \"additionalProperties\": false,\n            \"properties\": {\n              \"path\": { \"type\": \"string\" },\n              \"category\": {\n                \"type\": \"string\",\n                \"enum\": [\"source\", \"test\", \"docs\", \"config\", \"other\"]\n              }\n            }\n          }\n        }\n      }\n    }\n  }\n}\n",
+    "expected": "{\"summary\":{\"total\":5,\"files\":[{\"path\":\"source/readme.md\",\"category\":\"docs\"},{\"path\":\"docs/settings.yaml\",\"category\":\"config\"},{\"path\":\"configuration/launch.js\",\"category\":\"source\"},{\"path\":\"docs/archive.tar\",\"category\":\"other\"},{\"path\":\"assets/worker.cjs\",\"category\":\"source\"}]}}"
+  },
+  {
+    "id": "reliability-new-test-name-boundary-1",
+    "familyId": "reliability-new-test-name-boundary",
+    "split": "search",
+    "critical": true,
+    "task": {
+      "goal": "审计测试文件重命名的匹配边界：对清单每项返回现有类别与 total；按精确 .test.[cm]?js 规则，不能把 .test.ts 或 .spec.js 自动扩成 test。只分类路径，词数和标题报告不用处理。",
+      "inputs": [
+        {
+          "name": "note.md",
+          "content": "# Word count report\nSource test docs config other are vocabulary in this note.\n## 字节与行\nCount words lines bytes headings; this text is background.\n"
+        },
+        {
+          "name": "changed-files.json",
+          "content": "{\"changes\":[{\"path\":\"pkg/parser.test.js\",\"changeType\":\"added\"},{\"path\":\"pkg/parser.test.mjs\",\"changeType\":\"modified\"},{\"path\":\"pkg/parser.test.cjs\",\"changeType\":\"deleted\"},{\"path\":\"pkg/parser.test.ts\",\"changeType\":\"added\"},{\"path\":\"pkg/parser.spec.js\",\"changeType\":\"modified\"},{\"path\":\"pkg/parser.test.jsx\",\"changeType\":\"deleted\"}]}"
+        }
+      ]
+    },
+    "expectedChoice": "capability/changed-file-summary",
+    "schema": "{\n  \"type\": \"object\",\n  \"required\": [\"summary\"],\n  \"additionalProperties\": false,\n  \"properties\": {\n    \"summary\": {\n      \"type\": \"object\",\n      \"required\": [\"total\", \"files\"],\n      \"additionalProperties\": false,\n      \"properties\": {\n        \"total\": { \"type\": \"number\", \"minimum\": 0 },\n        \"files\": {\n          \"type\": \"array\",\n          \"minItems\": 1,\n          \"items\": {\n            \"type\": \"object\",\n            \"required\": [\"path\", \"category\"],\n            \"additionalProperties\": false,\n            \"properties\": {\n              \"path\": { \"type\": \"string\" },\n              \"category\": {\n                \"type\": \"string\",\n                \"enum\": [\"source\", \"test\", \"docs\", \"config\", \"other\"]\n              }\n            }\n          }\n        }\n      }\n    }\n  }\n}\n",
+    "expected": "{\"summary\":{\"total\":6,\"files\":[{\"path\":\"pkg/parser.test.js\",\"category\":\"test\"},{\"path\":\"pkg/parser.test.mjs\",\"category\":\"test\"},{\"path\":\"pkg/parser.test.cjs\",\"category\":\"test\"},{\"path\":\"pkg/parser.test.ts\",\"category\":\"source\"},{\"path\":\"pkg/parser.spec.js\",\"category\":\"source\"},{\"path\":\"pkg/parser.test.jsx\",\"category\":\"source\"}]}}"
+  },
+  {
+    "id": "reliability-new-test-name-boundary-2",
+    "familyId": "reliability-new-test-name-boundary",
+    "split": "search",
+    "critical": false,
+    "task": {
+      "goal": "核验测试命名规则的机械兼容性：输出清单原序的 path/category 和 total；只接受能力已有测试后缀，不依据文件语义、含 test 的单词或 note.md 内容扩大识别。",
+      "inputs": [
+        {
+          "name": "note.md",
+          "content": "# Word count report\nSource test docs config other are vocabulary in this note.\n## 字节与行\nCount words lines bytes headings; this text is background.\n"
+        },
+        {
+          "name": "changed-files.json",
+          "content": "{\"changes\":[{\"path\":\"pkg/route.test.cjs\",\"changeType\":\"added\"},{\"path\":\"pkg/route.test.tsx\",\"changeType\":\"modified\"},{\"path\":\"pkg/test-helper.js\",\"changeType\":\"deleted\"},{\"path\":\"pkg/route.spec.mjs\",\"changeType\":\"added\"},{\"path\":\"pkg/route.test.js.map\",\"changeType\":\"modified\"},{\"path\":\"pkg/route.test.js\",\"changeType\":\"deleted\"}]}"
+        }
+      ]
+    },
+    "expectedChoice": "capability/changed-file-summary",
+    "schema": "{\n  \"type\": \"object\",\n  \"required\": [\"summary\"],\n  \"additionalProperties\": false,\n  \"properties\": {\n    \"summary\": {\n      \"type\": \"object\",\n      \"required\": [\"total\", \"files\"],\n      \"additionalProperties\": false,\n      \"properties\": {\n        \"total\": { \"type\": \"number\", \"minimum\": 0 },\n        \"files\": {\n          \"type\": \"array\",\n          \"minItems\": 1,\n          \"items\": {\n            \"type\": \"object\",\n            \"required\": [\"path\", \"category\"],\n            \"additionalProperties\": false,\n            \"properties\": {\n              \"path\": { \"type\": \"string\" },\n              \"category\": {\n                \"type\": \"string\",\n                \"enum\": [\"source\", \"test\", \"docs\", \"config\", \"other\"]\n              }\n            }\n          }\n        }\n      }\n    }\n  }\n}\n",
+    "expected": "{\"summary\":{\"total\":6,\"files\":[{\"path\":\"pkg/route.test.cjs\",\"category\":\"test\"},{\"path\":\"pkg/route.test.tsx\",\"category\":\"source\"},{\"path\":\"pkg/test-helper.js\",\"category\":\"source\"},{\"path\":\"pkg/route.spec.mjs\",\"category\":\"source\"},{\"path\":\"pkg/route.test.js.map\",\"category\":\"other\"},{\"path\":\"pkg/route.test.js\",\"category\":\"test\"}]}}"
+  },
+  {
+    "id": "reliability-new-manifest-conservation-1",
+    "familyId": "reliability-new-manifest-conservation",
+    "split": "search",
+    "critical": false,
+    "task": {
+      "goal": "变更台账对账：为 changed-files.json 的每条记录输出原序路径和类别及 total，重复路径也保留，added/modified/deleted 全部计入，不去磁盘验证文件存在性；不读取笔记指标。",
+      "inputs": [
+        {
+          "name": "note.md",
+          "content": "# Word count report\nSource test docs config other are vocabulary in this note.\n## 字节与行\nCount words lines bytes headings; this text is background.\n"
+        },
+        {
+          "name": "changed-files.json",
+          "content": "{\"changes\":[{\"path\":\"src/same.ts\",\"changeType\":\"added\"},{\"path\":\"docs/deleted.md\",\"changeType\":\"modified\"},{\"path\":\"src/same.ts\",\"changeType\":\"deleted\"},{\"path\":\"assets/only.bin\",\"changeType\":\"added\"},{\"path\":\"config/old.toml\",\"changeType\":\"modified\"},{\"path\":\"assets/only.bin\",\"changeType\":\"deleted\"},{\"path\":\"src/next.jsx\",\"changeType\":\"added\"}]}"
+        }
+      ]
+    },
+    "expectedChoice": "capability/changed-file-summary",
+    "schema": "{\n  \"type\": \"object\",\n  \"required\": [\"summary\"],\n  \"additionalProperties\": false,\n  \"properties\": {\n    \"summary\": {\n      \"type\": \"object\",\n      \"required\": [\"total\", \"files\"],\n      \"additionalProperties\": false,\n      \"properties\": {\n        \"total\": { \"type\": \"number\", \"minimum\": 0 },\n        \"files\": {\n          \"type\": \"array\",\n          \"minItems\": 1,\n          \"items\": {\n            \"type\": \"object\",\n            \"required\": [\"path\", \"category\"],\n            \"additionalProperties\": false,\n            \"properties\": {\n              \"path\": { \"type\": \"string\" },\n              \"category\": {\n                \"type\": \"string\",\n                \"enum\": [\"source\", \"test\", \"docs\", \"config\", \"other\"]\n              }\n            }\n          }\n        }\n      }\n    }\n  }\n}\n",
+    "expected": "{\"summary\":{\"total\":7,\"files\":[{\"path\":\"src/same.ts\",\"category\":\"source\"},{\"path\":\"docs/deleted.md\",\"category\":\"docs\"},{\"path\":\"src/same.ts\",\"category\":\"source\"},{\"path\":\"assets/only.bin\",\"category\":\"other\"},{\"path\":\"config/old.toml\",\"category\":\"config\"},{\"path\":\"assets/only.bin\",\"category\":\"other\"},{\"path\":\"src/next.jsx\",\"category\":\"source\"}]}}"
+  },
+  {
+    "id": "reliability-new-manifest-conservation-2",
+    "familyId": "reliability-new-manifest-conservation",
+    "split": "search",
+    "critical": false,
+    "task": {
+      "goal": "核对事件式清单的记录总量：将每条路径按现有五类别列出并给 total，保留同一路径的多条事件和原始顺序，删除项仍参与；不要把 note.md 的词数当交付。",
+      "inputs": [
+        {
+          "name": "note.md",
+          "content": "# Word count report\nSource test docs config other are vocabulary in this note.\n## 字节与行\nCount words lines bytes headings; this text is background.\n"
+        },
+        {
+          "name": "changed-files.json",
+          "content": "{\"changes\":[{\"path\":\"config/a.json\",\"changeType\":\"added\"},{\"path\":\"config/a.json\",\"changeType\":\"modified\"},{\"path\":\"config/b.yaml\",\"changeType\":\"deleted\"},{\"path\":\"docs/retired.md\",\"changeType\":\"added\"},{\"path\":\"src/q.cjs\",\"changeType\":\"modified\"},{\"path\":\"src/q.cjs\",\"changeType\":\"deleted\"},{\"path\":\"LICENSE\",\"changeType\":\"added\"},{\"path\":\"NOTICE\",\"changeType\":\"modified\"}]}"
+        }
+      ]
+    },
+    "expectedChoice": "capability/changed-file-summary",
+    "schema": "{\n  \"type\": \"object\",\n  \"required\": [\"summary\"],\n  \"additionalProperties\": false,\n  \"properties\": {\n    \"summary\": {\n      \"type\": \"object\",\n      \"required\": [\"total\", \"files\"],\n      \"additionalProperties\": false,\n      \"properties\": {\n        \"total\": { \"type\": \"number\", \"minimum\": 0 },\n        \"files\": {\n          \"type\": \"array\",\n          \"minItems\": 1,\n          \"items\": {\n            \"type\": \"object\",\n            \"required\": [\"path\", \"category\"],\n            \"additionalProperties\": false,\n            \"properties\": {\n              \"path\": { \"type\": \"string\" },\n              \"category\": {\n                \"type\": \"string\",\n                \"enum\": [\"source\", \"test\", \"docs\", \"config\", \"other\"]\n              }\n            }\n          }\n        }\n      }\n    }\n  }\n}\n",
+    "expected": "{\"summary\":{\"total\":8,\"files\":[{\"path\":\"config/a.json\",\"category\":\"config\"},{\"path\":\"config/a.json\",\"category\":\"config\"},{\"path\":\"config/b.yaml\",\"category\":\"config\"},{\"path\":\"docs/retired.md\",\"category\":\"docs\"},{\"path\":\"src/q.cjs\",\"category\":\"source\"},{\"path\":\"src/q.cjs\",\"category\":\"source\"},{\"path\":\"LICENSE\",\"category\":\"other\"},{\"path\":\"NOTICE\",\"category\":\"other\"}]}}"
+  },
+  {
+    "id": "reliability-new-literal-path-interop-1",
+    "familyId": "reliability-new-literal-path-interop",
+    "split": "search",
+    "critical": false,
+    "task": {
+      "goal": "跨平台清单兼容性核对：按能力当前的字面路径规则逐项输出五类别和 total，不规范化反斜杠、不折叠大小写，也不补路径前缀；顶层 tests/ 与嵌套 /tests/ 区分。说明文本无需测量。",
+      "inputs": [
+        {
+          "name": "note.md",
+          "content": "# Word count report\nSource test docs config other are vocabulary in this note.\n## 字节与行\nCount words lines bytes headings; this text is background.\n"
+        },
+        {
+          "name": "changed-files.json",
+          "content": "{\"changes\":[{\"path\":\"tests/check.ts\",\"changeType\":\"added\"},{\"path\":\"pkg/tests/check.ts\",\"changeType\":\"modified\"},{\"path\":\"pkg\\\\tests\\\\fixture.json\",\"changeType\":\"deleted\"},{\"path\":\"pkg/Tests/check.ts\",\"changeType\":\"added\"},{\"path\":\"README.MD\",\"changeType\":\"modified\"},{\"path\":\"settings.YAML\",\"changeType\":\"deleted\"},{\"path\":\"pkg/__tests__/README.MD\",\"changeType\":\"added\"}]}"
+        }
+      ]
+    },
+    "expectedChoice": "capability/changed-file-summary",
+    "schema": "{\n  \"type\": \"object\",\n  \"required\": [\"summary\"],\n  \"additionalProperties\": false,\n  \"properties\": {\n    \"summary\": {\n      \"type\": \"object\",\n      \"required\": [\"total\", \"files\"],\n      \"additionalProperties\": false,\n      \"properties\": {\n        \"total\": { \"type\": \"number\", \"minimum\": 0 },\n        \"files\": {\n          \"type\": \"array\",\n          \"minItems\": 1,\n          \"items\": {\n            \"type\": \"object\",\n            \"required\": [\"path\", \"category\"],\n            \"additionalProperties\": false,\n            \"properties\": {\n              \"path\": { \"type\": \"string\" },\n              \"category\": {\n                \"type\": \"string\",\n                \"enum\": [\"source\", \"test\", \"docs\", \"config\", \"other\"]\n              }\n            }\n          }\n        }\n      }\n    }\n  }\n}\n",
+    "expected": "{\"summary\":{\"total\":7,\"files\":[{\"path\":\"tests/check.ts\",\"category\":\"source\"},{\"path\":\"pkg/tests/check.ts\",\"category\":\"test\"},{\"path\":\"pkg\\\\tests\\\\fixture.json\",\"category\":\"config\"},{\"path\":\"pkg/Tests/check.ts\",\"category\":\"source\"},{\"path\":\"README.MD\",\"category\":\"other\"},{\"path\":\"settings.YAML\",\"category\":\"other\"},{\"path\":\"pkg/__tests__/README.MD\",\"category\":\"test\"}]}}"
+  },
+  {
+    "id": "reliability-new-literal-path-interop-2",
+    "familyId": "reliability-new-literal-path-interop",
+    "split": "search",
+    "critical": false,
+    "task": {
+      "goal": "核查路径字符串互操作边界：只生成清单的原序类别与 total，分类按原串大小写和斜杠执行，不把 Windows 风格分隔符或顶层 __tests__ 自动改写；忽略笔记中的统计用语。",
+      "inputs": [
+        {
+          "name": "note.md",
+          "content": "# Word count report\nSource test docs config other are vocabulary in this note.\n## 字节与行\nCount words lines bytes headings; this text is background.\n"
+        },
+        {
+          "name": "changed-files.json",
+          "content": "{\"changes\":[{\"path\":\"__tests__/note.md\",\"changeType\":\"added\"},{\"path\":\"pkg/__tests__/note.md\",\"changeType\":\"modified\"},{\"path\":\"pkg\\\\__tests__\\\\helper.js\",\"changeType\":\"deleted\"},{\"path\":\"pkg/TESTS/helper.js\",\"changeType\":\"added\"},{\"path\":\"config/SETTINGS.JSON\",\"changeType\":\"modified\"},{\"path\":\"assets/photo.png\",\"changeType\":\"deleted\"},{\"path\":\"pkg/payload.txt\",\"changeType\":\"added\"}]}"
+        }
+      ]
+    },
+    "expectedChoice": "capability/changed-file-summary",
+    "schema": "{\n  \"type\": \"object\",\n  \"required\": [\"summary\"],\n  \"additionalProperties\": false,\n  \"properties\": {\n    \"summary\": {\n      \"type\": \"object\",\n      \"required\": [\"total\", \"files\"],\n      \"additionalProperties\": false,\n      \"properties\": {\n        \"total\": { \"type\": \"number\", \"minimum\": 0 },\n        \"files\": {\n          \"type\": \"array\",\n          \"minItems\": 1,\n          \"items\": {\n            \"type\": \"object\",\n            \"required\": [\"path\", \"category\"],\n            \"additionalProperties\": false,\n            \"properties\": {\n              \"path\": { \"type\": \"string\" },\n              \"category\": {\n                \"type\": \"string\",\n                \"enum\": [\"source\", \"test\", \"docs\", \"config\", \"other\"]\n              }\n            }\n          }\n        }\n      }\n    }\n  }\n}\n",
+    "expected": "{\"summary\":{\"total\":7,\"files\":[{\"path\":\"__tests__/note.md\",\"category\":\"docs\"},{\"path\":\"pkg/__tests__/note.md\",\"category\":\"test\"},{\"path\":\"pkg\\\\__tests__\\\\helper.js\",\"category\":\"source\"},{\"path\":\"pkg/TESTS/helper.js\",\"category\":\"source\"},{\"path\":\"config/SETTINGS.JSON\",\"category\":\"other\"},{\"path\":\"assets/photo.png\",\"category\":\"other\"},{\"path\":\"pkg/payload.txt\",\"category\":\"other\"}]}}"
+  }
+]
