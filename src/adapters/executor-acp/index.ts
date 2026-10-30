@@ -1,3 +1,4 @@
+import { applySessionConfiguration } from "./configuration.ts";
 import { publicEvent } from "./public-event.ts";
 import { spawn } from "node:child_process";
 import { Readable, Writable } from "node:stream";
@@ -205,6 +206,20 @@ export class AcpExecutor implements ExecutorProvider {
             .withSession(async (session) => {
               liveSessionId = session.sessionId;
               if (cancelPending) sendCancel();
+              req.signal?.throwIfAborted();
+              await applySessionConfiguration(
+                session.newSessionResponse.configOptions,
+                req,
+                async (configId, value) => {
+                  const response = await ctx.request(methods.agent.session.setConfigOption, {
+                    sessionId: session.sessionId,
+                    configId,
+                    value,
+                  });
+                  return response.configOptions;
+                },
+              );
+              req.signal?.throwIfAborted();
               observation.report("working", null, true);
               const done = session.prompt(req.prompt);
               done.catch(() => undefined); // 协议错误经超时/连接关闭体现，避免未处理拒绝

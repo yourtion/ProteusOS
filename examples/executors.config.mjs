@@ -6,4 +6,6 @@ export default {
   default: "pi",
   // 可导入自己的执行器适配器对象，加入 adapters，并将其 name 加入 enabled。
   adapters: [],
+  // 可添加 choices: { "my-acp": { models: ["实际模型 ID"], reasoningEfforts: ["high"] } }
+  // choices 的键必须对应内置或 adapters 中已注册的执行器。
 };

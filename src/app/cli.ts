@@ -78,9 +78,13 @@ withCommon(
   const port = Number(opts.port);
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error("无效端口");
   const { startWorkbench } = await import("./web/server.ts");
+  const modelAdapter = await loadModelAdapter(opts.modelAdapter);
+  const executorAdapter = await loadExecutorAdapter(opts.executorsConfig ?? opts.executorAdapter);
+  const { buildWorkbenchAssets } = await import("./web/assets.ts");
+  await buildWorkbenchAssets();
   const server = startWorkbench(port, opts.home ?? process.env.PROTEUS_HOME ?? ".proteus-web", {
-    modelAdapter: await loadModelAdapter(opts.modelAdapter),
-    executorAdapter: await loadExecutorAdapter(opts.executorsConfig ?? opts.executorAdapter),
+    modelAdapter,
+    executorAdapter,
   });
   for (const signal of ["SIGINT", "SIGTERM"] as const)
     process.once(signal, () => {

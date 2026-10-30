@@ -115,7 +115,11 @@ export function startWorkbench(
       }
     });
   });
-  const root = fileURLToPath(new URL("../../../web/dist/", import.meta.url));
+  const root = fileURLToPath(new URL("../../../web/dist", import.meta.url));
+  app.use("/*", async (c, next) => {
+    c.header("Cache-Control", "no-store");
+    await next();
+  });
   app.use("/*", serveStatic({ root }));
   const server = serve({ fetch: app.fetch, hostname: "127.0.0.1", port }, (info) => {
     authority = `127.0.0.1:${info.port}`;

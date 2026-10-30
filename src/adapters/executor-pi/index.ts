@@ -16,6 +16,8 @@ export interface PiRunOptions {
   workspaceDir: string;
   prompt: string;
   timeoutMs: number;
+  model?: string;
+  reasoningEffort?: string;
   signal?: AbortSignal;
   onEvent?: ExecutionRequest["onEvent"];
   onProgress?: ExecutionRequest["onProgress"];
@@ -45,6 +47,8 @@ export class PiExecutor implements ExecutorProvider {
       workspaceDir: req.workspaceDir,
       prompt: req.prompt,
       timeoutMs: req.timeoutMs,
+      model: req.model,
+      reasoningEffort: req.reasoningEffort,
       signal: req.signal,
       onEvent: req.onEvent,
       onProgress: req.onProgress,
@@ -159,12 +163,32 @@ export const defaultPiRunner: PiRunner = async (options) => {
   const cancelled = new Promise<never>((_, reject) => {
     rejectAbort = reject;
   });
+  cancelled.catch(() => undefined);
   const abort = () => {
     rejectAbort(options.signal?.reason ?? new Error("pi_cancelled"));
     void session.abort?.().catch(() => undefined);
   };
   options.signal?.addEventListener("abort", abort, { once: true });
   try {
+    options.signal?.throwIfAborted();
+    if (options.model) {
+      const models = session.modelRuntime
+        .getModels()
+        .filter(
+          (model) =>
+            model.id === options.model || `${model.provider}/${model.id}` === options.model,
+        );
+      if (models.length !== 1)
+        throw new Error("Pi 模型不存在或名称不唯一，请使用 provider/model-id");
+      await session.setModel(models[0]);
+    }
+    if (options.reasoningEffort) {
+      const level = options.reasoningEffort as Parameters<typeof session.setThinkingLevel>[0];
+      if (!session.getAvailableThinkingLevels().includes(level))
+        throw new Error("Pi 模型不支持所选推理强度");
+      session.setThinkingLevel(level);
+      if (session.thinkingLevel !== level) throw new Error("Pi 推理强度未生效");
+    }
     options.signal?.throwIfAborted();
     progress("working");
     await Promise.race([

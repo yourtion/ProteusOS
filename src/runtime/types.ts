@@ -330,6 +330,8 @@ export interface RuntimeStore {
  * start 等待执行完成；handle/事件流/cancel 语义随后续切片扩展（docs/runtime.md §5）。
  */
 export interface ExecutionRequest {
+  model?: string;
+  reasoningEffort?: string;
   onProgress?: (event: ExecutionProgress) => void;
   /** Optional host cancellation and public event projection. Never carries hidden thoughts. */
   signal?: AbortSignal;

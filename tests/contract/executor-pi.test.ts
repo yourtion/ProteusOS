@@ -2,10 +2,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { PiExecutor } from "../../src/adapters/executor-pi/index.ts";
 
 const sdk = vi.hoisted(() => {
-  const state = { listener: (_event: Record<string, unknown>) => {} };
+  const state = { thinking: "low", listener: (_event: Record<string, unknown>) => {} };
   return {
     state,
     prompt: vi.fn(),
+    setModel: vi.fn(async () => {}),
+    setThinkingLevel: vi.fn((level: string) => {
+      state.thinking = level;
+    }),
     abort: vi.fn(async () => {}),
     unsubscribe: vi.fn(),
     dispose: vi.fn(),
@@ -18,6 +22,13 @@ vi.mock("@earendil-works/pi-coding-agent", () => ({
   createAgentSession: async () => ({
     session: {
       prompt: sdk.prompt,
+      modelRuntime: { getModels: () => [{ id: "my-model", provider: "private" }] },
+      setModel: sdk.setModel,
+      setThinkingLevel: sdk.setThinkingLevel,
+      getAvailableThinkingLevels: () => ["low", "high"],
+      get thinkingLevel() {
+        return sdk.state.thinking;
+      },
       abort: sdk.abort,
       dispose: sdk.dispose,
       getSessionStats: sdk.stats,
@@ -134,4 +145,22 @@ it("Pi 取消传到 SDK，公开事件进入工作台且不暴露隐藏推理", 
   expect(sdk.abort).toHaveBeenCalledOnce();
   expect(events).toHaveBeenCalledWith({ kind: "message", text: "visible" });
   expect(JSON.stringify(events.mock.calls)).not.toContain("SECRET");
+});
+
+it("Pi 选择实际模型与强度；不支持的选择不发送 prompt", async () => {
+  sdk.prompt.mockResolvedValueOnce(undefined);
+  const result = await new PiExecutor().start({
+    ...request,
+    model: "private/my-model",
+    reasoningEffort: "high",
+  });
+  expect(result.ok).toBe(true);
+  expect(sdk.setModel).toHaveBeenCalledWith({ id: "my-model", provider: "private" });
+  expect(sdk.setThinkingLevel).toHaveBeenCalledWith("high");
+  sdk.prompt.mockClear();
+  expect((await new PiExecutor().start({ ...request, model: "missing" })).ok).toBe(false);
+  expect((await new PiExecutor().start({ ...request, reasoningEffort: "unsupported" })).ok).toBe(
+    false,
+  );
+  expect(sdk.prompt).not.toHaveBeenCalled();
 });

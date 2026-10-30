@@ -77,3 +77,7 @@ License：Apache-2.0
 产品内置资源位于 `src/resources/`，工作区快照与变更应用位于 `src/workspace/`。特定实验的协议、装配和脚本集中在 `experiments/`；使用 `pnpm experiment run/report`，独立脚本见 `experiments/runners/`。工程检查使用 Node 26 与合成 fixture，不需要历史实验归档或模型凭据。
 
 原始证据保存在源码目录外；归档身份见 [清单](./docs/experiments/archives.json)。设置 `PROTEUS_EVIDENCE_ROOT` 后使用 `pnpm evidence:verify` 校验，或追加 `--extract <id> <新目录>` 解包。解包需要 Python 3.12+。迁移后的依赖方向及恢复规则见 [仓库说明](./docs/repository.md)。
+
+## 用户级本地配置
+
+可将适配器放在 `~/.proteus-local/`，默认自动加载 `executors.config.mjs` 和可选的 `model-adapter.mjs`。执行 `mkdir -p ~/.proteus-local`，再把 [目录示例](./examples/proteus-local/)中的配置复制进去，之后直接 `pnpm web`。命令行与环境变量可覆盖自动发现；完整规则和已有配置迁移见 [本地配置教程](./docs/local-configuration.md)。

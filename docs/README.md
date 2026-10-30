@@ -14,6 +14,7 @@
 | [Web 代码工作台实施计划](./web-workbench-plan.md) | 参考 DSH 的项目与任务交互，代码任务、实时执行、diff 与应用修改的分阶段交付 |
 | [Web 工作台验收记录](./web-workbench-validation.md) | 浏览器覆盖、真实 Codex 修复闭环、验收修复与未验证范围 |
 | [领域模型](./domain-model.md) | 当前记录、归属和关联 |
+| [用户级本地配置](./local-configuration.md) | ~/.proteus-local 目录约定、自动发现与配置迁移 |
 | [模型接入](./model-adapters.md) | 自定义模型模块、签名鉴权与启动注入 |
 | [ACP 接入教程](./acp-integration.md) | 单文件适配器、动态鉴权、多执行器配置与工作台验证 |
 | [执行器接口说明](./executor-adapters.md) | ACP、Pi、OpenCode 和可用执行器配置 |

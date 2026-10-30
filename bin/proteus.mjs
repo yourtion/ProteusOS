@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 const cliPath = fileURLToPath(new URL("../src/app/cli.ts", import.meta.url));
 const result = spawnSync(
   process.execPath,
-  ["--import", "tsx/esm", cliPath, ...process.argv.slice(2)],
+  ["--import", import.meta.resolve("tsx/esm"), cliPath, ...process.argv.slice(2)],
   {
     stdio: "inherit",
   },

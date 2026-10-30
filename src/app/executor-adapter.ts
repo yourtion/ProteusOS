@@ -1,3 +1,5 @@
+import { discoverLocalModule, expandUserPath } from "./local-config.ts";
+import { executionChoices, type ExecutionChoices } from "./workbench/execution-options.ts";
 import { accessSync, constants } from "node:fs";
 import { delimiter, join, isAbsolute } from "node:path";
 import { PiExecutor } from "../adapters/executor-pi/index.ts";
@@ -19,7 +21,7 @@ export interface ExecutorAdapterContext {
     options: Omit<AcpExecutorOptions, "name" | "permissionPolicy">,
   ): ExecutorProvider;
 }
-export interface ExecutorAdapter {
+export interface ExecutorAdapter extends ExecutionChoices {
   version: "proteus-executor-adapter-v1";
   name: string;
   /** 每次执行单独创建，可在这里刷新鉴权；不可自动重试执行。 */
@@ -30,6 +32,7 @@ export interface ExecutorsConfiguration {
   enabled: string[];
   default: string;
   adapters?: ExecutorAdapter[];
+  choices?: Record<string, ExecutionChoices>;
 }
 export type ExecutorSetup = ExecutorAdapter | ExecutorsConfiguration;
 export function executorConfiguration(
@@ -64,6 +67,12 @@ export function executorConfiguration(
     enabled: [...input.enabled],
     default: input.default,
     adapters,
+    choices: Object.fromEntries(
+      Object.entries(input.choices ?? {}).map(([name, value]) => {
+        if (!known.has(name)) throw new Error("模型选项引用未知执行器");
+        return [name, executionChoices(value)];
+      }),
+    ),
   };
 }
 export function executableAvailable(command: string): boolean {
@@ -128,10 +137,11 @@ export function builtinExecutor(
 export async function loadExecutorAdapter(
   file = process.env.PROTEUS_EXECUTORS_CONFIG ?? process.env.PROTEUS_EXECUTOR_ADAPTER,
 ): Promise<ExecutorSetup | undefined> {
+  file ??= await discoverLocalModule("executors.config", "executor-adapter");
   if (file === undefined) return undefined;
   if (!file.trim() || /^[a-z][a-z\d+.-]*:/i.test(file))
     throw new Error("--executor-adapter 必须是本地文件路径");
-  const path = resolve(file);
+  const path = resolve(expandUserPath(file));
   if (![".js", ".mjs", ".ts", ".mts"].includes(extname(path)))
     throw new Error("执行器适配器文件必须为 .js、.mjs、.ts 或 .mts");
   let value: unknown;
@@ -175,7 +185,12 @@ export function checkedExecutorAdapter(value: unknown): ExecutorAdapter {
     ].includes(a.name)
   )
     throw new Error("执行器名称与内置执行器冲突");
-  return Object.freeze({ version: a.version, name: a.name, create: a.create.bind(a) });
+  return Object.freeze({
+    version: a.version,
+    name: a.name,
+    create: a.create.bind(a),
+    ...executionChoices(a),
+  });
 }
 export function executorFromAdapter(
   input: ExecutorAdapter,

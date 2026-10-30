@@ -1,5 +1,7 @@
 # 从本地文件接入模型
 
+也支持自动加载 `~/.proteus-local/model-adapter.mjs`，将个人代码与项目分开；目录约定见 [用户级本地配置](./local-configuration.md)。
+
 CLI 和 Web 启动时可加载操作者指定的本地 `.mjs`、`.js`、`.ts` 或 `.mts` 模块。相对路径以启动目录解析；不自动搜索项目或任务目录。模块默认导出一个适配器对象，或返回该对象的异步工厂。工厂在本次启动装配实例时调用，长驻 Web 复用该对象。
 
 ```bash
@@ -8,7 +10,7 @@ pnpm proteus submit task.yaml --model-adapter ./my-model.mjs
 PROTEUS_MODEL_ADAPTER=/absolute/path/my-model.ts pnpm web
 ```
 
-命令行路径优先于 `PROTEUS_MODEL_ADAPTER`。未配置时保持原有行为；指定文件不存在、导出不合法或初始化失败时直接报错，不回退到默认服务。TS 文件由现有 tsx 启动器加载；依赖按该文件所在目录解析。模块是受信宿主代码，拥有启动进程的权限，只加载自己的文件。代码/凭据不写入实例快照。
+命令行路径优先于 `PROTEUS_MODEL_ADAPTER`，两者均未设置时查找用户级本地入口；未发现入口时保持原有行为。指定文件不存在、导出不合法或初始化失败时直接报错，不回退到默认服务。TS 文件由现有 tsx 启动器加载；依赖按该文件所在目录解析。模块是受信宿主代码，拥有启动进程的权限，只加载自己的文件。代码/凭据不写入实例快照。
 
 可复制 [完整签名示例](../examples/model-adapter.mjs)，设置 `MY_MODEL_ENDPOINT` 和 `MY_MODEL_SIGNING_KEY` 后按自己的协议修改请求与响应映射。示例使用时间戳加请求正文的 HMAC 签名，这是示例私有协议，服务端须采用相同验签约定。可以在 `generate` 中刷新 token、自定义 headers、调用内部 SDK 或执行其他鉴权逻辑。
 

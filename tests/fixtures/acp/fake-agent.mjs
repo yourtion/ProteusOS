@@ -22,6 +22,30 @@ const sessionState = { cwd: process.cwd(), sessionId: "fake-session-1" };
 let cancelRequested = false;
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+const testConfiguration = [
+  {
+    id: "model",
+    name: "Model",
+    category: "model",
+    type: "select",
+    currentValue: "base",
+    options: [
+      { value: "base", name: "Base" },
+      { value: "my-model", name: "Custom" },
+    ],
+  },
+  {
+    id: "effort",
+    name: "Effort",
+    category: "thought_level",
+    type: "select",
+    currentValue: "low",
+    options: [
+      { value: "low", name: "Low" },
+      { value: "high", name: "High" },
+    ],
+  },
+];
 const app = agent({ name: "fake-acp-agent" })
   .onRequest(methods.agent.initialize, async () => ({
     protocolVersion: PROTOCOL_VERSION,
@@ -40,7 +64,25 @@ const app = agent({ name: "fake-acp-agent" })
         }),
       );
     }
-    return { sessionId: sessionState.sessionId, modes: null, meta: {} };
+    return {
+      sessionId: sessionState.sessionId,
+      modes: null,
+      meta: {},
+      ...(process.env.PROTEUS_TEST_CONFIG_OPTIONS ? { configOptions: testConfiguration } : {}),
+    };
+  })
+  .onRequest(methods.agent.session.setConfigOption, async ({ params }) => {
+    const option = testConfiguration.find((item) => item.id === params.configId);
+    if (!option || !option.options.some((item) => item.value === params.value))
+      throw new Error("unsupported test configuration");
+    option.currentValue = params.value;
+    writeFileSync(
+      join(sessionState.cwd, "selected-configuration.json"),
+      JSON.stringify(
+        Object.fromEntries(testConfiguration.map((item) => [item.id, item.currentValue])),
+      ),
+    );
+    return { configOptions: testConfiguration };
   })
   .onNotification(methods.agent.session.cancel, async () => {
     cancelRequested = true;

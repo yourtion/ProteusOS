@@ -1,3 +1,4 @@
+import { availableExecutor, type ExecutorChoice } from "../../src/app/workbench/execution-options";
 import { ConversationThread } from "./ConversationThread";
 import { applyPatches, type Json, type Patch } from "../../src/app/workbench/watch";
 import {
@@ -30,11 +31,18 @@ type Detail = Work & {
 type Settings = {
   home: string;
   defaultExecutor: string;
-  executors: { name: string; installed: boolean }[];
+  executors: ExecutorChoice[];
   organism: unknown;
   candidates: unknown[];
   promotions: unknown[];
 };
+class ApiError extends Error {
+  readonly status: number;
+  constructor(message: string, status: number) {
+    super(message);
+    this.status = status;
+  }
+}
 async function api<T>(path: string, body?: unknown): Promise<T> {
   const response = await fetch(`/api/${path}`, {
     method: body === undefined ? "GET" : "POST",
@@ -42,7 +50,8 @@ async function api<T>(path: string, body?: unknown): Promise<T> {
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   const result = await response.json();
-  if (!response.ok) throw new Error(result.error ?? `请求失败 ${response.status}`);
+  if (!response.ok)
+    throw new ApiError(result.error ?? `请求失败 ${response.status}`, response.status);
   return result;
 }
 const stateNames: Record<string, string> = {
@@ -70,6 +79,8 @@ function App() {
     [goal, setGoal] = useState(""),
     [mode, setMode] = useState<"read" | "review" | "edit">("edit"),
     [executor, setExecutor] = useState(""),
+    [model, setModel] = useState(""),
+    [reasoningEffort, setReasoningEffort] = useState(""),
     [timeout, setTimeoutValue] = useState(300),
     [parentId, setParentId] = useState<string | undefined>(),
     [search, setSearch] = useState(""),
@@ -89,9 +100,7 @@ function App() {
     ]);
     setProjects(p);
     setSettings(s);
-    setExecutor((current) =>
-      s.executors.some((e) => e.name === current && e.installed) ? current : s.defaultExecutor,
-    );
+    setExecutor((current) => availableExecutor(s, current));
     setRuns(r);
     setSelected((current) => (r.some((run) => run.id === current) ? current : ""));
     setProjectId((current) => current || p[0]?.id || "");
@@ -185,15 +194,41 @@ function App() {
     setGoal("");
     setParentId(parent);
     setConfirmApply(false);
+    void action(refresh);
   }
   async function submit() {
+    const latest = await api<Settings>("settings");
+    setSettings(latest);
+    if (!latest.executors.some((e) => e.name === executor && e.installed)) {
+      setExecutor(availableExecutor(latest));
+      throw new Error("执行器配置已变化，请确认新的执行器后重新提交");
+    }
     const requestId = crypto.randomUUID();
-    const body = { projectId, goal, mode, executor, timeoutSeconds: timeout, parentId, requestId };
+    const body = {
+      projectId,
+      goal,
+      mode,
+      executor,
+      model: model || undefined,
+      reasoningEffort: reasoningEffort || undefined,
+      timeoutSeconds: timeout,
+      parentId,
+      requestId,
+    };
     sessionStorage.setItem("proteus-pending", JSON.stringify(body));
     await send(body);
   }
   async function send(body: unknown) {
-    const result = await api<{ runId: string }>("runs", body);
+    let result: { runId: string };
+    try {
+      result = await api<{ runId: string }>("runs", body);
+    } catch (error) {
+      if (error instanceof ApiError && error.status >= 400 && error.status < 500) {
+        sessionStorage.removeItem("proteus-pending");
+        await refresh();
+      }
+      throw error;
+    }
     sessionStorage.removeItem("proteus-pending");
     setSelected(result.runId);
     await refresh();
@@ -468,7 +503,17 @@ function App() {
                   </label>
                   <label className="field">
                     执行器
-                    <select value={executor} onChange={(e) => setExecutor(e.target.value)}>
+                    <select
+                      value={executor}
+                      onChange={(e) => {
+                        setExecutor(e.target.value);
+                        setModel("");
+                        setReasoningEffort("");
+                      }}
+                    >
+                      {!availableExecutor(settings ?? { executors: [], defaultExecutor: "" }) && (
+                        <option value="">没有可用执行器</option>
+                      )}
                       {(settings?.executors ?? []).map((executor) => (
                         <option
                           key={executor.name}
@@ -479,6 +524,40 @@ function App() {
                         </option>
                       ))}
                     </select>
+                  </label>
+                  <label className="field">
+                    模型
+                    <input
+                      aria-label="模型"
+                      value={model}
+                      onChange={(e) => setModel(e.target.value)}
+                      placeholder="执行器默认模型"
+                      list="executor-models"
+                    />
+                    <datalist id="executor-models">
+                      {settings?.executors
+                        .find((e) => e.name === executor)
+                        ?.models?.map((value) => (
+                          <option key={value} value={value} />
+                        ))}
+                    </datalist>
+                  </label>
+                  <label className="field">
+                    推理强度
+                    <input
+                      aria-label="推理强度"
+                      value={reasoningEffort}
+                      onChange={(e) => setReasoningEffort(e.target.value)}
+                      placeholder="执行器默认强度"
+                      list="executor-efforts"
+                    />
+                    <datalist id="executor-efforts">
+                      {settings?.executors
+                        .find((e) => e.name === executor)
+                        ?.reasoningEfforts?.map((value) => (
+                          <option key={value} value={value} />
+                        ))}
+                    </datalist>
                   </label>
                   <label className="field">
                     超时（秒）
@@ -493,7 +572,7 @@ function App() {
                 </div>
                 <div className="composer-footer">
                   <p className="note composer-note">在独立副本中执行，修改由你审阅后应用。</p>
-                  <button className="primary" disabled={busy || !projectId}>
+                  <button className="primary" disabled={busy || !projectId || !executor}>
                     {busy ? "正在提交…" : "开始任务 ↗"}
                   </button>
                 </div>

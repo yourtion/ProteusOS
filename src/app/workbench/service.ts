@@ -224,17 +224,36 @@ export class Workbench {
       organism: this.instance.kernel.getOrganism(ORGANISM_ID),
       defaultExecutor: this.executorConfig().default,
       executors: this.executorConfig().enabled.map((name) => {
-        if (this.customExecutor(name) || name === "pi") return { name, installed: true };
+        const choices = this.executorConfig().choices?.[name] ?? this.customExecutor(name) ?? {};
+        if (this.customExecutor(name) || name === "pi")
+          return {
+            name,
+            installed: true,
+            models: choices.models,
+            reasoningEfforts: choices.reasoningEfforts,
+          };
         if (name === "opencode")
           return {
             name,
             installed: executableAvailable(process.env.PROTEUS_OPENCODE_COMMAND ?? "opencode"),
+            models: choices.models,
+            reasoningEfforts: choices.reasoningEfforts,
           };
         try {
           this.entry(name);
-          return { name, installed: true };
+          return {
+            name,
+            installed: true,
+            models: choices.models,
+            reasoningEfforts: choices.reasoningEfforts,
+          };
         } catch {
-          return { name, installed: false };
+          return {
+            name,
+            installed: false,
+            models: choices.models,
+            reasoningEfforts: choices.reasoningEfforts,
+          };
         }
       }),
       limits: { files: 2000, bytes: 64 * 1024 * 1024 },
@@ -351,6 +370,16 @@ export class Workbench {
     }
     if (parsed.parentId && this.work(parsed.parentId).projectId !== project.id)
       throw new Error("后续任务必须属于同一项目");
+    const choices =
+      this.executorConfig().choices?.[parsed.executor] ?? this.customExecutor(parsed.executor);
+    if (parsed.model && choices?.models && !choices.models.includes(parsed.model))
+      throw new Error("所选模型不在执行器配置中");
+    if (
+      parsed.reasoningEffort &&
+      choices?.reasoningEfforts &&
+      !choices.reasoningEfforts.includes(parsed.reasoningEffort)
+    )
+      throw new Error("所选推理强度不在执行器配置中");
     const captured = capture(project.path);
     const files = captured.files;
     if (!Object.keys(files).length) throw new Error("项目没有可用文本文件");
@@ -409,6 +438,8 @@ export class Workbench {
           goal: parsed.goal,
           mode: parsed.mode,
           executor: parsed.executor,
+          model: parsed.model,
+          reasoningEffort: parsed.reasoningEffort,
           parentId: parsed.parentId,
           snapshotId: snapshot.id,
           inputDir,
@@ -558,6 +589,8 @@ export class Workbench {
       const prompt = `${req.prompt}\n\nWork only in the current project copy. ${work.mode === "edit" ? "Make the requested changes." : "Read/review only; do not modify project files."} Do not access the original repository or install dependencies. Write a final concise report to .proteus-summary.md. Host runs separately registered checks after completion.`;
       const result = await executor.start({
         ...req,
+        model: work.model,
+        reasoningEffort: work.reasoningEffort,
         workspaceDir: cwd,
         prompt,
         signal: controller.signal,

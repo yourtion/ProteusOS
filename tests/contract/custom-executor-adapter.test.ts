@@ -73,3 +73,21 @@ it("坏模块与重名拒绝；缺失 ACP 命令返回失败而不崩溃", async
   expect(result.ok).toBe(false);
   expect(result.stderr).toContain("ENOENT");
 });
+
+it("ACP 选定模型与强度在 prompt 前应用，未支持的选择拒绝", async () => {
+  const configured = new AcpExecutor({
+    name: "test",
+    agentEntry: agent,
+    env: { ...process.env, PROTEUS_TEST_CONFIG_OPTIONS: "1" },
+    permissionPolicy: allowFirstOptionPolicy,
+  });
+  const req = { ...request(), model: "my-model", reasoningEffort: "high" };
+  expect((await configured.start(req)).ok).toBe(true);
+  const { readFileSync } = await import("node:fs");
+  expect(
+    JSON.parse(readFileSync(join(req.workspaceDir, "selected-configuration.json"), "utf8")),
+  ).toEqual({ model: "my-model", effort: "high" });
+  const bad = await configured.start({ ...request(), model: "unsupported" });
+  expect(bad.ok).toBe(false);
+  expect(bad.stderr).toContain("不支持所选配置");
+});

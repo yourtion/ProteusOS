@@ -11,6 +11,8 @@ export const SubmitInput = z.object({
   goal: z.string().trim().min(1).max(16000),
   mode: z.enum(["read", "review", "edit"]),
   executor: z.string().regex(/^[a-z][a-z0-9-]{0,63}$/),
+  model: z.string().trim().min(1).max(256).optional(),
+  reasoningEffort: z.string().trim().min(1).max(256).optional(),
   timeoutSeconds: z.number().int().min(10).max(1800).default(300),
   parentId: z.string().optional(),
   requestId: z.string().min(8).max(100),
@@ -47,6 +49,8 @@ export interface Work {
   goal: string;
   mode: Submission["mode"];
   executor: Submission["executor"];
+  model?: string;
+  reasoningEffort?: string;
   parentId?: string;
   snapshotId: string;
   inputDir: string;

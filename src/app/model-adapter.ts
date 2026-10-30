@@ -1,16 +1,18 @@
+import { discoverLocalModule, expandUserPath } from "./local-config.ts";
 import { stat } from "node:fs/promises";
 import { extname, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { checkedModelAdapter, type ModelAdapter } from "../model/index.ts";
 
-/** 只加载操作者显式指定的本地代码；相对路径以启动目录解析，不读取任务/项目配置。 */
+/** 加载显式入口或用户级约定入口的本地代码；相对路径以启动目录解析，不读取任务/项目配置。 */
 export async function loadModelAdapter(
   file = process.env.PROTEUS_MODEL_ADAPTER,
 ): Promise<ModelAdapter | undefined> {
+  file ??= await discoverLocalModule("model-adapter");
   if (file === undefined) return undefined;
   if (!file.trim() || /^[a-z][a-z\d+.-]*:/i.test(file))
     throw new Error("--model-adapter 必须是本地文件路径");
-  const path = resolve(file);
+  const path = resolve(expandUserPath(file));
   if (![".js", ".mjs", ".ts", ".mts"].includes(extname(path)))
     throw new Error("模型适配器文件必须为 .js、.mjs、.ts 或 .mts");
   let value: unknown;
