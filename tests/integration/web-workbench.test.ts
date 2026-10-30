@@ -82,6 +82,9 @@ const input = (projectId: string, goal = "修复加法") => ({
 
 it("runs a real SQLite task, checks code, supports follow-up, and applies changes once", async () => {
   const f = fixture();
+  const archive = Buffer.alloc(1024 * 1024 + 1);
+  writeFileSync(join(f.project, "evidence.tar.gz"), archive);
+  execFileSync("git", ["-C", f.project, "add", "evidence.tar.gz"]);
   const app = new Workbench({ home: f.home, executorFactory: factory });
   try {
     await app.initialize();
@@ -100,6 +103,7 @@ it("runs a real SQLite task, checks code, supports follow-up, and applies change
     expect(work.result?.checks.tested).toBe(true);
     expect(work.result?.checks.passed).toBe(true);
     expect(work.result?.changes).toHaveLength(1);
+    expect(work.baseline).toHaveProperty("evidence.tar.gz");
     const follow = app.submit({
       ...input(project.id, "READ 检查修复结果"),
       mode: "read",
@@ -117,6 +121,7 @@ it("runs a real SQLite task, checks code, supports follow-up, and applies change
     const applied = app.apply(receipt.runId);
     expect(app.apply(receipt.runId)).toEqual(applied);
     expect(readFileSync(join(f.project, "math.mjs"), "utf8")).toContain("a+b");
+    expect(readFileSync(join(f.project, "evidence.tar.gz")).equals(archive)).toBe(true);
   } finally {
     await app.close();
     rmSync(f.root, { recursive: true, force: true });
@@ -414,6 +419,42 @@ it("migrates legacy task ancestry deterministically across restarts", async () =
     await app.close();
     app = new Workbench({ home: f.home, executorFactory: factory });
     expect(app.work(second.runId).turnId).toBe(migrated.turnId);
+  } finally {
+    await app.close();
+    rmSync(f.root, { recursive: true, force: true });
+  }
+});
+
+it("executes with binary inputs and applies binary changes without losing file bytes", async () => {
+  const f = fixture();
+  writeFileSync(join(f.project, "fixture.bin"), Buffer.from([0, 255, 1]));
+  const binaryFactory: WorkbenchOptions["executorFactory"] = (name, permission) => {
+    const executor = factory!(name, permission);
+    return {
+      ...executor,
+      async start(req) {
+        expect(readFileSync(join(req.workspaceDir, "fixture.bin"))).toEqual(
+          Buffer.from([0, 255, 1]),
+        );
+        const result = await executor.start(req);
+        writeFileSync(join(req.workspaceDir, "fixture.bin"), Buffer.from([0, 128, 2]));
+        return result;
+      },
+    };
+  };
+  const app = new Workbench({ home: f.home, executorFactory: binaryFactory });
+  try {
+    const project = app.addProject({
+      path: f.project,
+      testCommand: [process.execPath, "check.mjs"],
+    });
+    const receipt = app.submit(input(project.id));
+    await waitFor(() => app.detail(receipt.runId).run?.state === "succeeded");
+    expect(
+      app.work(receipt.runId).result!.changes.find((c) => c.path === "fixture.bin")!.afterFile,
+    ).toBeDefined();
+    app.apply(receipt.runId);
+    expect(readFileSync(join(f.project, "fixture.bin"))).toEqual(Buffer.from([0, 128, 2]));
   } finally {
     await app.close();
     rmSync(f.root, { recursive: true, force: true });

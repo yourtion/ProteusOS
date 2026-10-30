@@ -231,7 +231,7 @@ env -u PROTEUS_E2E -u PROTEUS_SANDBOX PATH="/opt/homebrew/bin:$PATH" \
 
 ```bash
 env -u PROTEUS_E2E -u PROTEUS_SANDBOX PATH="/opt/homebrew/bin:$PATH" \
-  /opt/homebrew/bin/node tests/experiments/validate-adaptive-stage.ts
+  /opt/homebrew/bin/node experiments/runners/validate-adaptive-stage.ts
 ```
 
 该命令明确使用脚本 fixture 和真实本地 worker，无真实模型请求。新目录保存实例、冻结清单及完整报告，不能将其数值改善作为真实模型效果。

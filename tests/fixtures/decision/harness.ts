@@ -1,12 +1,12 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { AppInstance } from "../../../src/app/instance.ts";
-import { openInstance } from "../../../src/app/instance.ts";
+import type { AppInstance } from "../../../experiments/instance.ts";
+import { openInstance } from "../../../experiments/instance.ts";
 import { installSeed } from "../../../src/app/seed.ts";
-import type { ExperimentGenomes } from "../../../src/app/experiment/assets.ts";
-import { ensureExperimentGenomes } from "../../../src/app/experiment/assets.ts";
-import { OracleDecisionProvider } from "../../../src/app/experiment/oracle.ts";
+import type { ExperimentGenomes } from "../../../experiments/protocols/assets.ts";
+import { ensureExperimentGenomes } from "../../../experiments/protocols/assets.ts";
+import { OracleDecisionProvider } from "../../../experiments/protocols/oracle.ts";
 import { parseCapabilityModule } from "../../../src/runtime/capability.ts";
 import type { DecisionProvider } from "../../../src/decision/index.ts";
 import { FakeLlmDecisionProvider } from "./fake-llm.ts";

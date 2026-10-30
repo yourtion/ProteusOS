@@ -67,7 +67,7 @@
 
 - [执行摘要](./adaptive-observed-v3/summary.json)、[完整报告](./adaptive-observed-v3/report.json)、[冻结清单](./adaptive-observed-v3/manifest.json)、[实现版本](./adaptive-observed-v3/run.json)。
 - [独立核验](./adaptive-observed-v3/independent-audit.json)：SQLite 完整性通过、外键违规 0、830 个唯一 Run/DecisionCall、450 个完整单元、2,425 个 blob 的 SHA-256 全部匹配。从原始收据独立重建全部 450 个单元的选择、成功与延迟，再复算三臂成功率，均一致。
-- [原始证据包](./adaptive-observed-v3/evidence.tar.gz)与[归档校验](./adaptive-observed-v3/archive.json)：仅含封闭数据库、内容寻址 blob 和公开实验文件；不包含凭据、工作区或任务资料目录。解压到新目录后的完整报告及独立核验逐字段一致；父轮 3,462 条观测事件与原父实例逐条相同。
+- [原始证据包](../archives.json)与[归档校验](./adaptive-observed-v3/archive.json)：仅含封闭数据库、内容寻址 blob 和公开实验文件；不包含凭据、工作区或任务资料目录。解压到新目录后的完整报告及独立核验逐字段一致；父轮 3,462 条观测事件与原父实例逐条相同。
 - 代码验证：运行前定向 9/9，lint、format、typecheck 通过；全量 **426 passed / 5 skipped**。跳过项为需另行显式启用的 Agent/Microsandbox 场景。本次实际观测使用真实模型与受约束本地 worker。
 
 清单 SHA-256：`574cf09c7e2018bb9e4a061d6df03236667be8038fd984a993232c62a6ad8d97`。

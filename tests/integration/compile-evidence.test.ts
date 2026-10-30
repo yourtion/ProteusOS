@@ -1,8 +1,8 @@
 import { rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, expect, it } from "vitest";
-import { auditCompileEvidence } from "../../src/app/experiment/compile-evidence.ts";
-import { openInstance, type AppInstance } from "../../src/app/instance.ts";
+import { auditCompileEvidence } from "../../experiments/protocols/compile-evidence.ts";
+import { openInstance, type AppInstance } from "../../experiments/instance.ts";
 import { compileHarness } from "../fixtures/compilation/harness.ts";
 
 const opened: AppInstance[] = [];

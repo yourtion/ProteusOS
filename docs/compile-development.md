@@ -1,6 +1,6 @@
 # 编译开发开销到实验单元的映射
 
-M6a-03-02b1，2026-10-25。实现见 [development.ts](../src/app/experiment/development.ts)。它在 [开发证据核验](./compile-evidence.md) 之后冻结任务内容，并把来源决策、来源执行和全部搜索调用映射为 `adaptive-behavior-v1` 的开发收据。
+M6a-03-02b1，2026-10-25。实现见 [development.ts](../experiments/protocols/development.ts)。它在 [开发证据核验](./compile-evidence.md) 之后冻结任务内容，并把来源决策、来源执行和全部搜索调用映射为 `adaptive-behavior-v1` 的开发收据。
 
 ## 使用顺序
 

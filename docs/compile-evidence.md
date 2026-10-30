@@ -1,9 +1,9 @@
 # 编译开发证据的只读核验
 
-M6a-03-02a，2026-10-25。入口为 [auditCompileEvidence](../src/app/experiment/compile-evidence.ts)。本切片先核验 [编译作业](./policy-compilation.md) 的开发侧证据，供后续适应实验收据桥接使用。
+M6a-03-02a，2026-10-25。入口为 [auditCompileEvidence](../experiments/protocols/compile-evidence.ts)。本切片先核验 [编译作业](./policy-compilation.md) 的开发侧证据，供后续适应实验收据桥接使用。
 
 ```ts
-import { auditCompileEvidence } from "./src/app/experiment/compile-evidence.ts";
+import { auditCompileEvidence } from "./experiments/protocols/compile-evidence.ts";
 
 const evidence = auditCompileEvidence({
   kernel: app.kernel,

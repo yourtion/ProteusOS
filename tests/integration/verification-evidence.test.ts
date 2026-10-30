@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import type { AppInstance } from "../../src/app/instance.ts";
 import { openInstance } from "../../src/app/instance.ts";
-import { auditRunVerification } from "../../src/app/experiment/run-verification.ts";
+import { auditRunVerification } from "../../experiments/protocols/run-verification.ts";
 import { canonicalJson, digestOf } from "../../src/storage/blobs.ts";
 import {
   persistJsonVerification,

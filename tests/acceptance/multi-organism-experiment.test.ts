@@ -6,8 +6,8 @@ import {
   runExperiment,
   type RunExperimentOptions,
   type TrialRow,
-} from "../../src/app/experiment/runner.ts";
-import { generateReport } from "../../src/app/experiment/reporter.ts";
+} from "../../experiments/protocols/runner.ts";
+import { generateReport } from "../../experiments/protocols/reporter.ts";
 import { openInstance } from "../../src/app/instance.ts";
 import { MIGRATIONS } from "../../src/storage/migrations.ts";
 import { SqliteDb } from "../../src/storage/sqlite.ts";

@@ -1,6 +1,6 @@
 import type { RequestPermissionRequest } from "@agentclientprotocol/sdk";
 import { describe, expect, it } from "vitest";
-import { developmentPilotPermission } from "../../src/app/development-pilot-permission.ts";
+import { developmentPilotPermission } from "../../experiments/protocols/development-pilot-permission.ts";
 
 const workspace = "/private/tmp/pilot/workspaces/run/develop";
 function request(name: string, filePath: string): RequestPermissionRequest {

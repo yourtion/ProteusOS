@@ -29,7 +29,7 @@
 
 本轮 120 次生成、120 次同正文计数，已知 **37,752 input /31,730 output tokens**，约 15 分钟完成。O2 实际开发累计 **382 次**，包括原矩阵失败的 142 次与 R1 的 120 次；原 18 个未派发槽位没有补跑。含 O1/准备累计 **1175 次生成尝试**，已知 **452,731 input /262,373 output**，历史未知 **2 次**继续单列，未返还额度或补零。
 
-[执行摘要](./routing-output-cap-v1/summary.json)、[冻结清单](./routing-output-cap-v1/manifest.json)、[完整报告](./routing-output-cap-v1/report.json)、[配对与失败分析](./routing-output-cap-v1/analysis.json)、[独立脚本核验](./routing-output-cap-v1/independent-audit.json)、[请求发送范围核对](./routing-output-cap-v1/preflight-egress.json)、[原始证据包](./routing-output-cap-v1/evidence.tar.gz)、[归档摘要](./routing-output-cap-v1/archive.json)均保存。
+[执行摘要](./routing-output-cap-v1/summary.json)、[冻结清单](./routing-output-cap-v1/manifest.json)、[完整报告](./routing-output-cap-v1/report.json)、[配对与失败分析](./routing-output-cap-v1/analysis.json)、[独立脚本核验](./routing-output-cap-v1/independent-audit.json)、[请求发送范围核对](./routing-output-cap-v1/preflight-egress.json)、[原始证据包](../archives.json)、[归档摘要](./routing-output-cap-v1/archive.json)均保存。
 
 独立脚本核对 120 个唯一 Run /DecisionCall、原始请求/响应摘要、每臂实际额度、冻结输入/裁判、完整分母及累计成本；SQLite integrity /外键通过，**3983 个 blob** SHA-256 全部匹配，父轮 **842 条事件**逐条不变。清理重开和证据包解压后，报告及独立核验逐字段一致。这里的独立脚本核验不代表独立保管资料或独立效果验证。
 

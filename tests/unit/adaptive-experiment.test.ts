@@ -9,7 +9,7 @@ import {
   reportAdaptiveExperiment,
   selectAdaptiveChoice,
   type AdaptivePlan,
-} from "../../src/app/experiment/adaptive.ts";
+} from "../../experiments/protocols/adaptive.ts";
 import {
   rehearsalObservations,
   rehearsalPlan,

@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { runDevelopmentPilot } from "../../src/app/development-pilot.ts";
+import { runDevelopmentPilot } from "../../experiments/protocols/development-pilot.ts";
 
 function fixture() {
   const root = mkdtempSync(join(tmpdir(), "proteus-dev-pilot-test-"));

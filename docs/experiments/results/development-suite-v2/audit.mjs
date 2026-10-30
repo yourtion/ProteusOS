@@ -137,7 +137,7 @@ for (const row of summary.runs) {
   const task = suite.cases.find((t) => t.id === row.task);
   const expectedHarness = { ...continuation.originalHarnessDigests };
   if (!initial.runs.some((r) => r.id === row.id))
-    expectedHarness["tests/experiments/continue-development-suite-v2.ts"] =
+    expectedHarness["experiments/runners/continue-development-suite-v2.ts"] =
       continuation.continuationDigest;
   assert.deepEqual(manifest.harnessDigests, expectedHarness);
   assert.equal(manifest.requestedModel, suite.model);

@@ -5,7 +5,7 @@ import {
   type AdaptivePlan,
   type AdaptiveObservation,
   type FrozenAdaptivePlan,
-} from "../../../src/app/experiment/adaptive.ts";
+} from "../../../experiments/protocols/adaptive.ts";
 import { canonicalJson, digestOf } from "../../../src/storage/blobs.ts";
 
 /** 完全公开的协议演练，不是独立正式集，不实现未来的编译器。 */

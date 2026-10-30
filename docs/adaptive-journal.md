@@ -1,6 +1,6 @@
 # 适应实验的持久化派发账本
 
-M6a-03-01，2026-10-25。实现见 [AdaptiveJournal](../src/app/experiment/journal.ts)，通过 `openInstance(...).adaptive` 使用。协议仍为 [adaptive-behavior-v1](./experiments/adaptive-behavior-v1.md)，不改变其预算、数据或效果门槛。
+M6a-03-01，2026-10-25。实现见 [AdaptiveJournal](../experiments/protocols/journal.ts)，通过 `openInstance(...).adaptive` 使用。协议仍为 [adaptive-behavior-v1](./experiments/adaptive-behavior-v1.md)，不改变其预算、数据或效果门槛。
 
 本切片实现冻结清单、派发许可、预留和恢复的持久化。Journal 本身不发送模型请求或任务；新增 completeFromRuns 可在同一事务核验原始 Runtime 证据并结案，运行由应用侧串行运行器负责，不创建 Evaluation 或 Promotion。真实 runner、受信预算后端与独立资料仍是后续前置；不能以此切片的通过替代真实效果验证。
 

@@ -11,4 +11,4 @@
 
 本阶段完成 120/120、当前计量完整，无新增未知，保留历史未知 2 次。累计 1295 次生成尝试、已知 497899 input /290642 output；`benefit=inconclusive`，active 未变，正式 Evaluation /adoption 未运行。
 
-[摘要](./routing-layout-v1/summary.json)、[清单](./routing-layout-v1/manifest.json)、[原始报告](./routing-layout-v1/report.json)、[配对与核验](./routing-layout-v1/analysis.json)、[证据包](./routing-layout-v1/evidence.tar.gz)和[归档摘要](./routing-layout-v1/archive.json)已保存。独立脚本核对 SQLite、4468 个 blob、120 条收据及父轮 842 条事件，解包后报告逐字段复算一致。完整代码定向 18 个测试及全量 457 passed /5 skipped。
+[摘要](./routing-layout-v1/summary.json)、[清单](./routing-layout-v1/manifest.json)、[原始报告](./routing-layout-v1/report.json)、[配对与核验](./routing-layout-v1/analysis.json)、[证据包](../archives.json)和[归档摘要](./routing-layout-v1/archive.json)已保存。独立脚本核对 SQLite、4468 个 blob、120 条收据及父轮 842 条事件，解包后报告逐字段复算一致。完整代码定向 18 个测试及全量 457 passed /5 skipped。

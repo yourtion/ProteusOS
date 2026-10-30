@@ -21,7 +21,7 @@
 | `src/decision/` | 受限视图、严格响应解析、版本化规则/LLM 策略及调用记录合同 |
 | `src/adapters/decision-rule/`、`decision-llm/` | 固定规则基线与 Anthropic Messages Adapter；后者关闭自动重试并支持取消 |
 | `src/runtime/`、`src/storage/` | 决策调用账本、原子额度预留、截止点、取消、恢复与证据关联 |
-| `src/app/experiment/` | 数据集装载、双臂快照、Oracle 预检、运行与只读证据复算 |
+| `experiments/protocols/` | 数据集装载、双臂快照、Oracle 预检、运行与只读证据复算 |
 | `tests/contract/decision-contract.test.ts`、`tests/integration/decision-runtime.test.ts`、`tests/acceptance/organism-decision.test.ts` | 合同、恢复、报告验收及 240-trial fake 管道演练 |
 
 合同归属 Decision，调度归属 Runtime，持久化归属 Storage，SDK 映射归属 Adapter，装配与入口归属 App。Runtime 不导入 Evolution，Kernel 不导入模型 SDK。
@@ -249,22 +249,22 @@ CLI 要能区分“工程/预检失败”和“实验完成但收益未证明”
 pnpm proteus init --home ./experiment-instance --organism experiment --actor operator
 
 # 无模型调用的管道演练：40 个样本 × 两组 × 3 次重复
-pnpm proteus experiment run --home ./experiment-instance --organism experiment --actor operator \
+pnpm experiment run --home ./experiment-instance --organism experiment --actor operator \
   --dataset tests/fixtures/decision/plumbing --out ./plumbing-out \
   --llm fake --oracle --experiment-id plumbing-v1 --json
-pnpm proteus experiment report ./plumbing-out --dataset tests/fixtures/decision/plumbing \
+pnpm experiment report ./plumbing-out --dataset tests/fixtures/decision/plumbing \
   --home ./experiment-instance --organism experiment --actor operator --json
 
 # 开发阶段：先配置真实调用凭据，额度包含联通预检
-pnpm proteus experiment run --home ./experiment-instance --organism experiment --actor operator \
+pnpm experiment run --home ./experiment-instance --organism experiment --actor operator \
   --dataset tests/fixtures/decision/dev --out ./dev-out --llm real --oracle \
   --experiment-id dev-v1 --experiment-calls 100 --organism-calls 1000 --repeats 1 --json
 
 # 正式阶段：先独立准备并冻结 formal-dataset
-pnpm proteus experiment run --home ./experiment-instance --organism experiment --actor operator \
+pnpm experiment run --home ./experiment-instance --organism experiment --actor operator \
   --dataset ./formal-dataset --out ./formal-out --llm real --oracle \
   --experiment-id formal-v1 --experiment-calls 300 --repeats 3 --seed 20260921 --json
-pnpm proteus experiment report ./formal-out --dataset ./formal-dataset \
+pnpm experiment report ./formal-out --dataset ./formal-dataset \
   --home ./experiment-instance --organism experiment --actor operator --json
 
 # 结案未知调用，保留 unknown 证据与未结算费用

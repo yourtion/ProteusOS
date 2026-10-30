@@ -1,8 +1,8 @@
 import { readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
-import { openInstance, type AppInstance } from "../../src/app/instance.ts";
-import { freezeAdaptivePlan } from "../../src/app/experiment/adaptive.ts";
+import { openInstance, type AppInstance } from "../../experiments/instance.ts";
+import { freezeAdaptivePlan } from "../../experiments/protocols/adaptive.ts";
 import { armHarness } from "../fixtures/adaptive-behavior/arm-harness.ts";
 import { rehearsalObservations } from "../fixtures/adaptive-behavior/rehearsal.ts";
 

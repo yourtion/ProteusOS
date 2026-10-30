@@ -2,7 +2,7 @@ import { join } from "node:path";
 import { LlmDecisionProvider } from "../../../src/adapters/decision-llm/index.ts";
 import { resolveLlmDemosRequest } from "../../../src/adapters/decision-llm/request.ts";
 import type { CompileBackend } from "../../../src/evolution/compile-types.ts";
-import { openInstance } from "../../../src/app/instance.ts";
+import { openInstance } from "../../../experiments/instance.ts";
 import {
   parseLlmDemosPolicy,
   type DecisionRequest,

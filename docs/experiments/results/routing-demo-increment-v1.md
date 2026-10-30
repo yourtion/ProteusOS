@@ -13,4 +13,4 @@
 
 本阶段 120 次生成、120 次计数预检，已知 70,044 input /24,942 output。含历史累计 1415 次生成尝试，已知 567,943 input /315,584 output，历史未知 2 次继续保留。正式 Evaluation /adoption 未运行，active 不变；这是开发配置建议，不是独立收益确认。
 
-[摘要](./routing-demo-increment-v1/summary.json)、[清单](./routing-demo-increment-v1/manifest.json)、[原始报告](./routing-demo-increment-v1/report.json)、[配对与核验](./routing-demo-increment-v1/analysis.json)、[证据包](./routing-demo-increment-v1/evidence.tar.gz)和[归档摘要](./routing-demo-increment-v1/archive.json)已保存。脚本核对 SQLite、4947 个 blob、120 条收据及父轮 842 条事件；解包后报告逐字段复算一致。完整代码定向 18 个测试及全量 457 passed /5 skipped。
+[摘要](./routing-demo-increment-v1/summary.json)、[清单](./routing-demo-increment-v1/manifest.json)、[原始报告](./routing-demo-increment-v1/report.json)、[配对与核验](./routing-demo-increment-v1/analysis.json)、[证据包](../archives.json)和[归档摘要](./routing-demo-increment-v1/archive.json)已保存。脚本核对 SQLite、4947 个 blob、120 条收据及父轮 842 条事件；解包后报告逐字段复算一致。完整代码定向 18 个测试及全量 457 passed /5 skipped。

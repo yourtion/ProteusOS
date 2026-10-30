@@ -1,4 +1,4 @@
-import { execFileSync } from "node:child_process";
+import { diagnosticParents } from "../fixtures/diagnostic-parents.ts";
 import { mkdtempSync, writeFileSync, rmSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -8,12 +8,15 @@ import { resolveLlmDemosRequest } from "../../src/adapters/decision-llm/request.
 import {
   prepareDiagnosticRunner,
   openDiagnosticRunner,
-} from "../../src/app/experiment/diagnostic-runner.ts";
-import { DiagnosticExperiment, freezeDiagnosticPlan } from "../../src/app/experiment/diagnostic.ts";
-import { reliabilityDataset } from "../../src/app/experiment/reliability-data.ts";
-import { RELIABILITY_BASELINE } from "../../src/app/experiment/reliability-baseline.ts";
-import { diagnosticDataset } from "../../src/app/experiment/diagnostic-data.ts";
-import { openInstance, type AppInstance } from "../../src/app/instance.ts";
+} from "../../experiments/protocols/diagnostic-runner.ts";
+import {
+  DiagnosticExperiment,
+  freezeDiagnosticPlan,
+} from "../../experiments/protocols/diagnostic.ts";
+import { reliabilityDataset } from "../../experiments/protocols/reliability-data.ts";
+import { RELIABILITY_BASELINE } from "../../experiments/protocols/reliability-baseline.ts";
+import { diagnosticDataset } from "../../experiments/protocols/diagnostic-data.ts";
+import { openInstance, type AppInstance } from "../../experiments/instance.ts";
 import { canonicalJson, digestOf } from "../../src/storage/blobs.ts";
 import type { DecisionRequest, DecisionResult } from "../../src/decision/index.ts";
 
@@ -71,52 +74,18 @@ let capParent: string;
 let reliabilityParent: string;
 const opened = new Set<AppInstance>();
 const roots: string[] = [];
-beforeAll(() => {
-  parent = mkdtempSync(join(tmpdir(), "proteus-diagnostic-parent-"));
-  execFileSync("tar", [
-    "-xzf",
-    "docs/experiments/results/adaptive-observed-v3/evidence.tar.gz",
-    "-C",
-    parent,
-  ]);
-});
+let parentsRoot: string;
+beforeAll(async () => {
+  parentsRoot = mkdtempSync(join(tmpdir(), "proteus-synthetic-parents-"));
+  ({ parent, fixedParent, capParent, reliabilityParent } = await diagnosticParents(parentsRoot));
+}, 120000);
 afterEach(() => {
   for (const app of opened) app.close();
   opened.clear();
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
-beforeAll(() => {
-  fixedParent = mkdtempSync(join(tmpdir(), "proteus-cap-parent-"));
-  execFileSync("tar", [
-    "-xzf",
-    "docs/experiments/results/routing-fixed-output-v1/evidence.tar.gz",
-    "-C",
-    fixedParent,
-  ]);
-});
-beforeAll(() => {
-  capParent = mkdtempSync(join(tmpdir(), "proteus-layout-parent-"));
-  execFileSync("tar", [
-    "-xzf",
-    "docs/experiments/results/routing-output-cap-v1/evidence.tar.gz",
-    "-C",
-    capParent,
-  ]);
-});
-beforeAll(() => {
-  reliabilityParent = mkdtempSync(join(tmpdir(), "proteus-reliability-parent-"));
-  execFileSync("tar", [
-    "-xzf",
-    "docs/experiments/results/routing-demo-increment-v1/evidence.tar.gz",
-    "-C",
-    reliabilityParent,
-  ]);
-});
 afterAll(() => {
-  rmSync(reliabilityParent, { recursive: true, force: true });
-  rmSync(capParent, { recursive: true, force: true });
-  rmSync(parent, { recursive: true, force: true });
-  rmSync(fixedParent, { recursive: true, force: true });
+  if (parentsRoot) rmSync(parentsRoot, { recursive: true, force: true });
 });
 function fixture(
   mode: Model["fault"] = "none",
@@ -176,7 +145,7 @@ describe("O2 原始诊断：冻结额度、同正文计数和受约束执行", (
     expect(h.frozen.plan.conditions).toHaveLength(1);
     expect(h.frozen.plan.conditions[0]).toMatchObject({
       id: RELIABILITY_BASELINE.conditionId,
-      snapshotDigest: RELIABILITY_BASELINE.snapshotDigest,
+      snapshotDigest: h.frozen.plan.fixtureBaselineDigest,
     });
     expect(() =>
       freezeDiagnosticPlan({
@@ -273,7 +242,7 @@ describe("O2 原始诊断：冻结额度、同正文计数和受约束执行", (
       engineering: "passed",
       confirmationPassed: false,
       selected: null,
-      totalModelCallsIncludingHistory: 1059,
+      totalModelCallsIncludingHistory: h.frozen.plan.prior.modelCalls + 4,
       totalUnknownUsageCallsIncludingHistory: 2,
       developmentRecommendation: "v1-t1024-d0",
       qualityGates: [
@@ -332,7 +301,7 @@ describe("O2 原始诊断：冻结额度、同正文计数和受约束执行", (
       engineering: "incomplete",
       unknownUsageCalls: 2,
       completedRuns: 4,
-      totalModelCallsIncludingHistory: 798,
+      totalModelCallsIncludingHistory: h.frozen.plan.prior.modelCalls + 4,
       totalUnknownUsageCallsIncludingHistory: 4,
       confirmationPassed: false,
     });
@@ -431,7 +400,7 @@ describe("O2 原始诊断：冻结额度、同正文计数和受约束执行", (
       sentModelCalls: 16,
       unknownUsageCalls: 0,
       activeUnchanged: true,
-      totalModelCallsIncludingHistory: 809,
+      totalModelCallsIncludingHistory: h.frozen.plan.prior.modelCalls + 16,
       totalUnknownUsageCallsIncludingHistory: 1,
     });
     expect(report.metrics).toHaveLength(8);
@@ -526,7 +495,7 @@ describe("O2 原始诊断：冻结额度、同正文计数和受约束执行", (
     expect(report.metrics.map((c) => c.id)).toEqual(["v1-t512-d0", "v1-t256-d0"]);
     expect(report.confirmationPassed).toBe(true);
     expect(report.sentModelCalls).toBe(4);
-    expect(report.totalModelCallsIncludingHistory).toBe(813);
+    expect(report.totalModelCallsIncludingHistory).toBe(confirm.frozen.plan.prior.modelCalls + 4);
     expect(report.totalUnknownUsageCallsIncludingHistory).toBe(1);
   });
   it("拒绝把小型 fixture 改标为完整 real，或省去一个矩阵条件", () => {

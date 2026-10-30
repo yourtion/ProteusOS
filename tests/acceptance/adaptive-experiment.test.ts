@@ -10,7 +10,7 @@ import {
   reportAdaptiveExperiment,
   selectAdaptiveChoice,
   type AdaptiveObservation,
-} from "../../src/app/experiment/adaptive.ts";
+} from "../../experiments/protocols/adaptive.ts";
 import { canonicalJson, digestOf } from "../../src/storage/blobs.ts";
 import {
   rehearsalObservations,

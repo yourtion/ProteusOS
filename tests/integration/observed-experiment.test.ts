@@ -8,10 +8,10 @@ import { canonicalJson, digestOf } from "../../src/storage/blobs.ts";
 import {
   prepareObservedRunner,
   openObservedRunner,
-} from "../../src/app/experiment/observed-runner.ts";
-import { ObservedExperiment } from "../../src/app/experiment/observed.ts";
-import { openInstance } from "../../src/app/instance.ts";
-import { freezeObservedPlan } from "../../src/app/experiment/observed-plan.ts";
+} from "../../experiments/protocols/observed-runner.ts";
+import { ObservedExperiment } from "../../experiments/protocols/observed.ts";
+import { openInstance } from "../../experiments/instance.ts";
+import { freezeObservedPlan } from "../../experiments/protocols/observed-plan.ts";
 import {
   buildLlmChoiceBody,
   resolveLlmDemosRequest,

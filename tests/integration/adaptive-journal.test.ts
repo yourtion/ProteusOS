@@ -2,12 +2,15 @@ import { randomUUID } from "node:crypto";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import { openInstance } from "../../src/app/instance.ts";
-import { AdaptiveJournal } from "../../src/app/experiment/journal.ts";
-import { freezeAdaptivePlan, type AdaptiveObservation } from "../../src/app/experiment/adaptive.ts";
-import type { AdaptiveReservationRecord } from "../../src/app/experiment/journal-types.ts";
+import { openInstance } from "../../experiments/instance.ts";
+import { AdaptiveJournal } from "../../experiments/protocols/journal.ts";
+import {
+  freezeAdaptivePlan,
+  type AdaptiveObservation,
+} from "../../experiments/protocols/adaptive.ts";
+import type { AdaptiveReservationRecord } from "../../experiments/protocols/journal-types.ts";
 import { canonicalJson, digestOf } from "../../src/storage/blobs.ts";
-import { bootSeededInstance } from "../helpers.ts";
+import { bootSeededInstance } from "../fixtures/experiment-instance.ts";
 import { rehearsalObservations, rehearsalPlan } from "../fixtures/adaptive-behavior/rehearsal.ts";
 
 function harness() {

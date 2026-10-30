@@ -21,7 +21,7 @@
 
 固定检查全部通过；补丁只改目标文件；人工审查后在主仓库执行回归和完整检查。保存修复前结果、清单、Run/Attempt、快照、执行轨迹、外部测试结果及补丁。原始源码和检查封存，可脱离模型复验。
 
-运行入口：`tests/experiments/run-development-pilot.ts --output NEW_DIR --claude-settings FILE`（使用本项目 tsx）。首版限定单个自包含 Node 模块，尚不是通用仓库编码 CLI 或 Web。源码修复后默认入口会因基线已通过而拒绝再次调用模型；复演旧缺陷可显式提供 `--source-file` 指向归档旧源码，且必须使用新目录。
+运行入口：`experiments/runners/run-development-pilot.ts --output NEW_DIR --claude-settings FILE`（使用本项目 tsx）。首版限定单个自包含 Node 模块，尚不是通用仓库编码 CLI 或 Web。源码修复后默认入口会因基线已通过而拒绝再次调用模型；复演旧缺陷可显式提供 `--source-file` 指向归档旧源码，且必须使用新目录。
 
 结果已保存至 [真实开发试点结果](./results/development-pilot-v1.md)。首轮 125.995 秒后失败：试点权限回调只读取旧 `_meta.claudeCode.toolName`，实际 ACP 提供标准 `toolCall.name`，三次目标 Write 均被误拒绝。保留失败记录并提取原始提案，12 项离线验收通过；原样采用到源码并通过全量回归。对应修复提交 `d82402d`。
 

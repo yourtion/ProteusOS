@@ -14,7 +14,7 @@ import {
 import {
   DECISION_VIEW_CONTENT,
   RULE_CHOICE_POLICY_CONTENT,
-} from "../../src/app/experiment/assets.ts";
+} from "../../experiments/protocols/assets.ts";
 import { DEV_DATASET } from "../fixtures/decision/harness.ts";
 
 /**

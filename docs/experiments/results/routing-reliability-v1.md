@@ -6,6 +6,6 @@
 
 本轮 60 次生成与 60 次预检，实际已知 **32,136 input /16,134 output tokens**；中位 Run 延迟 5.635 秒，p95 15.695 秒，结束原因均 `end_turn`。全链累计 **1475 次生成尝试**、已知 **600,079 input /331,718 output**，历史未知用量 2 次继续保留。价格及执行成本未知，不换算金额；正式 Evaluation 和采用未执行，active 保持原状态。
 
-[执行摘要](./routing-reliability-v1/summary.json)、[冻结清单](./routing-reliability-v1/manifest.json)、[完整报告](./routing-reliability-v1/report.json)、[只读审计](./routing-reliability-v1/independent-audit.json)、[原始证据包](./routing-reliability-v1/evidence.tar.gz)及[归档摘要](./routing-reliability-v1/archive.json)已保存。审计核对 60 个唯一 Run/DecisionCall、请求/响应摘要、额度与候选快照、SQLite 完整性、外键、5248 个 blob 和父轮 842 条事件；解包后报告和审计结果逐字段一致。证据包 SHA-256：`9e15c6856fae743fc8e8521b83721250a5340e424d6f9b2d896eacdd26041420`。
+[执行摘要](./routing-reliability-v1/summary.json)、[冻结清单](./routing-reliability-v1/manifest.json)、[完整报告](./routing-reliability-v1/report.json)、[只读审计](./routing-reliability-v1/independent-audit.json)、[原始证据包](../archives.json)及[归档摘要](./routing-reliability-v1/archive.json)已保存。审计核对 60 个唯一 Run/DecisionCall、请求/响应摘要、额度与候选快照、SQLite 完整性、外键、5248 个 blob 和父轮 842 条事件；解包后报告和审计结果逐字段一致。证据包 SHA-256：`9e15c6856fae743fc8e8521b83721250a5340e424d6f9b2d896eacdd26041420`。
 
 工程验证：20 个冻结任务均通过真实本地 worker 与裁判的无网络 60 槽位演练；34 个定向测试、静态检查及全量 **460 passed /5 skipped**。fixture 不作为真实效果。

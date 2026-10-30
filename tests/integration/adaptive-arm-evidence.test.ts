@@ -2,7 +2,7 @@ import { rmSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import { openInstance, type AppInstance } from "../../src/app/instance.ts";
-import { auditAdaptiveArm } from "../../src/app/experiment/arm-evidence.ts";
+import { auditAdaptiveArm } from "../../experiments/protocols/arm-evidence.ts";
 import { canonicalJson } from "../../src/storage/blobs.ts";
 import { armHarness } from "../fixtures/adaptive-behavior/arm-harness.ts";
 const opened: AppInstance[] = [];

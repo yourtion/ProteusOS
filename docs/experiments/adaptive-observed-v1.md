@@ -10,7 +10,7 @@
 
 ## 冻结的数据与家族
 
-资料均为合成文本与改动路径清单，公开生成器是 [observed-data.ts](../../src/app/experiment/observed-data.ts)。固定 20 train / 20 search / 40 formal / 10 regression **任务**；formal/regression 在开发选择冻结前不会发送给模型。生成器及整份任务/裁判清单在首次来源运行前持久化并计算 SHA-256。
+资料均为合成文本与改动路径清单，公开生成器是 [observed-data.ts](../../experiments/protocols/observed-data.ts)。固定 20 train / 20 search / 40 formal / 10 regression **任务**；formal/regression 在开发选择冻结前不会发送给模型。生成器及整份任务/裁判清单在首次来源运行前持久化并计算 SHA-256。
 
 同一模板的材料变体归入同一家族，实际为 **5 train / 5 search / 10 formal / 5 regression 模板家族**；不将 40 formal 任务包装成原协议要求的 40 个独立 family，也不将模板 ID 隔离当作语义独立性证明。正式/回归指标先在 case×repeat 内汇总，再在家族间等权平均，全部计划分母保留。每个角色包含文本统计与文件类别任务；输入同时包含真实文本与改动路径，期望输出和裁判文件保存在模型/worker 输入之外。
 
@@ -55,16 +55,16 @@
 ```bash
 # 无模型请求，完整规模工程演练
 env PATH="/opt/homebrew/bin:$PATH" /opt/homebrew/bin/node \
-  tests/experiments/run-observed.ts --fixture --output NEW_DIRECTORY
+  experiments/runners/run-observed.ts --fixture --output NEW_DIRECTORY
 
 # 必须从干净提交启动，输出目录不可复用；凭据只在内存中使用
 env PATH="/opt/homebrew/bin:$PATH" /opt/homebrew/bin/node \
-  tests/experiments/run-observed.ts --real --output NEW_DIRECTORY \
+  experiments/runners/run-observed.ts --real --output NEW_DIRECTORY \
   --claude-settings /path/to/explicit/settings.json
 
 # 不需要凭据或原资料，读取保存实例重新核验
 env PATH="/opt/homebrew/bin:$PATH" /opt/homebrew/bin/node \
-  tests/experiments/run-observed.ts --report EXISTING_DIRECTORY
+  experiments/runners/run-observed.ts --report EXISTING_DIRECTORY
 ```
 
 保存 manifest.json、run.json、report.json、summary.json、SQLite 和内容寻址 blob。所有真实执行必须在本协议和运行器提交后开始。

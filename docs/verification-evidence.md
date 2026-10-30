@@ -22,7 +22,7 @@ expectedOutput 属于独立验收资料，只保存到实例 blob，不加入 wo
 
 `src/runtime/verification-evidence.ts` 的 `readJsonVerification` 是底层复算函数：核对记录、裁判和各正文摘要，以保存的 stats/hybrid 算法重新计算 checks 和 passed，拒绝只改判定或摘要损坏。它不自行执行访问授权；调用方必须持有读取这些证据的权限。
 
-`src/app/experiment/run-verification.ts` 的 `auditRunVerification` 是应用侧只读入口：
+`experiments/protocols/run-verification.ts` 的 `auditRunVerification` 是应用侧只读入口：
 
 ```ts
 const audit = auditRunVerification(

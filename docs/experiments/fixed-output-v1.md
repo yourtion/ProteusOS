@@ -31,7 +31,7 @@
 
 ```bash
 env PATH="/opt/homebrew/bin:$PATH" /opt/homebrew/bin/node \
-  tests/experiments/run-diagnostic.ts --real --output NEW_DIRECTORY \
+  experiments/runners/run-diagnostic.ts --real --output NEW_DIRECTORY \
   --parent SEALED_STOPPED_MATRIX_DIRECTORY --stage fixed-output \
   --claude-settings /path/to/explicit/settings.json
 ```

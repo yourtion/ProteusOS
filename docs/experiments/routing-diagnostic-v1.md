@@ -39,7 +39,7 @@ O1 历史 793 次、已知 304,045 input /174,841 output、未知用量 1 次永
 
 ```bash
 env PATH="/opt/homebrew/bin:$PATH" /opt/homebrew/bin/node \
-  tests/experiments/run-diagnostic.ts --real --output NEW_DIRECTORY \
+  experiments/runners/run-diagnostic.ts --real --output NEW_DIRECTORY \
   --parent SEALED_O1_DIRECTORY --stage matrix \
   --claude-settings /path/to/explicit/settings.json
 ```

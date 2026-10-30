@@ -1,8 +1,8 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { LlmDecisionProvider } from "../../../src/adapters/decision-llm/index.ts";
-import { buildExecutors, openInstance } from "../../../src/app/instance.ts";
-import { adaptiveUnits, freezeAdaptivePlan } from "../../../src/app/experiment/adaptive.ts";
+import { buildExecutors, openInstance } from "../../../experiments/instance.ts";
+import { adaptiveUnits, freezeAdaptivePlan } from "../../../experiments/protocols/adaptive.ts";
 import {
   FROZEN_LLM_POLICY,
   RESPONSE_SCHEMA_DIGEST_TARGET,

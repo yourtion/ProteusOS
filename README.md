@@ -71,3 +71,9 @@ License：Apache-2.0
 使用 `pnpm proteus web --executor-adapter ./my-executor.mjs`，或设置 `PROTEUS_EXECUTOR_ADAPTER`。自定义执行器会出现在工作台选择列表；文件中可准备动态鉴权，再通过宿主提供的 `createAcpExecutor` 启动 ACP stdio 命令。参见 [ACP 接入教程](./docs/acp-integration.md)、[接口说明](./docs/executor-adapters.md) 和 [ACP 示例](./examples/executor-adapter.mjs)。
 
 可使用 `pnpm proteus web --executors-config ./examples/executors.config.mjs` 配置 `enabled` 列表和默认执行器。内置 Pi（SDK）与 OpenCode（ACP）已接入工作台；[配置示例](./examples/executors.config.mjs)也支持同时注册多个自定义适配器。
+
+## 实验与工程验证
+
+产品内置资源位于 `src/resources/`，工作区快照与变更应用位于 `src/workspace/`。特定实验的协议、装配和脚本集中在 `experiments/`；使用 `pnpm experiment run/report`，独立脚本见 `experiments/runners/`。工程检查使用 Node 26 与合成 fixture，不需要历史实验归档或模型凭据。
+
+原始证据保存在源码目录外；归档身份见 [清单](./docs/experiments/archives.json)。设置 `PROTEUS_EVIDENCE_ROOT` 后使用 `pnpm evidence:verify` 校验，或追加 `--extract <id> <新目录>` 解包。解包需要 Python 3.12+。迁移后的依赖方向及恢复规则见 [仓库说明](./docs/repository.md)。

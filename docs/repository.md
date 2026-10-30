@@ -2,6 +2,8 @@
 
 当前为 TypeScript 单包模块化仓库；依赖和检查脚本以 package.json 与 pnpm-lock.yaml 为准。技术选择见 [ADR 0004](./adr/0004-m0-engineering-baseline.md)。
 
+2026-10-30 核对发现通用实例装配、存储类型及回归测试仍依赖具体实验与历史归档。目标权责、Workspace 字节快照合同与分步迁移验收见[总体架构的重新分层提案](./architecture.md#实验验证与工作区重新分层)。该提案尚未实施，下文依赖方向是约束目标，不代表现有代码已全部符合。
+
 ## 1. 从单包模块化起步
 
 领域模块先放在一个包中，保持明确导入方向；不因为概念图里有多个框就建立多个发布包或网络服务。当模块出现第二个独立消费者、不同部署需要或稳定发布节奏时，再提取到 `packages/`。
@@ -23,7 +25,10 @@ ProteusOS/
 │   ├── evolution/              # 冻结经验、学习队列、候选与独立评估
 │   ├── federation/             # 分享包/继承、来源签名与信任、HTTP registry
 │   ├── storage/                # node:sqlite、迁移、事件流、outbox、blob
+│   ├── resources/              # 产品内置能力与验收 schema
+│   ├── workspace/              # 字节快照、上下文投影、变更与应用
 │   └── app/                    # 组装依赖、执行器注册表、CLI 命令与 seed
+├── experiments/                # 协议、独立实例装配、实验入口与复验
 ├── tests/
 │   ├── unit/                   # 纯不变量与状态迁移
 │   ├── contract/               # Provider/持久化/ACP 合同（fake agent，真实协议）
@@ -85,6 +90,19 @@ HTTP/SSE Adapter ──→ 应用 Interface / 用例 Module
 
 ## 4. 实例数据与源码分开
 
+### 实验、测试与工作区迁移（2026-10-30）
+
+- 产品资源位于 `src/resources/`；产品源码不导入或读取测试与实验目录。`pnpm check:boundaries` 已纳入 `pnpm check`，当前迁移例外为零。模块导入及显式资源 URL 的静态检查配合产品隔离副本验收，动态文件路径仍由实际合同测试覆盖。
+- 特定实验协议、原始收据审计、历史开发试点和独立入口位于 `experiments/`。实验执行使用 `experiments/instance.ts`，装配协议 guard 和 `ExperimentStorage`；普通 `openInstance` 拒绝准入或启动带 `experimentId` 的 Run。恢复历史实验必须使用实验入口。两种存储 Adapter 与 WorkbenchStorage 继续使用同一 SQLite 连接与事务机制，历史迁移编号保留。
+- 原 `pnpm experiment run/report` 改为 `pnpm experiment run/report`；其他研究脚本位于 `experiments/runners/`。真实 observed 运行须显式传入 `--setup-service-report` 和 `--setup-runtime-report`。日常编译、格式检查和测试覆盖实验源码，搬目录不会隐去协议测试。
+- `tests/fixtures/diagnostic-parents.ts` 通过真实准入、运行、结案和续跑生成合成父实例，默认诊断测试不读取历史归档。真实协议仍固定历史基线；合成可靠性测试在冻结计划中标注 fixture 基线摘要，真实模式拒绝此字段。累计调用与未知成本由父实例精确累加验证。
+- `src/workspace/` 拥有捕获、字节/权限物化、上下文投影、变更收集、冲突检查、应用和恢复。Workbench 负责授权、Run 状态与应用回执的持久化，不再实现文件修改循环。普通小文本保留旧字符串格式，其他文件采用可恢复的字节表示；这些表示是宿主输入与备份，不自动作为模型文本上下文。单文件执行上限 8 MiB，总量 64 MiB，文件数 2000；文本投影另有 1 MiB 总预算。文件隔离仍不构成 OS 沙箱。
+- 十份原始归档已移出源码树，目录和摘要见 [归档清单](./experiments/archives.json)。设置 `PROTEUS_EVIDENCE_ROOT` 后运行 `pnpm evidence:verify`；`pnpm evidence:verify --extract <id> <新目录>` 校验后解包。解包需要 Python 3.12+，拒绝越界、链接及特殊文件，并限制成员数和展开体积。正常产品和测试不自动获取归档。
+
+产品隔离验收只复制 `src/` 并提供依赖，不包含 `tests/`、`docs/` 或 `experiments/`；它验证初始化、普通 Run、固定裁判的 evaluation Run 以及工作台修改/检查/应用。工程检查另外覆盖候选治理、恢复、并发预算、工作区二进制与权限、应用失败回滚和外部归档解包。
+
+Git 历史与源码迁移分别验收：当前提交移除归档文件；历史重写在独立克隆中准备并保留映射，远端更新单独确认。旧提交标识保留在历史证据清单中，不能为了匹配新 Git 历史改写原始实验事实。
+
 实例根目录由操作者显式配置，例如 `<instance-root>/`：
 
 ```text
@@ -121,3 +139,9 @@ Seed 图、确定性策略和固定验收规范可以作为源码内的版本化
 只有当证据表明需要独立部署、隔离依赖、外部插件 SDK 或多个消费端时才拆包。跨机器调度还需要租约、故障接管、远端身份认证与多写入一致性；本地 outbox 不等于已经获得这些能力。
 
 团队联邦增加独立的导入/发布 Adapter 与治理流程，不要求个人 Runtime 改为共享可写状态。协议扩展沿用精确版本与本地选择权；引入前补充对应威胁边界和迁移方案。
+
+### 本轮验收记录
+
+2026-10-30：在仅包含架构迁移的干净副本中，Node 26 全量 `pnpm check` 通过，92 个测试文件、542 项通过、5 项显式跳过；包括依赖规则、lint、格式、前后端类型、工程测试与前端构建。十份外部归档的字节数、SHA-256 和受限解包全部验证通过。工作台二进制输入/修改/应用、权限位、回执失败回滚及并发修改保留均有回归覆盖。未调用真实模型。
+
+本次保留既有 SQLite 迁移和历史读取；源码中已移除原始证据包。Git 历史清理在独立镜像中准备，提交映射与原始历史备份存于外部证据目录。强推属于独立的远端更新。

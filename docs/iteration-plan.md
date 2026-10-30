@@ -208,14 +208,14 @@ M8 先使用两个本地个体与现有离线包/loopback registry；外部示�
 
 | 顺序 | 工作 | 主要落点 | 验收 |
 | --- | --- | --- | --- |
-| 1 | 核对原架构差距、现有实验状态、Jev 服务/SDK、模型可固定程度与调用额度 | `docs/`、`src/app/experiment/` | 本文差距矩阵与官方事实一致；无凭据不标真实完成 |
+| 1 | 核对原架构差距、现有实验状态、Jev 服务/SDK、模型可固定程度与调用额度 | `docs/`、`experiments/protocols/` | 本文差距矩阵与官方事实一致；无凭据不标真实完成 |
 | 2 | 冻结 `decision-plane-v1` 协议与 typed choice 概率/弃权合同 | `docs/experiments/`、`src/decision/` | 规则/LLM/Jev 相同视图和裁判，开发校准/正式 family 分开，原 v1 不变 |
 | 3 | 实现 Jev Adapter、策略解析、app 装配与证据存储 | `src/adapters/decision-jev/`、`src/decision/`、`src/app/`、`src/storage/` | 运行时校验响应，关闭隐式重试，凭据不落盘，旧策略兼容 |
-| 4 | 贯通 Runtime 调用/取消/恢复与实验报告 | `src/runtime/`、`src/app/experiment/`、`tests/` | 并发预算、unknown、迟到响应、撤权不重复派发；分布/校准/成本可复算 |
+| 4 | 贯通 Runtime 调用/取消/恢复与实验报告 | `src/runtime/`、`experiments/protocols/`、`tests/` | 并发预算、unknown、迟到响应、撤权不重复派发；分布/校准/成本可复算 |
 | 5 | 独立真实比较并冻结 Provider 选择与阈值 | 授权实例、实验报告 | 真实兼容与收益分别结论；新快照使用需显式授权，不自动切换 |
 | 6 | 最小 Prediction/Outcome、replay、self-state 投影及训练用途治理 | `src/runtime/`、`src/evolution/`、`src/storage/` | 行动前后有时间与版本来源；未知不伪造，删除/失效生效，无历史写重放 |
 | 7 | 冻结 `behavior-compilation-v1` 并定义适用策略的学习合同与 train/search 分组 | `docs/experiments/`、`src/decision/`、`src/evolution/` | 明确 Jev criteria 或 LLM demos 的可变范围，formal 不可读，预注册效果门 |
-| 8 | 有界搜索、账本、唯一 Candidate、正式评价和只读编译报告 | `src/evolution/`、`src/storage/`、`src/app/experiment/` | train/search 不产生 eligible；完整成本与来源，崩溃不重调模型 |
+| 8 | 有界搜索、账本、唯一 Candidate、正式评价和只读编译报告 | `src/evolution/`、`src/storage/`、`experiments/protocols/` | train/search 不产生 eligible；完整成本与来源，崩溃不重调模型 |
 | 9 | 开发消融、冻结、独立正式验证；通过后显式晋升并试用 | `tests/`、授权实例、实验报告 | 新 Run 使用新快照，旧 Run 保持旧版本，回滚有效；证据不足不晋升 |
 
 实现阶段按现有 unit/contract/integration/acceptance/evals 布局补充有意义的合同与故事，运行 `pnpm check`。日常 CI 使用 fake，只证明工程行为；真实实验单独执行，使用预先固定的额度。首期只优化策略、不生成能力代码；未来涉及生成/导入代码时继续满足现有真实隔离准入。

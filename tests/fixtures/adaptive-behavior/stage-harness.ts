@@ -1,8 +1,8 @@
 import { cpSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { openInstance } from "../../../src/app/instance.ts";
-import { freezeAdaptivePlan } from "../../../src/app/experiment/adaptive.ts";
-import { prepareCompileDevelopment } from "../../../src/app/experiment/development.ts";
+import { openInstance } from "../../../experiments/instance.ts";
+import { freezeAdaptivePlan } from "../../../experiments/protocols/adaptive.ts";
+import { prepareCompileDevelopment } from "../../../experiments/protocols/development.ts";
 import {
   buildLlmChoiceBody,
   resolveLlmDemosRequest,

@@ -6,7 +6,7 @@ import {
   type DecisionRequest,
   type LlmDemonstration,
 } from "../../../src/decision/index.ts";
-import { DECISION_VIEW_CONTENT } from "../../../src/app/experiment/assets.ts";
+import { DECISION_VIEW_CONTENT } from "../../../experiments/protocols/assets.ts";
 import { canonicalJson, digestOf } from "../../../src/storage/blobs.ts";
 
 export function llmDemosFixture(

@@ -10,14 +10,17 @@
   "type": "module",
   "scripts": {
     "proteus": "tsx src/app/cli.ts",
-    "check": "oxlint . && oxfmt --check src tests bin web/src web/rsbuild.config.ts && tsc --noEmit && tsc -p web/tsconfig.json && vitest run && pnpm web:build",
+    "check": "node scripts/check-boundaries.mjs && oxlint . && oxfmt --check src experiments tests bin scripts web/src web/rsbuild.config.ts && tsc --noEmit && tsc -p web/tsconfig.json && vitest run && pnpm web:build",
     "lint": "oxlint .",
-    "format": "oxfmt src tests bin web/src web/rsbuild.config.ts",
+    "format": "oxfmt src experiments tests bin scripts web/src web/rsbuild.config.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "web:build": "cd web && rsbuild build",
     "web": "tsx src/app/cli.ts web",
-    "web:typecheck": "tsc -p web/tsconfig.json"
+    "web:typecheck": "tsc -p web/tsconfig.json",
+    "check:boundaries": "node scripts/check-boundaries.mjs",
+    "experiment": "tsx experiments/cli.ts",
+    "evidence:verify": "tsx scripts/verify-archives.ts"
   },
   "dependencies": {
     "@agentclientprotocol/claude-agent-acp": "^0.79.0",

@@ -35,7 +35,7 @@
 
 当前 120 次生成及 120 次计数预检，已知 37,752 input /28,620 output tokens；历史及本轮总计 **1,055 次生成尝试**，已知 414,979 input /230,643 output，历史未知 **2 次**保持。全部是已知小计，不对历史缺失补零。CPU/价格等未知成本仍单列。
 
-[执行摘要](./routing-fixed-output-v1/summary.json)、[完整报告](./routing-fixed-output-v1/report.json)、[冻结清单](./routing-fixed-output-v1/manifest.json)、[配对分析](./routing-fixed-output-v1/analysis.json)、[独立核验](./routing-fixed-output-v1/independent-audit.json)、[原始证据包](./routing-fixed-output-v1/evidence.tar.gz)及[归档摘要](./routing-fixed-output-v1/archive.json)均保存。
+[执行摘要](./routing-fixed-output-v1/summary.json)、[完整报告](./routing-fixed-output-v1/report.json)、[冻结清单](./routing-fixed-output-v1/manifest.json)、[配对分析](./routing-fixed-output-v1/analysis.json)、[独立核验](./routing-fixed-output-v1/independent-audit.json)、[原始证据包](../archives.json)及[归档摘要](./routing-fixed-output-v1/archive.json)均保存。
 
 独立核对：120 个唯一 Run / DecisionCall，完整数据库共有 1,092 Run（40 本地来源、1,052 个模型调用，另有历史准备 3 次）；SQLite 完整性与外键通过，3,479 个 blob 的 SHA-256 全部匹配。父矩阵 996 条事件逐条不变，归档解压后报告逐字段一致；归档不包含凭据、工作区和可变资料目录。
 

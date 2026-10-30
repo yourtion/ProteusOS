@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
 import { LlmDecisionProvider } from "../../src/adapters/decision-llm/index.ts";
-import { openInstance, type AppInstance } from "../../src/app/instance.ts";
+import { openInstance, type AppInstance } from "../../experiments/instance.ts";
 import {
   isLlmDemosPolicy,
   parseLlmPolicy,

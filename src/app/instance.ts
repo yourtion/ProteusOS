@@ -8,11 +8,6 @@ import type { ModelAdapter } from "../model/index.ts";
 import { LlmDecisionProvider } from "../adapters/decision-llm/index.ts";
 import { LlmRouteProposer } from "../adapters/consolidation-llm/index.ts";
 import type { CompileBackend } from "../evolution/compile-types.ts";
-import { AdaptiveJournal } from "./experiment/journal.ts";
-import { AdaptiveRunSlots } from "./experiment/run-slots.ts";
-import { guardObservedRun } from "./experiment/observed.ts";
-import { guardDiagnosticRun } from "./experiment/diagnostic.ts";
-import { bindCompileDevelopment } from "./experiment/development.ts";
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -46,14 +41,12 @@ export function resolveInstanceRoot(flag?: string): string {
   return join(homedir(), ".proteus");
 }
 
-export interface AppInstance {
+export interface AppInstance<S extends Storage = Storage> {
   root: string;
-  storage: Storage;
+  storage: S;
   kernel: Kernel;
   runtime: Runtime;
   evolution: Evolution;
-  adaptive: AdaptiveJournal;
-  adaptiveRuns: AdaptiveRunSlots;
   federation: Federation;
   sharingTrust: PublicationTrust;
   blobs: BlobStore;
@@ -144,10 +137,12 @@ export function buildDecisions(
 }
 
 /** 组装依赖：领域模块不自行创建外部客户端（docs/architecture.md §Persistence） */
-export function openInstance(
+export function openInstance<S extends Storage = Storage>(
   root: string,
   options: {
     workbenchOwner?: boolean;
+    storageFactory?: (db: SqliteDb) => S;
+    runGuard?: RuntimeDeps["runGuard"];
     modelAdapter?: ModelAdapter;
     executorAdapter?: ExecutorSetup;
     organismId?: string;
@@ -166,7 +161,7 @@ export function openInstance(
     /** 能力执行沙箱后端；缺省按 PROTEUS_SANDBOX（microsandbox→真隔离；未设→进程级） */
     capabilitySandbox?: SandboxBackend;
   } = {},
-): AppInstance {
+): AppInstance<S> {
   if (!options.workbenchOwner && existsSync(join(root, ".workbench.lock"))) {
     throw new Error("该实例由 Web Host 管理；请通过工作台操作，或停止 Host 后使用 CLI");
   }
@@ -177,7 +172,7 @@ export function openInstance(
   db.migrate(MIGRATIONS);
 
   const blobs = new BlobStore(join(root, "blobs"), join(root, "tmp"));
-  const storage = new Storage(db);
+  const storage = options.storageFactory ? options.storageFactory(db) : (new Storage(db) as S);
   const clock = { now: () => Date.now() };
   const ids = { next: () => uuidv7() };
   const kernel = new Kernel(storage, clock, ids);
@@ -187,13 +182,13 @@ export function openInstance(
   const capabilitySandbox =
     options.capabilitySandbox ??
     (process.env.PROTEUS_SANDBOX === "microsandbox" ? new MicrosandboxBackend() : undefined);
-  let adaptiveRuns: AdaptiveRunSlots;
   const runtime = new Runtime({
-    runGuard: (run, phase) => {
-      adaptiveRuns.guard(run, phase);
-      guardObservedRun({ storage, kernel, blobs }, run, phase);
-      guardDiagnosticRun({ storage, kernel, blobs }, run, phase);
-    },
+    runGuard:
+      options.runGuard ??
+      ((run) => {
+        if (run.experimentId)
+          throw new Error("Run requires an experiment host with its constraints installed");
+      }),
     storage,
     kernel,
     organismId,
@@ -258,40 +253,12 @@ export function openInstance(
     clock,
     ids,
   });
-  const adaptive = new AdaptiveJournal({
-    readRunReceipt: (id, reservationId) => adaptiveRuns.deriveReceipt(id, reservationId),
-    kernel,
-    storage,
-    blobs,
-    clock,
-    ids,
-    organismId,
-    actorId,
-    bindCompilation: (jobId, frozen) =>
-      bindCompileDevelopment(
-        { kernel, runtime, evolution, storage, blobs, organismId, actorId },
-        jobId,
-        frozen,
-      ),
-  });
-  adaptiveRuns = new AdaptiveRunSlots({
-    kernel,
-    storage,
-    blobs,
-    clock,
-    organismId,
-    actorId,
-    runtime,
-    journal: adaptive,
-  });
   return {
     root,
     storage,
     kernel,
     runtime,
     evolution,
-    adaptive,
-    adaptiveRuns,
     federation,
     sharingTrust,
     blobs,

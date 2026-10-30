@@ -1,3 +1,4 @@
+import { WorkbenchStorage, type WorkbenchRecords } from "./store.ts";
 import {
   executorConfiguration,
   builtinExecutor,
@@ -11,13 +12,12 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
-  rmSync,
   writeFileSync,
   openSync,
   closeSync,
   unlinkSync,
 } from "node:fs";
-import { basename, dirname, join, resolve } from "node:path";
+import { basename, join, resolve } from "node:path";
 import { buildExecutors, openInstance, resolvePackageBin } from "../instance.ts";
 import { installSeed, LINEAGE_ID, ORGANISM_ID, PRINCIPAL_ID } from "../seed.ts";
 import { AcpExecutor } from "../../adapters/executor-acp/index.ts";
@@ -36,6 +36,10 @@ import {
   type Work,
 } from "./contracts.ts";
 import {
+  capture,
+  changeContent,
+  applyChangeSet,
+  restoreChangeSet,
   changes,
   hash,
   readOutput,
@@ -44,7 +48,7 @@ import {
   runCheck,
   safePath,
   writeFiles,
-} from "./workspace.ts";
+} from "../../workspace/index.ts";
 
 export interface WorkbenchOptions {
   home: string;
@@ -53,7 +57,7 @@ export interface WorkbenchOptions {
   executorFactory?: (name: string, permission: AcpPermissionPolicy) => ExecutorProvider;
 }
 export class Workbench {
-  readonly instance: ReturnType<typeof openInstance>;
+  readonly instance: import("../instance.ts").AppInstance<WorkbenchStorage>;
   readonly home: string;
   private active = new Map<string, AbortController>();
   private replies = new Map<string, (choice: string | null) => void>();
@@ -87,6 +91,7 @@ export class Workbench {
     try {
       this.instance = openInstance(this.home, {
         workbenchOwner: true,
+        storageFactory: (db) => new WorkbenchStorage(db),
         modelAdapter: options.modelAdapter,
         executors: new Map([
           ...buildExecutors(this.options.executorAdapter),
@@ -149,12 +154,12 @@ export class Workbench {
   }
   conversations() {
     return this.instance.storage
-      .workbenchList<ConversationRecord>("conversation")
+      .workbenchList("conversation")
       .reverse()
       .map((conversation) => ({
         ...conversation,
         turns: this.instance.storage
-          .workbenchList<TurnRecord>("turn")
+          .workbenchList("turn")
           .filter((turn) => turn.conversationId === conversation.id),
       }));
   }
@@ -165,20 +170,20 @@ export class Workbench {
     }
     void this.drain();
   }
-  private put(kind: string, id: string, value: unknown) {
+  private put<K extends keyof WorkbenchRecords>(kind: K, id: string, value: WorkbenchRecords[K]) {
     this.instance.storage.tx(() => this.instance.storage.workbenchPut(kind, id, value));
   }
   projects() {
-    return this.instance.storage.workbenchList<Project>("project");
+    return this.instance.storage.workbenchList("project");
   }
   works() {
-    return this.instance.storage.workbenchList<Work>("work").reverse();
+    return this.instance.storage.workbenchList("work").reverse();
   }
   interactions() {
-    return this.instance.storage.workbenchList<Interaction>("interaction");
+    return this.instance.storage.workbenchList("interaction");
   }
   activities() {
-    return this.instance.storage.workbenchList<Activity>("activity");
+    return this.instance.storage.workbenchList("activity");
   }
   private event(runId: string, kind: string, text: string, data?: Activity["data"]) {
     if (kind === "message" && text.length > 4000) {
@@ -232,7 +237,7 @@ export class Workbench {
           return { name, installed: false };
         }
       }),
-      limits: { files: 2000, bytes: 20 * 1024 * 1024 },
+      limits: { files: 2000, bytes: 64 * 1024 * 1024 },
       candidates: this.instance.storage.listCandidates(ORGANISM_ID, 30),
       promotions: this.instance.storage.listPromotions(ORGANISM_ID, 30),
     };
@@ -271,7 +276,7 @@ export class Workbench {
     return project;
   }
   work(id: string) {
-    const work = this.instance.storage.workbenchGet<Work>("work", id);
+    const work = this.instance.storage.workbenchGet("work", id);
     if (!work) throw new Error("任务不存在");
     return work;
   }
@@ -328,17 +333,16 @@ export class Workbench {
     if (this.governanceBusy) throw new Error("行为管理操作正在执行，请稍后提交");
     const parsed = SubmitInput.parse(input);
     const digest = hash(canonicalJson(parsed));
-    const prior = this.instance.storage.workbenchGet<{ digest: string; id: string }>(
-      "operation",
-      parsed.requestId,
-    );
+    const prior = this.instance.storage.workbenchGet("operation", parsed.requestId);
     if (prior) {
       if (prior.digest !== digest) throw new Error("请求标识已用于不同内容");
       return { runId: prior.id };
     }
     const project = this.project(parsed.projectId);
     if (!this.executorConfig().enabled.includes(parsed.executor))
-      throw new Error(`unknown_executor: ${parsed.executor}`);
+      throw new Error(
+        `unknown_executor: ${parsed.executor}；当前启用：${this.executorConfig().enabled.join(", ")}。请刷新工作台并重新选择执行器`,
+      );
     if (!this.options.executorFactory && !this.customExecutor(parsed.executor)) {
       if (parsed.executor === "opencode") {
         if (!executableAvailable(process.env.PROTEUS_OPENCODE_COMMAND ?? "opencode"))
@@ -347,7 +351,8 @@ export class Workbench {
     }
     if (parsed.parentId && this.work(parsed.parentId).projectId !== project.id)
       throw new Error("后续任务必须属于同一项目");
-    const files = readProject(project.path);
+    const captured = capture(project.path);
+    const files = captured.files;
     if (!Object.keys(files).length) throw new Error("项目没有可用文本文件");
     const inputDir = join(this.home, "submissions", randomUUID());
     const source = join(inputDir, "source");
@@ -357,8 +362,9 @@ export class Workbench {
       const parent = this.work(parsed.parentId);
       if (!parent.result) throw new Error("前置任务尚无结果");
       for (const change of parent.result.changes) {
-        if (change.after === null) delete executionFiles[change.path];
-        else executionFiles[change.path] = change.after;
+        const content = changeContent(change, "after");
+        if (content === null) delete executionFiles[change.path];
+        else executionFiles[change.path] = content;
       }
     }
     writeFiles(source, executionFiles);
@@ -406,6 +412,8 @@ export class Workbench {
           parentId: parsed.parentId,
           snapshotId: snapshot.id,
           inputDir,
+          inputDigest: captured.digest,
+          excludedInputs: captured.excluded,
           baseline: Object.fromEntries(
             Object.entries(files).map(([name, text]) => [name, hash(text)]),
           ),
@@ -618,7 +626,7 @@ export class Workbench {
     return result;
   }
   reply(id: string, choice: string) {
-    const interaction = this.instance.storage.workbenchGet<Interaction>("interaction", id);
+    const interaction = this.instance.storage.workbenchGet("interaction", id);
     if (!interaction || interaction.state !== "pending" || !this.replies.has(id))
       throw new Error("审批已失效");
     if (!interaction.options.some((o) => o.id === choice)) throw new Error("无效选项");
@@ -641,66 +649,18 @@ export class Workbench {
     )
       throw new Error("仅可应用通过验收的修改任务");
     const root = repository(this.project(work.projectId).path);
-    const current = readProject(root);
-    if (
-      canonicalJson(
-        Object.fromEntries(Object.entries(current).map(([name, text]) => [name, hash(text)])),
-      ) !== canonicalJson(work.baseline)
-    )
-      throw new Error("项目已变化，无法应用旧结果；请重新运行任务");
-    for (const change of work.result.changes) safePath(root, change.path);
-    work.applyState = "applying";
-    this.put("work", id, work);
-    try {
-      for (const change of work.result.changes) {
-        const path = safePath(root, change.path);
-        if (change.after === null) rmSync(path);
-        else {
-          mkdirSync(dirname(path), { recursive: true });
-          writeFileSync(path, change.after);
-        }
-      }
-      work.appliedAt = Date.now();
-      work.applyState = "applied";
+    return applyChangeSet(root, work.baseline, work.result.changes, (state, appliedAt) => {
+      work.applyState = state;
+      if (appliedAt) work.appliedAt = appliedAt;
       this.put("work", id, work);
-      return { appliedAt: work.appliedAt };
-    } catch (error) {
-      try {
-        for (const change of work.result.changes) {
-          const path = safePath(root, change.path);
-          if (change.before === null) rmSync(path, { force: true });
-          else {
-            mkdirSync(dirname(path), { recursive: true });
-            writeFileSync(path, change.before);
-          }
-        }
-        work.applyState = "rolled-back";
-      } catch {
-        work.applyState = "needs-recovery";
-      }
-      this.put("work", id, work);
-      throw error;
-    }
+    });
   }
   restoreApplication(id: string) {
     const work = this.work(id);
     if (work.applyState !== "needs-recovery" || !work.result)
       throw new Error("没有待恢复的应用操作");
     const root = repository(this.project(work.projectId).path);
-    for (const change of work.result.changes) {
-      const path = safePath(root, change.path);
-      const text = existsSync(path) ? readFileSync(path, "utf8") : null;
-      if (text !== change.before && text !== change.after)
-        throw new Error("文件已有额外修改，保留备份等待人工恢复");
-    }
-    for (const change of work.result.changes) {
-      const path = safePath(root, change.path);
-      if (change.before === null) rmSync(path, { force: true });
-      else {
-        mkdirSync(dirname(path), { recursive: true });
-        writeFileSync(path, change.before);
-      }
-    }
+    restoreChangeSet(root, work.result.changes);
     work.applyState = "rolled-back";
     this.put("work", id, work);
     return { restored: true };
@@ -722,12 +682,7 @@ export class Workbench {
   async govern(input: unknown) {
     const parsed = GovernanceInput.parse(input);
     const digest = hash(canonicalJson(parsed));
-    const prior = this.instance.storage.workbenchGet<{
-      digest: string;
-      state: string;
-      result?: unknown;
-      error?: string;
-    }>("governance-operation", parsed.requestId);
+    const prior = this.instance.storage.workbenchGet("governance-operation", parsed.requestId);
     if (prior) {
       if (prior.digest !== digest) throw new Error("操作标识已用于其他内容");
       if (prior.state === "completed") return prior.result;
@@ -738,7 +693,7 @@ export class Workbench {
     if (this.draining || this.active.size) throw new Error("请等待代码任务结束后再操作行为版本");
     if (
       this.instance.storage
-        .workbenchList<{ state: string }>("governance-operation")
+        .workbenchList("governance-operation")
         .some((op) => op.state === "running")
     )
       throw new Error("已有管理操作执行中或等待核对");

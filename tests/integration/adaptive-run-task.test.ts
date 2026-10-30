@@ -2,12 +2,12 @@ import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import { openInstance, type AppInstance } from "../../src/app/instance.ts";
-import { freezeAdaptivePlan } from "../../src/app/experiment/adaptive.ts";
+import { freezeAdaptivePlan } from "../../experiments/protocols/adaptive.ts";
 import {
   auditAdaptiveRunTask,
   auditRunVerification,
-} from "../../src/app/experiment/run-verification.ts";
-import { adaptiveTaskInputDigest } from "../../src/app/experiment/task-input.ts";
+} from "../../experiments/protocols/run-verification.ts";
+import { adaptiveTaskInputDigest } from "../../experiments/protocols/task-input.ts";
 import { executionInputDigest } from "../../src/runtime/execution-evidence.ts";
 import { canonicalJson, digestOf } from "../../src/storage/blobs.ts";
 import { rehearsalPlan } from "../fixtures/adaptive-behavior/rehearsal.ts";

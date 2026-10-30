@@ -12,3 +12,6 @@ dist/
 .proteus-web/
 
 .pnpm-store/
+
+# Raw experimental evidence belongs in an external evidence store.
+/docs/experiments/results/**/evidence.tar.gz

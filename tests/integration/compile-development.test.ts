@@ -11,17 +11,17 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import { randomUUID } from "node:crypto";
-import { AdaptiveJournal } from "../../src/app/experiment/journal.ts";
-import { openInstance, type AppInstance } from "../../src/app/instance.ts";
+import { AdaptiveJournal } from "../../experiments/protocols/journal.ts";
+import { openInstance, type AppInstance } from "../../experiments/instance.ts";
 import {
   adaptiveTask,
   freezeAdaptivePlan,
   reportAdaptiveExperiment,
-} from "../../src/app/experiment/adaptive.ts";
+} from "../../experiments/protocols/adaptive.ts";
 import {
   bindCompileDevelopment,
   prepareCompileDevelopment,
-} from "../../src/app/experiment/development.ts";
+} from "../../experiments/protocols/development.ts";
 import { canonicalJson, digestOf } from "../../src/storage/blobs.ts";
 import { compileHarness } from "../fixtures/compilation/harness.ts";
 import { DEV_DATASET } from "../fixtures/decision/harness.ts";

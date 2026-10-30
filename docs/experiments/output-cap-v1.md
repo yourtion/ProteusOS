@@ -26,7 +26,7 @@
 
 ```bash
 env PATH="/opt/homebrew/bin:$PATH" /opt/homebrew/bin/node \
-  tests/experiments/run-diagnostic.ts --real --output NEW_DIRECTORY \
+  experiments/runners/run-diagnostic.ts --real --output NEW_DIRECTORY \
   --parent SEALED_FIXED_OUTPUT_DIRECTORY --stage output-cap \
   --claude-settings /path/to/explicit/settings.json
 ```

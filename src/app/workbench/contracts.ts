@@ -23,11 +23,8 @@ export interface Project {
   testCommand: string[];
   createdAt: number;
 }
-export interface Change {
-  path: string;
-  before: string | null;
-  after: string | null;
-}
+export type { Change } from "../../workspace/types.ts";
+import type { Change } from "../../workspace/types.ts";
 export interface ConversationRecord {
   id: string;
   projectId: string;
@@ -53,6 +50,8 @@ export interface Work {
   parentId?: string;
   snapshotId: string;
   inputDir: string;
+  inputDigest?: string;
+  excludedInputs?: string[];
   baseline: Record<string, string>;
   testCommand: string[];
   createdAt: number;

@@ -1,0 +1,82 @@
+[
+  {
+    "id": "adaptive-observed-v3",
+    "file": "evidence.tar.gz",
+    "bytes": 2972665,
+    "sha256": "9b5730c6dc26c81e99d087f5d4fa524158c46ecd69b05a371205ad9a44fa7df3",
+    "sourcePath": "docs/experiments/results/adaptive-observed-v3/evidence.tar.gz",
+    "sourceCommit": "82a9630779d3717e88b58af863f3658d37c54d91"
+  },
+  {
+    "id": "development-pilot-v1",
+    "file": "evidence.tar.gz",
+    "bytes": 91856,
+    "sha256": "e7b6fba7344913af0f99a768ebb0e5c44579adc5b30e0cde7cc21803f9e851e9",
+    "sourcePath": "docs/experiments/results/development-pilot-v1/evidence.tar.gz",
+    "sourceCommit": "adbcfe952981c460a363c134163856e8b1f9c5c4"
+  },
+  {
+    "id": "development-suite-v1",
+    "file": "evidence.tar.gz",
+    "bytes": 836410,
+    "sha256": "48e0f1a6fc1039edb47bd2bcdb4d04de0c23cda22aaa20017ee75170e991127f",
+    "sourcePath": "docs/experiments/results/development-suite-v1/evidence.tar.gz",
+    "sourceCommit": "cd9bce00f79a0b6f367d7f38acb8d492af59c1e7"
+  },
+  {
+    "id": "development-suite-v2",
+    "file": "evidence.tar.gz",
+    "bytes": 4369174,
+    "sha256": "b96d8d37ad7af06a1a5ab8dc106a5049b82ad63fc412d0eb9daab19174b01aec",
+    "sourcePath": "docs/experiments/results/development-suite-v2/evidence.tar.gz",
+    "sourceCommit": "98649d771a365f4fd0bd2227e374676a3b1dd6e8"
+  },
+  {
+    "id": "routing-demo-increment-v1",
+    "file": "evidence.tar.gz",
+    "bytes": 5309397,
+    "sha256": "f0f769d7a8e883ecacf308af4cab92fe8c0e4fcbb91d3fbfb4670ef4a8f8f20f",
+    "sourcePath": "docs/experiments/results/routing-demo-increment-v1/evidence.tar.gz",
+    "sourceCommit": "e57cf1dd5cf55b5440012955c64ea088dcb441b2"
+  },
+  {
+    "id": "routing-diagnostic-matrix-v1",
+    "file": "evidence.tar.gz",
+    "bytes": 3620014,
+    "sha256": "c46ba5b4e4a0c9f3a62cee82a202993ef19d7be9ee987e4b8b5aa5d621e9a8cc",
+    "sourcePath": "docs/experiments/results/routing-diagnostic-matrix-v1/evidence.tar.gz",
+    "sourceCommit": "f9905b237bf5a3029301090ba114b468585c797a"
+  },
+  {
+    "id": "routing-fixed-output-v1",
+    "file": "evidence.tar.gz",
+    "bytes": 4114177,
+    "sha256": "ee103cb1b237f3864967d42131a777b96804d9eeae0c1e7ad970107c45e07576",
+    "sourcePath": "docs/experiments/results/routing-fixed-output-v1/evidence.tar.gz",
+    "sourceCommit": "5f66c7d8b9feaf465451bb5cba229a662f50dab9"
+  },
+  {
+    "id": "routing-layout-v1",
+    "file": "evidence.tar.gz",
+    "bytes": 4821902,
+    "sha256": "5bfeb30c78bac944e797d9803f4779d31053c736500d6418ddc63bdbe8ea9072",
+    "sourcePath": "docs/experiments/results/routing-layout-v1/evidence.tar.gz",
+    "sourceCommit": "42450cdd172bf8013a0e786def886d70851869ba"
+  },
+  {
+    "id": "routing-output-cap-v1",
+    "file": "evidence.tar.gz",
+    "bytes": 4358574,
+    "sha256": "f97c57a73c67271bb529abbee6cc983fe05a3c9c6e11f0f343b2329d5006f058",
+    "sourcePath": "docs/experiments/results/routing-output-cap-v1/evidence.tar.gz",
+    "sourceCommit": "eaa5d3a4d85332e8e5c325eca68a7f60a39ab973"
+  },
+  {
+    "id": "routing-reliability-v1",
+    "file": "evidence.tar.gz",
+    "bytes": 5607157,
+    "sha256": "9e15c6856fae743fc8e8521b83721250a5340e424d6f9b2d896eacdd26041420",
+    "sourcePath": "docs/experiments/results/routing-reliability-v1/evidence.tar.gz",
+    "sourceCommit": "86efcedc0d64877a52303eee44a109c273b40b96"
+  }
+]

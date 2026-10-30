@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { openInstance } from "../../src/app/instance.ts";
+import { openInstance } from "../../experiments/instance.ts";
 import type { RunSummary } from "../../src/runtime/types.ts";
 import {
   bootExperimentHarness,

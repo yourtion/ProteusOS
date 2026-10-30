@@ -1,6 +1,6 @@
 # 适应行为实验 v1：冻结与离线演练
 
-协议 ID：`adaptive-behavior-v1`，报告合同同名，冻结日期：2026-10-24。与 [organism-decision-v1](./organism-decision-v1.md) 独立，不修改旧实验或 `m3-policy-eval-v1` 的判定。实现见 [冻结与复算合同](../../src/app/experiment/adaptive.ts)。
+协议 ID：`adaptive-behavior-v1`，报告合同同名，冻结日期：2026-10-24。与 [organism-decision-v1](./organism-decision-v1.md) 独立，不修改旧实验或 `m3-policy-eval-v1` 的判定。实现见 [冻结与复算合同](../../experiments/protocols/adaptive.ts)。
 
 当前交付为 **P0-04 工程验收**：可冻结清单、隔离用途、预检预算并离线复算；fixture 和本地 worker 演练均不提供真实模型收益证据。有界示例编译器已完成工程实现；任务内适应、经验库、真实实验 runner 及正式 Evaluation 桥接尚未实现。这个离线模块不会调用服务、创建 Candidate/Evaluation、消费正式验证集或晋升版本。
 

@@ -2,7 +2,7 @@ import { mkdtempSync, mkdirSync, readFileSync, realpathSync, writeFileSync } fro
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, it } from "vitest";
-import { runDevelopmentPilot } from "../../src/app/development-pilot.ts";
+import { runDevelopmentPilot } from "../../experiments/protocols/development-pilot.ts";
 
 function fixture() {
   const root = realpathSync(mkdtempSync(join(tmpdir(), "proteus-repo-check-")));

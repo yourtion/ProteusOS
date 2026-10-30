@@ -9,8 +9,8 @@ import { Storage } from "../../src/storage/store.ts";
 import { BlobStore, digestOf } from "../../src/storage/blobs.ts";
 import { Kernel } from "../../src/kernel/index.ts";
 import { canonicalJson, installSeed, SEED_ARTIFACTS } from "../../src/app/seed.ts";
-import { runExperiment } from "../../src/app/experiment/runner.ts";
-import { generateReport, ReportError } from "../../src/app/experiment/reporter.ts";
+import { runExperiment } from "../../experiments/protocols/runner.ts";
+import { generateReport, ReportError } from "../../experiments/protocols/reporter.ts";
 import { CAPABILITY_MODULE } from "../fixtures/decision/harness.ts";
 import { REPO_ROOT, tempInstanceRoot } from "../helpers.ts";
 

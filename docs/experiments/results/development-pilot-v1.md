@@ -30,7 +30,7 @@ JSON Schema 子集校验器将原型继承的字段当作输出字段：空对�
 
 ## 证据与离线复验
 
-[汇总](./development-pilot-v1/summary.json)、[首轮原始报告](./development-pilot-v1/attempt-1-report.json)、[第二轮原始报告](./development-pilot-v1/attempt-2-report.json)、[审计结果](./development-pilot-v1/audit.json)、[证据包](./development-pilot-v1/evidence.tar.gz)和[归档摘要](./development-pilot-v1/archive.json)已保存。
+[汇总](./development-pilot-v1/summary.json)、[首轮原始报告](./development-pilot-v1/attempt-1-report.json)、[第二轮原始报告](./development-pilot-v1/attempt-2-report.json)、[审计结果](./development-pilot-v1/audit.json)、[证据包](../archives.json)和[归档摘要](./development-pilot-v1/archive.json)已保存。
 
 归档含两个原始实例、冻结资料、公开 ACP 轨迹与权限决定，以及已采用提案的原始来源；不包含凭据配置目录或带有内部推理的 SDK 原始会话。封存前扫描未发现配置凭据。首轮执行入口尚未提交，manifest 如实标记脏工作树并保存实现摘要；第二轮实现对应 `8d22656`，工作区另有并行文档/依赖修改，未参与输入或本次提交。
 

@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
-import { reliabilityDataset } from "../../src/app/experiment/reliability-data.ts";
-import { diagnosticDataset } from "../../src/app/experiment/diagnostic-data.ts";
+import { reliabilityDataset } from "../../experiments/protocols/reliability-data.ts";
+import { diagnosticDataset } from "../../experiments/protocols/diagnostic-data.ts";
 
 it("新资料按场景冻结且不重复此前开发目标", () => {
   const cases = reliabilityDataset();
