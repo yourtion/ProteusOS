@@ -10,7 +10,7 @@ export const SubmitInput = z.object({
   projectId: z.string(),
   goal: z.string().trim().min(1).max(16000),
   mode: z.enum(["read", "review", "edit"]),
-  executor: z.enum(["codex", "claude"]),
+  executor: z.string().regex(/^[a-z][a-z0-9-]{0,63}$/),
   timeoutSeconds: z.number().int().min(10).max(1800).default(300),
   parentId: z.string().optional(),
   requestId: z.string().min(8).max(100),

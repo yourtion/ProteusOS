@@ -48,4 +48,4 @@ export default async function () {
 
 注册适配器不会修改已有快照或把规则 seed 自动改成 LLM 路由。选择 `decision-llm` 的图和 `--mode llm` 的归纳作业才会调用它。`experiment run --llm real` 支持此文件；`--llm fake` 仍使用测试实现。专用研究脚本需自行通过 `loadModelAdapter` 或构造器显式注入。
 
-Web 中此配置用于同一实例的决策和归纳。编码 Agent（ACP/Pi）仍由 `ExecutorProvider` 管理，不会自动切换其模型或鉴权。
+Web 中此配置用于同一实例的决策和归纳。编码 Agent（ACP/Pi）仍由 `ExecutorProvider` 管理，不会自动切换其模型或鉴权。执行器的单文件加载与鉴权接入见 [ACP 接入教程](./acp-integration.md)。

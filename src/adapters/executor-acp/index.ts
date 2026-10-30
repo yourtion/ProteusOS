@@ -46,7 +46,9 @@ export function denyAllPolicy(): RequestPermissionResponse {
 export interface AcpExecutorOptions {
   name: string;
   /** agent 进程入口脚本（以 process.execPath 启动，避免 exec 位问题） */
-  agentEntry: string;
+  agentEntry?: string;
+  /** 直接启动 ACP stdio 命令（不经过 shell），与 agentEntry 二选一。 */
+  command?: string;
   agentArgs?: string[];
   /** 受信宿主显式提供子进程环境；不写入 trace 或版本。缺省保持既有行为。 */
   env?: NodeJS.ProcessEnv;
@@ -61,7 +63,8 @@ export interface AcpExecutorOptions {
 export class AcpExecutor implements ExecutorProvider {
   readonly name: string;
   readonly recoveryPolicy = "manual";
-  private readonly agentEntry: string;
+  private readonly agentEntry?: string;
+  private readonly command: string;
   private readonly agentArgs: string[];
   private readonly env: NodeJS.ProcessEnv | undefined;
   private readonly sessionMeta: NewSessionRequest["_meta"];
@@ -70,6 +73,9 @@ export class AcpExecutor implements ExecutorProvider {
   private readonly clientInfo: { name: string; title: string; version: string };
 
   constructor(options: AcpExecutorOptions) {
+    if (!!options.agentEntry === !!options.command)
+      throw new Error("ACP 需要且只能指定 agentEntry 或 command");
+    this.command = options.command ?? process.execPath;
     this.name = options.name;
     this.agentEntry = options.agentEntry;
     this.agentArgs = options.agentArgs ?? [];
@@ -91,12 +97,20 @@ export class AcpExecutor implements ExecutorProvider {
     observation.record("session.started", { attemptId: req.attemptId });
     observation.report("connecting", null, true);
     const accounting = new AcpAccounting(this.captureClaudeUsage);
-    const heartbeat = setInterval(() => observation.heartbeat(), 1000);
-    const child = spawn(process.execPath, [this.agentEntry, ...this.agentArgs], {
-      stdio: ["pipe", "pipe", "pipe"],
-      env: this.env ?? process.env,
-    });
+    const child = spawn(
+      this.command,
+      [...(this.agentEntry ? [this.agentEntry] : []), ...this.agentArgs],
+      {
+        cwd: req.workspaceDir,
+        shell: false,
+        stdio: ["pipe", "pipe", "pipe"],
+        env: this.env ?? process.env,
+      },
+    );
 
+    const spawnError = new Promise<never>((_, reject) => child.once("error", reject));
+    spawnError.catch(() => undefined);
+    const heartbeat = setInterval(() => observation.heartbeat(), 1000);
     let stderr = "";
     let stderrTruncated = false;
     let stdoutTruncated = false;
@@ -178,26 +192,29 @@ export class AcpExecutor implements ExecutorProvider {
     let stopReason: string | null = null;
     let failure: string | null = null;
     try {
-      const response = await app.connectWith(stream, async (ctx) => {
-        liveContext = ctx;
-        await ctx.request(methods.agent.initialize, {
-          protocolVersion: PROTOCOL_VERSION,
-          capabilities: {},
-          info: this.clientInfo,
-        });
-        return ctx
-          .buildSession({ cwd: req.workspaceDir, mcpServers: [], _meta: this.sessionMetadata() })
-          .withSession(async (session) => {
-            liveSessionId = session.sessionId;
-            if (cancelPending) sendCancel();
-            observation.report("working", null, true);
-            const done = session.prompt(req.prompt);
-            done.catch(() => undefined); // 协议错误经超时/连接关闭体现，避免未处理拒绝
-            const response = await done;
-            stopReason = response.stopReason ?? null;
-            return response;
+      const response = await Promise.race([
+        app.connectWith(stream, async (ctx) => {
+          liveContext = ctx;
+          await ctx.request(methods.agent.initialize, {
+            protocolVersion: PROTOCOL_VERSION,
+            capabilities: {},
+            info: this.clientInfo,
           });
-      });
+          return ctx
+            .buildSession({ cwd: req.workspaceDir, mcpServers: [], _meta: this.sessionMetadata() })
+            .withSession(async (session) => {
+              liveSessionId = session.sessionId;
+              if (cancelPending) sendCancel();
+              observation.report("working", null, true);
+              const done = session.prompt(req.prompt);
+              done.catch(() => undefined); // 协议错误经超时/连接关闭体现，避免未处理拒绝
+              const response = await done;
+              stopReason = response.stopReason ?? null;
+              return response;
+            });
+        }),
+        spawnError,
+      ]);
       stopReason = response.stopReason ?? stopReason;
       accounting.observeResponse(response);
     } catch (err) {

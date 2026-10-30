@@ -6,6 +6,7 @@ const sdk = vi.hoisted(() => {
   return {
     state,
     prompt: vi.fn(),
+    abort: vi.fn(async () => {}),
     unsubscribe: vi.fn(),
     dispose: vi.fn(),
     stats: vi.fn(() => ({ tokens: { input: 12, output: 5 }, cost: 0.5 })),
@@ -17,6 +18,7 @@ vi.mock("@earendil-works/pi-coding-agent", () => ({
   createAgentSession: async () => ({
     session: {
       prompt: sdk.prompt,
+      abort: sdk.abort,
       dispose: sdk.dispose,
       getSessionStats: sdk.stats,
       subscribe: (listener: (event: Record<string, unknown>) => void) => {
@@ -102,4 +104,34 @@ describe("pi 执行观测合同", () => {
     expect(JSON.stringify(result.evidence)).toBe(before);
     expect(sdk.unsubscribe).toHaveBeenCalledOnce();
   });
+});
+
+it("Pi 取消传到 SDK，公开事件进入工作台且不暴露隐藏推理", async () => {
+  sdk.prompt.mockImplementation(async () => {
+    sdk.state.listener({
+      type: "message_end",
+      message: {
+        role: "assistant",
+        content: [
+          { type: "thinking", thinking: "SECRET" },
+          { type: "text", text: "visible" },
+        ],
+      },
+    });
+    await new Promise(() => {});
+  });
+  const controller = new AbortController();
+  const events = vi.fn();
+  const promise = new PiExecutor().start({
+    ...request,
+    signal: controller.signal,
+    onEvent: events,
+  });
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  controller.abort();
+  const result = await promise;
+  expect(result.ok).toBe(false);
+  expect(sdk.abort).toHaveBeenCalledOnce();
+  expect(events).toHaveBeenCalledWith({ kind: "message", text: "visible" });
+  expect(JSON.stringify(events.mock.calls)).not.toContain("SECRET");
 });

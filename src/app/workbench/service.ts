@@ -1,3 +1,10 @@
+import {
+  executorConfiguration,
+  builtinExecutor,
+  executableAvailable,
+  executorFromAdapter,
+  type ExecutorSetup,
+} from "../executor-adapter.ts";
 import type { ModelAdapter } from "../../model/index.ts";
 import { randomUUID } from "node:crypto";
 import {
@@ -42,6 +49,7 @@ import {
 export interface WorkbenchOptions {
   home: string;
   modelAdapter?: ModelAdapter;
+  executorAdapter?: ExecutorSetup;
   executorFactory?: (name: string, permission: AcpPermissionPolicy) => ExecutorProvider;
 }
 export class Workbench {
@@ -55,7 +63,10 @@ export class Workbench {
   private lock: string;
   private options: WorkbenchOptions;
   constructor(options: WorkbenchOptions) {
-    this.options = options;
+    this.options = {
+      ...options,
+      executorAdapter: executorConfiguration(options.executorAdapter),
+    };
     this.home = resolve(options.home);
     mkdirSync(this.home, { recursive: true });
     this.lock = join(this.home, ".workbench.lock");
@@ -78,7 +89,7 @@ export class Workbench {
         workbenchOwner: true,
         modelAdapter: options.modelAdapter,
         executors: new Map([
-          ...buildExecutors(),
+          ...buildExecutors(this.options.executorAdapter),
           [
             "web-coder",
             { name: "web-coder", recoveryPolicy: "manual", start: (req) => this.execute(req) },
@@ -206,7 +217,14 @@ export class Workbench {
     return {
       home: this.home,
       organism: this.instance.kernel.getOrganism(ORGANISM_ID),
-      executors: ["codex", "claude"].map((name) => {
+      defaultExecutor: this.executorConfig().default,
+      executors: this.executorConfig().enabled.map((name) => {
+        if (this.customExecutor(name) || name === "pi") return { name, installed: true };
+        if (name === "opencode")
+          return {
+            name,
+            installed: executableAvailable(process.env.PROTEUS_OPENCODE_COMMAND ?? "opencode"),
+          };
         try {
           this.entry(name);
           return { name, installed: true };
@@ -219,7 +237,14 @@ export class Workbench {
       promotions: this.instance.storage.listPromotions(ORGANISM_ID, 30),
     };
   }
+  private executorConfig() {
+    return executorConfiguration(this.options.executorAdapter);
+  }
+  private customExecutor(name: string) {
+    return this.executorConfig().adapters.find((a) => a.name === name);
+  }
   private entry(name: string) {
+    if (name !== "codex" && name !== "claude") throw new Error(`unknown_executor: ${name}`);
     return resolvePackageBin(
       name === "codex" ? "@agentclientprotocol/codex-acp" : "@agentclientprotocol/claude-agent-acp",
       name === "codex" ? "codex-acp" : "claude-agent-acp",
@@ -312,7 +337,14 @@ export class Workbench {
       return { runId: prior.id };
     }
     const project = this.project(parsed.projectId);
-    if (!this.options.executorFactory) this.entry(parsed.executor);
+    if (!this.executorConfig().enabled.includes(parsed.executor))
+      throw new Error(`unknown_executor: ${parsed.executor}`);
+    if (!this.options.executorFactory && !this.customExecutor(parsed.executor)) {
+      if (parsed.executor === "opencode") {
+        if (!executableAvailable(process.env.PROTEUS_OPENCODE_COMMAND ?? "opencode"))
+          throw new Error("OpenCode 未安装或命令不可执行");
+      } else if (parsed.executor !== "pi") this.entry(parsed.executor);
+    }
     if (parsed.parentId && this.work(parsed.parentId).projectId !== project.id)
       throw new Error("后续任务必须属于同一项目");
     const files = readProject(project.path);
@@ -500,15 +532,20 @@ export class Workbench {
         ? { outcome: { outcome: "selected", optionId: choice } }
         : { outcome: { outcome: "cancelled" } };
     };
-    const executor =
-      this.options.executorFactory?.(work.executor, permission) ??
-      new AcpExecutor({
-        name: work.executor,
-        agentEntry: this.entry(work.executor),
-        permissionPolicy: permission,
-        captureClaudeUsage: work.executor === "claude",
-      });
     try {
+      const executor =
+        (this.customExecutor(work.executor)
+          ? executorFromAdapter(this.customExecutor(work.executor)!, permission)
+          : undefined) ??
+        this.options.executorFactory?.(work.executor, permission) ??
+        (["pi", "opencode"].includes(work.executor)
+          ? builtinExecutor(work.executor, permission)
+          : new AcpExecutor({
+              name: work.executor,
+              agentEntry: this.entry(work.executor),
+              permissionPolicy: permission,
+              captureClaudeUsage: work.executor === "claude",
+            }));
       this.event(work.id, "started", "在独立项目副本中执行");
       const prompt = `${req.prompt}\n\nWork only in the current project copy. ${work.mode === "edit" ? "Make the requested changes." : "Read/review only; do not modify project files."} Do not access the original repository or install dependencies. Write a final concise report to .proteus-summary.md. Host runs separately registered checks after completion.`;
       const result = await executor.start({

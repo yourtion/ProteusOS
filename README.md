@@ -65,3 +65,9 @@ License：Apache-2.0
 ## 自定义模型适配器
 
 使用 `pnpm proteus web --model-adapter ./my-model.mjs`，或设置 `PROTEUS_MODEL_ADAPTER`，在启动时加载自己的模型实现。模块可自行执行动态 token、请求签名等鉴权，供决策与 LLM 归纳复用。完整合同与生效范围见 [模型接入说明](./docs/model-adapters.md)，可从 [签名示例](./examples/model-adapter.mjs) 开始。
+
+## 自定义执行器与 ACP
+
+使用 `pnpm proteus web --executor-adapter ./my-executor.mjs`，或设置 `PROTEUS_EXECUTOR_ADAPTER`。自定义执行器会出现在工作台选择列表；文件中可准备动态鉴权，再通过宿主提供的 `createAcpExecutor` 启动 ACP stdio 命令。参见 [ACP 接入教程](./docs/acp-integration.md)、[接口说明](./docs/executor-adapters.md) 和 [ACP 示例](./examples/executor-adapter.mjs)。
+
+可使用 `pnpm proteus web --executors-config ./examples/executors.config.mjs` 配置 `enabled` 列表和默认执行器。内置 Pi（SDK）与 OpenCode（ACP）已接入工作台；[配置示例](./examples/executors.config.mjs)也支持同时注册多个自定义适配器。

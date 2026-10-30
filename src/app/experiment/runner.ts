@@ -1,3 +1,4 @@
+import type { ExecutorSetup } from "../executor-adapter.ts";
 import type { ModelAdapter } from "../../model/index.ts";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createReadStream } from "node:fs";
@@ -30,6 +31,7 @@ export const FORMAL_WALL_CLOCK_LIMIT_MS = 60 * 60 * 1000;
 export interface RunExperimentOptions {
   organismId?: string;
   modelAdapter?: ModelAdapter;
+  executorAdapter?: ExecutorSetup;
   actorId?: string;
   home: string;
   datasetDir: string;
@@ -134,7 +136,12 @@ export async function runExperiment(opts: RunExperimentOptions): Promise<Experim
   }
   if (oracleProvider) decisions.set("decision-oracle", oracleProvider);
 
-  const inst = openInstance(opts.home, { decisions, organismId, actorId });
+  const inst = openInstance(opts.home, {
+    decisions,
+    organismId,
+    actorId,
+    executorAdapter: opts.executorAdapter,
+  });
   try {
     // 保留普通 seed 与既有 M0–M2 行为（实验规范 §1）：临时实验实例幂等安装
     installSeed(

@@ -16,6 +16,9 @@ export interface PiRunOptions {
   workspaceDir: string;
   prompt: string;
   timeoutMs: number;
+  signal?: AbortSignal;
+  onEvent?: ExecutionRequest["onEvent"];
+  onProgress?: ExecutionRequest["onProgress"];
 }
 
 export type PiRunner = (options: PiRunOptions) => Promise<{
@@ -36,11 +39,15 @@ export class PiExecutor implements ExecutorProvider {
   }
 
   async start(req: ExecutionRequest): Promise<ExecutionResult> {
+    req.signal?.throwIfAborted();
     const startedAt = Date.now();
     const result = await this.runner({
       workspaceDir: req.workspaceDir,
       prompt: req.prompt,
       timeoutMs: req.timeoutMs,
+      signal: req.signal,
+      onEvent: req.onEvent,
+      onProgress: req.onProgress,
     });
     return {
       ok: result.ok,
@@ -56,21 +63,66 @@ export class PiExecutor implements ExecutorProvider {
 
 /** 默认 runner：惰性加载 pi SDK，会话 cwd 固定为任务工作区 */
 export const defaultPiRunner: PiRunner = async (options) => {
+  options.signal?.throwIfAborted();
   const mod = await import("@earendil-works/pi-coding-agent");
   // 工作区是运行时创建的一次性隔离目录：按操作者决定显式授信，
   // 否则 pi 的 defaultProjectTrust=ask 在无人值守下禁用写工具
-  const settingsManager = mod.SettingsManager.create(options.workspaceDir, undefined, {
-    projectTrusted: true,
-  });
+  const settingsManager = mod.SettingsManager.create(
+    options.workspaceDir,
+    process.env.PROTEUS_PI_AGENT_DIR,
+    {
+      projectTrusted: true,
+    },
+  );
   const { session } = await mod.createAgentSession({
     cwd: options.workspaceDir,
+    agentDir: process.env.PROTEUS_PI_AGENT_DIR,
     tools: ["read", "write", "edit", "bash", "grep", "find", "ls"],
     settingsManager,
   });
+  const startedAt = Date.now();
+  let toolCalls = 0,
+    messageChars = 0;
+  const progress = (phase: "working" | "tool" | "completed" | "failed") => {
+    try {
+      options.onProgress?.({
+        phase,
+        elapsedMs: Date.now() - startedAt,
+        toolCalls,
+        messageChars,
+        lastActivityAt: Date.now(),
+        detail: null,
+      });
+    } catch {
+      /* observation cannot fail execution */
+    }
+  };
+  const publish = (event: Parameters<NonNullable<ExecutionRequest["onEvent"]>>[0]) => {
+    try {
+      options.onEvent?.(event);
+    } catch {
+      /* observation cannot fail execution */
+    }
+  };
   const trace = new ExecutionTrace();
   trace.record("session.started");
   const unsubscribe = session.subscribe((event) => {
     if (event.type === "tool_execution_start" || event.type === "tool_execution_end") {
+      if (event.type === "tool_execution_start") toolCalls++;
+      publish({
+        kind: "tool",
+        text: event.toolName,
+        data: {
+          toolCallId: event.toolCallId,
+          status:
+            event.type === "tool_execution_start"
+              ? "in_progress"
+              : event.isError
+                ? "failed"
+                : "completed",
+        },
+      });
+      progress("tool");
       trace.record(event.type, {
         toolCallId: event.toolCallId,
         toolName: event.toolName,
@@ -78,7 +130,12 @@ export const defaultPiRunner: PiRunner = async (options) => {
       });
     } else if (event.type === "message_end" && event.message.role === "assistant") {
       for (const block of event.message.content) {
-        if (block.type === "text") trace.record("message", { text: block.text });
+        if (block.type === "text") {
+          trace.record("message", { text: block.text });
+          messageChars += block.text.length;
+          publish({ kind: "message", text: block.text });
+          progress("working");
+        }
       }
     }
   });
@@ -98,16 +155,29 @@ export const defaultPiRunner: PiRunner = async (options) => {
     }
   };
   let timer: ReturnType<typeof setTimeout> | undefined;
+  let rejectAbort!: (error: unknown) => void;
+  const cancelled = new Promise<never>((_, reject) => {
+    rejectAbort = reject;
+  });
+  const abort = () => {
+    rejectAbort(options.signal?.reason ?? new Error("pi_cancelled"));
+    void session.abort?.().catch(() => undefined);
+  };
+  options.signal?.addEventListener("abort", abort, { once: true });
   try {
+    options.signal?.throwIfAborted();
+    progress("working");
     await Promise.race([
+      cancelled,
       session.prompt(options.prompt),
       new Promise<never>((_, reject) => {
-        timer = setTimeout(
-          () => reject(new Error(`pi 执行超时（${options.timeoutMs}ms）`)),
-          options.timeoutMs,
-        );
+        timer = setTimeout(() => {
+          reject(new Error(`pi 执行超时（${options.timeoutMs}ms）`));
+          void session.abort?.().catch(() => undefined);
+        }, options.timeoutMs);
       }),
     ]);
+    progress("completed");
     trace.record("session.completed", { ok: true });
     return {
       ok: true,
@@ -116,6 +186,7 @@ export const defaultPiRunner: PiRunner = async (options) => {
       evidence: trace.finish("executor-pi-v1", "agent-events", true, { usage: usage() }),
     };
   } catch (err) {
+    progress("failed");
     trace.record("session.completed", { ok: false });
     return {
       ok: false,
@@ -127,6 +198,7 @@ export const defaultPiRunner: PiRunner = async (options) => {
       }),
     };
   } finally {
+    options.signal?.removeEventListener("abort", abort);
     if (timer) clearTimeout(timer);
     unsubscribe();
     session.dispose();

@@ -1,3 +1,9 @@
+import {
+  executorFromAdapter,
+  executorConfiguration,
+  builtinExecutor,
+  type ExecutorSetup,
+} from "./executor-adapter.ts";
 import type { ModelAdapter } from "../model/index.ts";
 import { LlmDecisionProvider } from "../adapters/decision-llm/index.ts";
 import { LlmRouteProposer } from "../adapters/consolidation-llm/index.ts";
@@ -82,7 +88,7 @@ export function resolvePackageBin(packageName: string, binName: string): string 
  * PROTEUS_FAKE_ACP_AGENT=<script> 时额外注册 fake-acp（测试/演练用，
  * 与真实适配器同一 ACP 合同）。
  */
-export function buildExecutors(): Map<string, ExecutorProvider> {
+export function buildExecutors(adapter?: ExecutorSetup): Map<string, ExecutorProvider> {
   const workerPath = fileURLToPath(
     new URL("../adapters/executor-process/stats-worker.mjs", import.meta.url),
   );
@@ -113,6 +119,14 @@ export function buildExecutors(): Map<string, ExecutorProvider> {
       // 适配器未安装时该执行器不注册；图中引用会得到明确的 unknown_executor
     }
   }
+  const config = executorConfiguration(adapter);
+  executors.set("opencode", builtinExecutor("opencode"));
+  for (const custom of config.adapters) executors.set(custom.name, executorFromAdapter(custom));
+  for (const name of executors.keys()) {
+    const alias = name === "codex-acp" ? "codex" : name === "claude-code-acp" ? "claude" : name;
+    if (name !== "local-process" && name !== "fake-acp" && !config.enabled.includes(alias))
+      executors.delete(name);
+  }
   return executors;
 }
 
@@ -135,6 +149,7 @@ export function openInstance(
   options: {
     workbenchOwner?: boolean;
     modelAdapter?: ModelAdapter;
+    executorAdapter?: ExecutorSetup;
     organismId?: string;
     actorId?: string;
     routeProposer?: RouteProposer;
@@ -182,7 +197,7 @@ export function openInstance(
     storage,
     kernel,
     organismId,
-    executors: options.executors ?? buildExecutors(),
+    executors: options.executors ?? buildExecutors(options.executorAdapter),
     onExecutionProgress: options.onExecutionProgress,
     decisions: buildDecisions(
       new Map([

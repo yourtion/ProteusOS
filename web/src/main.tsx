@@ -29,6 +29,7 @@ type Detail = Work & {
 };
 type Settings = {
   home: string;
+  defaultExecutor: string;
   executors: { name: string; installed: boolean }[];
   organism: unknown;
   candidates: unknown[];
@@ -68,7 +69,7 @@ function App() {
   const [page, setPage] = useState<"tasks" | "projects" | "settings" | "governance">("tasks"),
     [goal, setGoal] = useState(""),
     [mode, setMode] = useState<"read" | "review" | "edit">("edit"),
-    [executor, setExecutor] = useState("codex"),
+    [executor, setExecutor] = useState(""),
     [timeout, setTimeoutValue] = useState(300),
     [parentId, setParentId] = useState<string | undefined>(),
     [search, setSearch] = useState(""),
@@ -88,6 +89,9 @@ function App() {
     ]);
     setProjects(p);
     setSettings(s);
+    setExecutor((current) =>
+      s.executors.some((e) => e.name === current && e.installed) ? current : s.defaultExecutor,
+    );
     setRuns(r);
     setSelected((current) => (r.some((run) => run.id === current) ? current : ""));
     setProjectId((current) => current || p[0]?.id || "");
@@ -465,8 +469,15 @@ function App() {
                   <label className="field">
                     执行器
                     <select value={executor} onChange={(e) => setExecutor(e.target.value)}>
-                      <option value="codex">Codex ACP</option>
-                      <option value="claude">Claude ACP</option>
+                      {(settings?.executors ?? []).map((executor) => (
+                        <option
+                          key={executor.name}
+                          value={executor.name}
+                          disabled={!executor.installed}
+                        >
+                          {executor.name}
+                        </option>
+                      ))}
                     </select>
                   </label>
                   <label className="field">
