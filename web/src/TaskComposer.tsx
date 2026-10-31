@@ -173,15 +173,17 @@ export function TaskComposer({
         </fieldset>
         <div className="composer-footer">
           <p className="note">
-            {blocked
-              ? "请先确认上一条提交的结果。"
-              : !canStart
-                ? "请在侧栏选择项目后开始任务。"
-                : !executor
-                  ? "请先配置一个可用执行器。"
-                  : followup
-                    ? "携带本轮摘要与文件结果，在独立副本中继续。"
-                    : "在独立副本中执行，修改由你审阅后应用。"}
+            {sending
+              ? "正在提交，请稍候…"
+              : blocked
+                ? "请先确认上一条提交的结果。"
+                : !canStart
+                  ? "请在侧栏选择项目后开始任务。"
+                  : !executor
+                    ? "请先配置一个可用执行器。"
+                    : followup
+                      ? "携带本轮摘要与文件结果，在独立副本中继续。"
+                      : "在独立副本中执行，修改由你审阅后应用。"}
             <span className="composer-shortcut">⌘ / Ctrl + Enter 发送 · 草稿保留在此标签页</span>
           </p>
           <Button
