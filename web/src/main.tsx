@@ -31,6 +31,7 @@ type Detail = Work & {
 type Settings = {
   home: string;
   defaultExecutor: string;
+  limits: { files: number; bytes: number };
   executors: ExecutorChoice[];
   organism: unknown;
   candidates: unknown[];
@@ -107,7 +108,14 @@ function App() {
   };
   useEffect(() => {
     let active = true;
+    let attempt = 0;
     const initialize = async () => {
+      const current = ++attempt;
+      setReady(false);
+      setConnected(false);
+      setDetail(null);
+      setConfirmApply(false);
+      setError("");
       try {
         const token = location.hash.slice(1);
         if (token) {
@@ -119,12 +127,12 @@ function App() {
           history.replaceState(null, "", location.pathname);
         }
         await refresh();
-        if (active) {
+        if (active && current === attempt) {
           setError("");
           setReady(true);
         }
       } catch (e) {
-        if (active) setError(String(e));
+        if (active && current === attempt) setError(String(e));
       }
     };
     void initialize();
@@ -260,16 +268,21 @@ function App() {
           </span>{" "}
           Proteus<span className="brand-caption">你的代码工作空间</span>
         </div>
-        <button className="new" onClick={() => newTask()}>
+        <button className="new" disabled={busy || !ready} onClick={() => newTask()}>
           ＋ 新任务
         </button>
         <label className="field">
           当前项目
           <select
             value={projectId}
+            disabled={busy || !ready}
             onChange={(e) => {
               setProjectId(e.target.value);
               setSelected("");
+              setParentId(undefined);
+              setContextHistory(null);
+              setGoal("");
+              setConfirmApply(false);
             }}
           >
             <option value="">所有项目</option>
@@ -360,8 +373,10 @@ function App() {
             <p className="eyebrow">PROJECTS</p>
             <h1>连接你的代码</h1>
             <p>
-              任务在独立副本中执行，审阅后再应用到原项目。当前支持最多 2000 个 UTF-8 文本文件、总计
-              20 MiB 的普通 Git 仓库。
+              任务在独立副本中执行，审阅后再应用到原项目。当前支持最多 {settings?.limits.files}{" "}
+              个文件、总计
+              {Math.floor((settings?.limits.bytes ?? 0) / 1024 / 1024)} MiB 的普通 Git
+              仓库；二进制资源以文件形式保留。
             </p>
             <form
               className="card"
@@ -707,7 +722,7 @@ function App() {
           </section>
         )}
       </main>
-      <aside className="inspector" hidden={page !== "tasks" || !selected}>
+      <aside className="inspector" hidden={!ready || page !== "tasks" || !selected}>
         <div className="tabs">
           {(["changes", "tools", "trace", "usage", "checks", "evidence"] as const).map((t) => (
             <button className={tab === t ? "selected" : ""} key={t} onClick={() => setTab(t)}>

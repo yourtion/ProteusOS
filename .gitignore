@@ -15,3 +15,6 @@ dist/
 
 # Raw experimental evidence belongs in an external evidence store.
 /docs/experiments/results/**/evidence.tar.gz
+
+# Generated real-browser acceptance evidence.
+/artifacts/

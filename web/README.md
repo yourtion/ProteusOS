@@ -5,7 +5,7 @@
 ## 使用流程
 
 1. 在“项目与检查配置”添加 Git 仓库根目录，输入项目名和测试命令的参数数组，例如 `["node", "--test"]`。宿主会冻结该命令；数组为空时结果明确标记未验证。
-2. 选择项目，在新任务中描述需求，选择理解、审查或修改代码，选择 Codex/Claude ACP 与超时。执行器需在宿主机完成相应认证；“已安装”只代表适配器安装状态。
+2. 选择项目，在新任务中描述需求，选择理解、审查或修改代码，选择已启用的执行器、模型、推理强度与超时。执行器列表来自宿主配置，支持 `~/.proteus-local/executors.config.mjs` 中的本地适配器；模型和强度受执行器配置与协议能力约束。执行器需在宿主机完成相应认证；“已安装”只代表适配器安装状态。
 3. 观察执行过程并处理一次性权限请求。任务准入后立即返回，Host 串行执行；刷新和关闭浏览器不取消任务。停止必须显式点击“请求停止”。
 4. 在右栏查看文件修改前后内容、独立测试输出和运行证据。总结按文本呈现，不执行模型返回的 HTML。
 5. 审阅后点击“应用到原项目”并确认。系统核对全部已纳入文件的基线，再写入修改；原项目已变化时拒绝覆盖。重复应用返回原回执。中断的多文件应用有备份恢复入口，额外修改冲突时保留备份等待人工处理。
@@ -31,7 +31,17 @@ Host 持有实例锁。该实例的其他 CLI 入口会明确拒绝访问；CLI 
 
 React + Rsbuild + TypeScript，Hono 负责 HTTP 和 SSE，SQLite 由现有 Storage 管理；沿用 Oxlint、Oxfmt、Vitest。`pnpm web:typecheck` 检查前端类型，`pnpm web:build` 构建静态文件。`pnpm check` 包含前端类型和构建。
 
-`tests/integration/web-workbench.test.ts` 使用临时 Git 项目、真实 SQLite/HTTP/SSE 和受控测试执行器验证主要流程；ACP 合同测试使用真实 ACP 协议的 fixture。测试执行器只由进程内测试构造器注入，浏览器不能选择或配置任意执行器。已在内置浏览器完成一次真实 Codex ACP 修复、宿主独立检查及应用闭环；Claude 和复杂真实项目仍需单独验收。详见 [验收记录](../docs/web-workbench-validation.md)。完整测试集中的 model-free 诊断测试需要 Node 26，建议使用 Node 26 运行全部检查。
+`tests/integration/web-workbench.test.ts` 使用临时 Git 项目、真实 SQLite/HTTP/SSE 和受控测试执行器验证主要流程；ACP 合同测试使用真实 ACP 协议的 fixture。浏览器只能选择宿主已启用的执行器，不能上传任意实现。完整测试集中的 model-free 诊断测试需要 Node 26，建议使用 Node 26 运行全部检查。
+
+真实页面回归使用独立 Playwright 浏览器：
+
+```sh
+pnpm install
+pnpm exec playwright install chromium
+pnpm test:web
+```
+
+已安装 Microsoft Edge 时，也可以执行 `PROTEUS_BROWSER_CHANNEL=msedge pnpm test:web`。脚本创建临时 HOME、本地适配器配置、空数据库和两个 Git 项目，经实际 CLI 启动 Web；通过页面操作验证任务、权限、模型与强度传递、检查、应用、重试、跨项目切换及重启恢复。ACP 服务是受控协议 fixture，不会调用真实模型。报告和截图保存到 `artifacts/web-browser/`，不包含启动令牌；Ubuntu CI 执行该回归并上传证据。详见 [验收记录](../docs/web-workbench-validation.md)。
 
 ## DSH 组件复用
 

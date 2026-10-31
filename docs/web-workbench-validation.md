@@ -1,5 +1,49 @@
 # Web 工作台验收记录
 
+## 干净环境页面回归（2026-10-31）
+
+本次验证从临时 HOME、空 SQLite 数据库和两个新 Git 仓库开始，经 `bin/proteus.mjs web` 启动实际服务。自定义执行器来自该 HOME 下的 `.proteus-local/executors.config.mjs`，启用 `traex`、`opencode-w`，默认 `traex`；通过页面添加项目、填写任务和处理权限，没有通过 API 预先创建任务。
+
+浏览器为独立 Playwright 驱动的 Microsoft Edge 156.0.4314.50（headless），Node v26.11.1。内置浏览器接口重试后仍返回 `Local browser use is disabled in Work settings`，因此本次结果不属于内置浏览器验收。用户此前授权使用独立 Playwright/Chromium。
+
+### 实际结果
+
+执行 `PROTEUS_BROWSER_CHANNEL=msedge pnpm test:web`，30 个页面阶段通过；无未捕获页面异常。报告中的三个 HTTP 错误分别来自主动测试的非法模型（400）、错误认证令牌（401）、应用时项目基线冲突（400），均验证了相应提示和保护行为。
+
+- 项目添加、本地执行器发现、默认执行器、切换执行器后清空模型/强度；将 `alternate-model` 与 `high` 从页面传递到 ACP agent，并核对 agent 回显。
+- 修改任务、允许/拒绝权限、只读后续任务及历史、执行器失败、取消、非法模型不显示重试入口、检查失败不允许应用。
+- 修改前后比较、独立检查、工具/Trace/用量/证据页、结果下载；应用前原项目保持不变，确认应用后核对磁盘文本和二进制字节。
+- 设置页、经验冻结、规则学习作业提交与取消、跨项目切换清除后续任务上下文、390px 页面无横向溢出。
+- 服务已接收提交但响应丢失时，页面重试只产生一个任务；错误令牌隐藏旧任务，重新认证恢复；基线冲突拒绝覆盖原文件。
+- 停止 CLI 后实际 Web 进程退出、实例锁释放，同端口重启后通过新启动地址认证，恢复所选任务与 SSE 连接；新浏览器上下文未认证时不能读取工作台。
+
+`pnpm check` 通过：97 个测试文件，552 项通过、5 项跳过；依赖边界、Lint、格式、前后端类型检查和构建通过。新增 CLI 生命周期回归覆盖 SIGTERM、SIGINT 与同端口重启。
+
+### 复现与修复
+
+1. CLI 启动器使用 `spawnSync`，终止启动器后实际 Web 子进程仍存活。独立探针曾返回 `serverStillRunning: true`。改为异步子进程并转发 SIGINT/SIGTERM；现在通过真实 CLI 断言锁和端口释放，浏览器验证服务重启。
+2. 保存项目期间切换项目，较晚的保存响应覆盖了刚选择的项目；从任务发起补充需求后切换项目还会残留原父任务。操作期间禁用项目切换/新任务，切换时清空后续任务上下文；原页面复现脚本和完整回归通过。
+3. 重新认证失败后，页面仍显示旧任务及连接状态。初始化时清空就绪状态、连接、详情和应用确认，失败时隐藏检查侧栏，并用初始化序号避免旧请求更新认证结果；页面分别验证错误令牌、恢复认证和服务重启。
+4. 项目说明仍写 20 MiB 且仅支持 UTF-8，与实际 64 MiB、支持二进制的能力不符。改为读取服务端限额并修正说明。
+
+### 复现命令与证据
+
+```sh
+pnpm install
+pnpm exec playwright install chromium
+pnpm test:web
+# 使用本机已安装的 Edge：
+PROTEUS_BROWSER_CHANNEL=msedge pnpm test:web
+```
+
+报告保存到 `artifacts/web-browser/report.json`，每个通过阶段的截图保存在 `artifacts/web-browser/screenshots/`。Ubuntu CI 自动运行并上传证据；该目录不纳入 Git，也不复制启动令牌。测试会关闭自身创建的服务，临时数据保留用于排查。
+
+### 验证边界
+
+ACP 子进程是受控协议 agent，实际经过 HTTP、SQLite、Runtime、ACP stdio、宿主文件检查与应用；没有调用用户的真实 traex/opencode-w/Pi 模型服务，不能据此证明其鉴权、模型推理或费用正常。经验页面覆盖冻结、提交和取消，未覆盖真实策略候选评价、采用与回滚。以下保留较早的验收记录，不作为本次测试结果。
+
+## 历史验收（2026-10-29）
+
 日期：2026-10-29（Asia/Shanghai）。浏览器：ChatGPT 内置浏览器。验证当前工作区代码，未提交 Git。
 
 ## 已验证
