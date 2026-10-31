@@ -1,3 +1,4 @@
+import { browserSession } from "./session";
 import { useLayoutEffect, useEffect, useRef, useState } from "react";
 import type { Activity, Work } from "../../src/app/workbench/contracts";
 import { ExecutionRound } from "./ExecutionRound";
@@ -25,15 +26,17 @@ export function ConversationThread({
   const follow = useRef(true);
   const [away, setAway] = useState(false);
   useLayoutEffect(() => {
-    const cached = sessionStorage.getItem(`proteus-scroll-${work.id}`);
+    const cached = browserSession.getItem(`proteus-scroll-${work.id}`);
     const saved = positions.get(work.id) ?? (cached === null ? undefined : Number(cached));
-    if (saved !== undefined) window.scrollTo(0, saved);
+    if (saved !== undefined && Number.isFinite(saved) && saved >= 0) window.scrollTo(0, saved);
     else if (running) end.current?.scrollIntoView({ block: "end" });
     else window.scrollTo(0, 0);
-    follow.current = saved === undefined && running;
+    const near = (end.current?.getBoundingClientRect().bottom ?? 0) <= window.innerHeight + 100;
+    follow.current = near;
+    setAway(!near);
     const onScroll = () => {
       positions.set(work.id, window.scrollY);
-      sessionStorage.setItem(`proteus-scroll-${work.id}`, String(window.scrollY));
+      browserSession.setItem(`proteus-scroll-${work.id}`, String(window.scrollY));
       if (positions.size > 100) positions.delete(positions.keys().next().value!);
       const near = (end.current?.getBoundingClientRect().bottom ?? 0) <= window.innerHeight + 100;
       follow.current = near;
@@ -43,8 +46,8 @@ export function ConversationThread({
     return () => window.removeEventListener("scroll", onScroll);
   }, [work.id]);
   useEffect(() => {
-    if (running && follow.current) end.current?.scrollIntoView({ block: "end" });
-  }, [activities, running]);
+    if (follow.current) end.current?.scrollIntoView({ block: "end" });
+  }, [activities, running, work.result]);
   return (
     <div className="conversation-thread">
       {conversation.truncated && (

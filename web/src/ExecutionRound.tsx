@@ -1,3 +1,4 @@
+import { browserSession } from "./session";
 import { statusMeta } from "./ui/status";
 import { Button, SelectionBar } from "./ui";
 import { useId, useState } from "react";
@@ -37,7 +38,7 @@ export function ExecutionRound({
   type View = "tools" | "trace" | "messages" | null;
   const [view, setCurrentView] = useState<View>(() => {
     try {
-      const saved = sessionStorage.getItem(`proteus-process-view-${work.id}`);
+      const saved = browserSession.getItem(`proteus-process-view-${work.id}`);
       return saved === "tools" || saved === "trace" || saved === "messages" ? saved : null;
     } catch {
       return null;
@@ -47,7 +48,7 @@ export function ExecutionRound({
   function setView(next: View) {
     setCurrentView(next);
     try {
-      sessionStorage.setItem(`proteus-process-view-${work.id}`, next ?? "");
+      browserSession.setItem(`proteus-process-view-${work.id}`, next ?? "");
     } catch {
       /* Optional UI preference. */
     }

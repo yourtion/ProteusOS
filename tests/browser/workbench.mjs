@@ -128,7 +128,12 @@ try {
   await page.getByRole("button", { name: "补充需求", exact: true }).click();
   await page.getByRole("textbox", { name: "任务需求", exact: true }).fill("READ 解释修复后的加法");
   await page.getByRole("combobox", { name: "任务类型", exact: true }).selectOption("read");
-  await page.getByRole("button", { name: "开始任务 ↗", exact: true }).click();
+  const parentRun = await page.evaluate(() => sessionStorage.getItem("proteus-selected-run"));
+  await page.getByRole("button", { name: "发送补充需求 ↗", exact: true }).click();
+  await page.waitForFunction(
+    (parent) => sessionStorage.getItem("proteus-selected-run") !== parent,
+    parentRun,
+  );
   await page.getByText("本次未运行自动测试；执行完成不代表代码正确。", { exact: true }).waitFor();
   assert.ok((await page.locator(".history-turn").count()) >= 1);
   await phase("read-follow-up");
@@ -222,12 +227,12 @@ try {
     .selectOption({ label: "Browser acceptance" });
   await page.getByRole("button").filter({ hasText: "BINARY 修改二进制资源" }).click();
   await page.getByRole("button", { name: "补充需求", exact: true }).click();
-  await page.getByText(/基于任务/).waitFor();
+  await page.getByRole("form", { name: "补充需求", exact: true }).waitFor();
   await page
     .getByRole("combobox", { name: "当前项目", exact: true })
     .selectOption({ label: "Second project" });
   assert.equal(
-    await page.getByText(/基于任务/).count(),
+    await page.getByRole("form", { name: "补充需求", exact: true }).count(),
     0,
     "switching projects must clear follow-up context",
   );
