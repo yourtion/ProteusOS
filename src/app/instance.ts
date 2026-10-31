@@ -1,3 +1,4 @@
+import { checkedRuntimeAdapter, type RuntimeAdapter } from "./runtime-adapter.ts";
 import {
   executorFromAdapter,
   executorConfiguration,
@@ -145,6 +146,7 @@ export function openInstance<S extends Storage = Storage>(
     runGuard?: RuntimeDeps["runGuard"];
     modelAdapter?: ModelAdapter;
     executorAdapter?: ExecutorSetup;
+    runtimeAdapter?: RuntimeAdapter;
     organismId?: string;
     actorId?: string;
     routeProposer?: RouteProposer;
@@ -162,6 +164,9 @@ export function openInstance<S extends Storage = Storage>(
     capabilitySandbox?: SandboxBackend;
   } = {},
 ): AppInstance<S> {
+  const adapter = options.runtimeAdapter
+    ? checkedRuntimeAdapter(options.runtimeAdapter)
+    : undefined;
   if (!options.workbenchOwner && existsSync(join(root, ".workbench.lock"))) {
     throw new Error("该实例由 Web Host 管理；请通过工作台操作，或停止 Host 后使用 CLI");
   }
@@ -181,6 +186,7 @@ export function openInstance<S extends Storage = Storage>(
   if (kernel.getOrganism(organismId)) kernel.assertOrganismAccess(organismId, actorId);
   const capabilitySandbox =
     options.capabilitySandbox ??
+    adapter?.capabilitySandbox ??
     (process.env.PROTEUS_SANDBOX === "microsandbox" ? new MicrosandboxBackend() : undefined);
   const runtime = new Runtime({
     runGuard:
@@ -199,6 +205,7 @@ export function openInstance<S extends Storage = Storage>(
         ...(options.modelAdapter
           ? [["decision-llm", new LlmDecisionProvider({ adapter: options.modelAdapter })] as const]
           : []),
+        ...(adapter?.decisions ?? []).map((provider) => [provider.name, provider] as const),
         ...(options.decisions ?? []),
       ]),
     ),
@@ -215,11 +222,12 @@ export function openInstance<S extends Storage = Storage>(
     actorId,
     routeProposer:
       options.routeProposer ??
+      adapter?.routeProposer ??
       (options.modelAdapter
         ? new LlmRouteProposer({ adapter: options.modelAdapter })
         : llmProposerFromEnv()) ??
       undefined,
-    compileBackend: options.compileBackend,
+    compileBackend: options.compileBackend ?? adapter?.compileBackend,
     learningCallTimeoutMs: options.learningCallTimeoutMs,
     kernel,
     storage,

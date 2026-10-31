@@ -1,3 +1,4 @@
+import type { RuntimeAdapter } from "../runtime-adapter.ts";
 import { WorkbenchStorage, type WorkbenchRecords } from "./store.ts";
 import {
   executorConfiguration,
@@ -54,6 +55,7 @@ export interface WorkbenchOptions {
   home: string;
   modelAdapter?: ModelAdapter;
   executorAdapter?: ExecutorSetup;
+  runtimeAdapter?: RuntimeAdapter;
   executorFactory?: (name: string, permission: AcpPermissionPolicy) => ExecutorProvider;
 }
 export class Workbench {
@@ -93,6 +95,7 @@ export class Workbench {
         workbenchOwner: true,
         storageFactory: (db) => new WorkbenchStorage(db),
         modelAdapter: options.modelAdapter,
+        runtimeAdapter: options.runtimeAdapter,
         executors: new Map([
           ...buildExecutors(this.options.executorAdapter),
           [
@@ -223,6 +226,15 @@ export class Workbench {
       home: this.home,
       organism: this.instance.kernel.getOrganism(ORGANISM_ID),
       defaultExecutor: this.executorConfig().default,
+      runtimeAdapter: this.options.runtimeAdapter
+        ? {
+            id: this.options.runtimeAdapter.id,
+            decisions: this.options.runtimeAdapter.decisions?.map((p) => p.name) ?? [],
+            routeProposer: this.options.runtimeAdapter.routeProposer?.name ?? null,
+            compileBackend: this.options.runtimeAdapter.compileBackend?.version ?? null,
+            capabilitySandbox: this.options.runtimeAdapter.capabilitySandbox?.name ?? null,
+          }
+        : null,
       executors: this.executorConfig().enabled.map((name) => {
         const choices = this.executorConfig().choices?.[name] ?? this.customExecutor(name) ?? {};
         if (this.customExecutor(name) || name === "pi")

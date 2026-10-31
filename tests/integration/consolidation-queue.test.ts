@@ -77,7 +77,13 @@ async function setup(fresh = false, routeProposer?: RouteProposer): Promise<AppI
   if (inst) return inst;
   const { ensureCapabilityGenome } = await import("../../src/evolution/assets.ts");
   const app = routeProposer
-    ? openInstance(tempInstanceRoot(), { routeProposer })
+    ? openInstance(tempInstanceRoot(), {
+        runtimeAdapter: {
+          version: "proteus-runtime-adapter-v1",
+          id: "test-learning@1",
+          routeProposer,
+        },
+      })
     : bootSeededInstance();
   if (routeProposer) {
     installSeed({

@@ -1,5 +1,4 @@
-import { loadExecutorAdapter } from "./executor-adapter.ts";
-import { loadModelAdapter } from "./model-adapter.ts";
+import { loadAppAdapters } from "./adapters.ts";
 import { Command } from "commander";
 import {
   accessCommand,
@@ -60,6 +59,7 @@ function withCommon(cmd: Command): Command {
   return cmd
     .option("--executors-config <file>", "可用执行器与默认执行器配置模块")
     .option("--executor-adapter <file>", "本地执行器适配器模块（或 PROTEUS_EXECUTOR_ADAPTER）")
+    .option("--runtime-adapter <file>", "本地决策/学习/能力沙箱模块（或 PROTEUS_RUNTIME_ADAPTER）")
     .option("--model-adapter <file>", "本地模型适配器模块（或 PROTEUS_MODEL_ADAPTER）")
     .option("--home <dir>", "实例根目录（默认 ~/.proteus 或 PROTEUS_HOME）")
     .option("--organism <id>", "个体 ID", "organism-default")
@@ -78,13 +78,11 @@ withCommon(
   const port = Number(opts.port);
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error("无效端口");
   const { startWorkbench } = await import("./web/server.ts");
-  const modelAdapter = await loadModelAdapter(opts.modelAdapter);
-  const executorAdapter = await loadExecutorAdapter(opts.executorsConfig ?? opts.executorAdapter);
+  const adapters = await loadAppAdapters(opts);
   const { buildWorkbenchAssets } = await import("./web/assets.ts");
   await buildWorkbenchAssets();
   const server = startWorkbench(port, opts.home ?? process.env.PROTEUS_HOME ?? ".proteus-web", {
-    modelAdapter,
-    executorAdapter,
+    ...adapters,
   });
   for (const signal of ["SIGINT", "SIGTERM"] as const)
     process.once(signal, () => {

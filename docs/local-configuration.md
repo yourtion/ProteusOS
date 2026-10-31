@@ -8,6 +8,7 @@
 ├── traex-executor.mjs         # 自己的执行器实现
 ├── opencode-w-executor.mjs
 ├── model-adapter.mjs          # 可选：决策和归纳使用的模型服务
+├── runtime-adapter.mjs        # 可选：决策、学习提议、编译和能力沙箱实现
 └── .env                       # 可选：由自己的模块显式读取
 ```
 
@@ -55,6 +56,7 @@ export default {
 | --- | --- |
 | 执行器 | `--executors-config` → `--executor-adapter` → `PROTEUS_EXECUTORS_CONFIG` → `PROTEUS_EXECUTOR_ADAPTER` → 本地 `executors.config.*` → 本地 `executor-adapter.*` |
 | 模型 | `--model-adapter` → `PROTEUS_MODEL_ADAPTER` → 本地 `model-adapter.*` |
+| 运行时 | `--runtime-adapter` → `PROTEUS_RUNTIME_ADAPTER` → 本地 `runtime-adapter.*` |
 
 执行器配置入口存在时，备用的 `executor-adapter.*` 不会再合并加载；多个执行器在 `executors.config.*` 的 adapters 中声明。显式覆盖文件按启动目录解析，配置里的 import 按配置文件位置解析。`~/` 在覆盖路径中也受支持。
 
@@ -78,3 +80,4 @@ pnpm proteus web --executors-config /absolute/path/another.config.mjs
 - [ACP 接入教程](./acp-integration.md)
 - [执行器、Pi/OpenCode 与模型选项](./executor-adapters.md)
 - [模型适配器接入](./model-adapters.md)
+- [决策、学习与能力沙箱适配器](./runtime-adapters.md)

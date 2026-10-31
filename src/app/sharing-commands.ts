@@ -1,5 +1,4 @@
-import { loadExecutorAdapter } from "./executor-adapter.ts";
-import { loadModelAdapter } from "./model-adapter.ts";
+import { loadAppAdapters } from "./adapters.ts";
 import { readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { createRegistryServer, RegistryClient } from "../federation/registry.ts";
@@ -10,8 +9,7 @@ import { ORGANISM_ID, PRINCIPAL_ID } from "./seed.ts";
 
 async function open(opts: CommonOpts) {
   return openInstance(resolveInstanceRoot(opts.home), {
-    modelAdapter: await loadModelAdapter(opts.modelAdapter),
-    executorAdapter: await loadExecutorAdapter(opts.executorsConfig ?? opts.executorAdapter),
+    ...(await loadAppAdapters(opts)),
     organismId: opts.organism,
     actorId: opts.actor,
   });
