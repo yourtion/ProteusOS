@@ -1,0 +1,288 @@
+.welcome {
+  width: min(100%, 800px);
+  margin: clamp(16px, 3vh, 32px) auto 32px;
+  padding: 0 var(--space-5);
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+.mark {
+  font-family: Georgia, serif;
+  font-size: 30px;
+  line-height: 1;
+  color: var(--accent);
+  margin-bottom: var(--space-3);
+}
+.eyebrow {
+  font-size: var(--font-xs);
+  letter-spacing: 1px;
+  color: var(--muted);
+}
+.welcome h1 {
+  font-family: Georgia, "Songti SC", "STSong", serif;
+  font-size: clamp(26px, 2.2vw, 30px);
+  font-weight: 400;
+  margin: var(--space-2) 0;
+}
+.welcome > p:not(.eyebrow) {
+  color: var(--muted);
+  font-size: var(--font-body);
+}
+.welcome > .button {
+  margin-top: var(--space-4);
+}
+.composer {
+  margin-top: var(--space-5);
+  text-align: left;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  background: var(--surface);
+  box-shadow: 0 3px 12px #302a2008;
+}
+.composer:focus-within {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+}
+.composer textarea {
+  padding: var(--space-1);
+  border-color: transparent;
+  background: transparent;
+  font-size: var(--font-body);
+  line-height: 1.7;
+  min-height: 96px;
+}
+.composer .form-row {
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--line);
+  margin-top: var(--space-3);
+}
+.composer .form-row input,
+.composer .form-row select {
+  background: var(--subtle);
+}
+.composer-options {
+  border-top: 1px solid var(--line);
+  margin-top: var(--space-3);
+  padding-top: var(--space-2);
+}
+.composer-options summary span {
+  font-size: var(--font-xs);
+  margin-left: var(--space-2);
+  color: var(--muted);
+}
+.composer-options .form-row {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border: 0;
+  margin-top: var(--space-2);
+  padding-top: 0;
+}
+.composer-footer {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  align-items: center;
+  margin-top: var(--space-4);
+}
+.composer-footer .note {
+  margin: 0;
+  max-width: 70%;
+  font-size: var(--font-xs);
+}
+.composer-footer button {
+  flex-shrink: 0;
+  min-height: 36px;
+}
+.suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+}
+.suggestions button {
+  border-color: var(--line);
+  color: var(--muted);
+}
+.suggestions span {
+  margin-left: var(--space-3);
+}
+.conversation-history {
+  text-align: left;
+  border-bottom: 1px solid var(--line);
+  padding: var(--space-3) 0;
+  margin-bottom: var(--space-4);
+}
+.conversation-history p {
+  white-space: pre-wrap;
+  margin-top: var(--space-2);
+}
+.conversation-history article {
+  margin: var(--space-3) 0;
+}
+.conversation-thread {
+  line-height: 1.7;
+  font-size: var(--font-body);
+}
+.message-label {
+  display: block;
+  color: var(--muted);
+  font-size: var(--font-xs);
+  margin: var(--space-3) 0 6px;
+}
+.history-turn {
+  border-bottom: 1px solid var(--line);
+  padding-bottom: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+.user-turn {
+  white-space: pre-wrap;
+  background: var(--neutral-bg);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius);
+}
+.assistant-turn {
+  padding: var(--space-1) var(--space-4);
+}
+.conversation-thread > .note {
+  margin-top: var(--space-3);
+  font-size: var(--font-xs);
+}
+.markdown > :first-child {
+  margin-top: 0;
+}
+.markdown > :last-child {
+  margin-bottom: 0;
+}
+.markdown p {
+  margin: var(--space-2) 0;
+  white-space: pre-wrap;
+}
+.markdown .markdown-heading {
+  font-size: 1.125rem;
+  font-weight: 600;
+  margin: var(--space-4) 0 var(--space-2);
+}
+.markdown code {
+  font-size: 0.875em;
+  background: var(--neutral-bg);
+  padding: 2px 5px;
+  border-radius: 4px;
+}
+.markdown ul,
+.markdown ol {
+  padding-left: var(--space-5);
+}
+.markdown li {
+  margin: 6px 0;
+}
+.markdown li p {
+  margin: var(--space-1) 0;
+}
+.markdown input[type="checkbox"] {
+  width: auto;
+  margin-right: var(--space-2);
+}
+.markdown blockquote {
+  border-left: 3px solid var(--line);
+  margin: var(--space-3) 0;
+  padding-left: var(--space-4);
+  color: var(--muted);
+}
+.code-block {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  margin: var(--space-3) 0;
+  overflow: hidden;
+}
+.code-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  background: var(--neutral-bg);
+  padding: var(--space-1) var(--space-3);
+  font-size: var(--font-xs);
+}
+.code-toolbar button {
+  padding: var(--space-1) var(--space-2);
+  min-height: 28px;
+  font-size: var(--font-xs);
+}
+.code-block pre {
+  margin: 0;
+  padding: var(--space-4);
+  overflow-x: auto;
+  white-space: pre;
+  background: var(--subtle);
+  font-size: var(--font-sm);
+}
+.code-block pre code {
+  background: none;
+  padding: 0;
+  font-size: inherit;
+}
+.markdown-table {
+  overflow: auto;
+  margin: var(--space-3) 0;
+}
+.markdown table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: var(--font-ui);
+}
+.markdown th,
+.markdown td {
+  border: 1px solid var(--line);
+  padding: var(--space-2) var(--space-3);
+  text-align: left;
+}
+.markdown th {
+  background: var(--subtle);
+}
+.file-reference {
+  min-height: auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  font-size: inherit;
+}
+.jump-latest {
+  position: fixed;
+  bottom: var(--space-5);
+  left: 50%;
+  transform: translateX(-50%);
+  padding: var(--space-2) var(--space-4);
+  box-shadow: 0 3px 14px #302a2018;
+  z-index: 5;
+}
+@media (max-width: 700px) {
+  .welcome {
+    padding: 0 var(--space-4);
+    margin: var(--space-4) auto;
+  }
+  .welcome h1 {
+    font-size: 26px;
+  }
+  .composer {
+    margin-top: var(--space-4);
+  }
+  .composer-options .form-row {
+    grid-template-columns: 1fr;
+  }
+  .composer-options summary span {
+    display: block;
+    margin: var(--space-1) 0 0 var(--space-4);
+  }
+  .composer-footer {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .composer-footer .note {
+    max-width: 100%;
+  }
+  .composer-footer button {
+    align-self: flex-end;
+  }
+}

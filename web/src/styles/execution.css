@@ -1,0 +1,318 @@
+.execution-round {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--subtle);
+  margin: 8px 0 16px;
+  overflow: hidden;
+  font-size: var(--font-sm);
+  line-height: 1.5;
+}
+.round-summary {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  padding: 10px 12px;
+}
+.round-summary button {
+  background: transparent;
+  padding: 0;
+  border: 0;
+  border-radius: 3px;
+  font-size: inherit;
+}
+.round-summary button:hover {
+  color: var(--accent);
+  background: transparent;
+}
+.round-disclosure {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+}
+.round-disclosure strong {
+  font-weight: 500;
+}
+.round-chevron {
+  color: var(--muted);
+  font-size: 18px;
+}
+.execution-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--tone);
+  flex-shrink: 0;
+}
+.is-running .execution-dot {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--info) 12%, transparent);
+}
+.round-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  color: var(--muted);
+  font-size: var(--font-xs);
+  font-variant-numeric: tabular-nums;
+}
+.round-summary .round-trace-link {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: var(--font-xs);
+  white-space: nowrap;
+}
+.round-failure {
+  color: var(--danger);
+}
+.round-route {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  padding: 0 12px 10px;
+}
+.route-step {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  max-width: 100%;
+}
+.route-arrow {
+  color: var(--muted);
+  padding: 0 2px;
+}
+.round-route button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 160px;
+  padding: 3px 7px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--surface);
+  font-size: var(--font-xs);
+}
+.route-step button > span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.round-route .route-more {
+  background: transparent;
+  color: var(--muted);
+}
+.round-empty {
+  font-size: var(--font-xs);
+  color: var(--muted);
+}
+.round-live {
+  margin: 0;
+  border-top: 1px solid var(--line);
+  padding: 7px 12px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--muted);
+  font-size: var(--font-xs);
+}
+.round-tabs {
+  display: flex;
+  gap: var(--space-1);
+  align-items: center;
+  border-block: 1px solid var(--line);
+  padding: var(--space-1) var(--space-2);
+}
+.round-tabs > .segmented {
+  background: transparent;
+}
+.round-tabs .round-collapse {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: var(--font-xs);
+}
+.round-detail-scroll {
+  max-height: 360px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  background: var(--surface);
+  padding: 0 12px;
+}
+.round-detail-scroll > .note {
+  margin: 12px 0;
+}
+.tool-call {
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  padding: 0;
+  margin: 0;
+}
+.tool-call:last-child {
+  border-bottom: 0;
+}
+.tool-call > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  list-style: none;
+  min-height: 38px;
+  padding: 8px 0;
+  font-size: var(--font-sm);
+  color: var(--text);
+}
+.tool-call > summary::-webkit-details-marker {
+  display: none;
+}
+.tool-call > summary::after {
+  content: "›";
+  color: var(--muted);
+}
+.tool-call[open] > summary::after {
+  content: "⌄";
+}
+.tool-call > summary .tool-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tool-call > summary small {
+  display: inline;
+  margin: 0;
+  font-size: var(--font-xs);
+  color: var(--muted);
+  white-space: nowrap;
+}
+.tool-duration {
+  font-size: var(--font-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.tool-state {
+  color: var(--muted);
+  flex-shrink: 0;
+}
+.tool-state.completed {
+  color: var(--success);
+}
+.tool-state.failed {
+  color: var(--danger);
+}
+.tool-state.in_progress {
+  color: var(--warning);
+}
+.tool-detail {
+  padding: 0 0 12px 20px;
+}
+.tool-identity {
+  font-size: var(--font-xs);
+  overflow-wrap: anywhere;
+  margin: 0 0 8px;
+  color: var(--muted);
+}
+.tool-io {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.tool-io h4 {
+  font-size: var(--font-xs);
+  font-weight: 500;
+  margin: 0 0 5px;
+  color: var(--muted);
+}
+.tool-io pre {
+  background: var(--subtle);
+  border-radius: 6px;
+  overflow: auto;
+  margin: 0;
+  max-height: 180px;
+  padding: 10px;
+  font-size: var(--font-xs);
+  line-height: 1.6;
+}
+.inspector .tool-io {
+  grid-template-columns: 1fr;
+}
+.inspector .tool-duration {
+  display: none;
+}
+.round-ledger {
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+.round-ledger li {
+  display: grid;
+  grid-template-columns: 58px 52px minmax(0, 1fr);
+  align-items: baseline;
+  gap: 8px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+.round-ledger time {
+  color: var(--muted);
+  font-size: var(--font-xs);
+  font-variant-numeric: tabular-nums;
+}
+.ledger-kind {
+  font-size: var(--font-xs);
+  color: var(--muted);
+}
+.round-ledger summary {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: var(--font-xs);
+}
+.round-ledger pre {
+  font-size: var(--font-xs);
+  max-height: 220px;
+  overflow: auto;
+}
+.round-message {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+}
+.round-message > span {
+  font-size: var(--font-xs);
+  color: var(--muted);
+}
+.round-message .markdown {
+  font-size: var(--font-ui);
+  line-height: 1.65;
+}
+.round-coverage {
+  margin: 0;
+  padding: 6px 12px;
+  border-top: 1px solid var(--line);
+  color: var(--warning);
+  font-size: var(--font-xs);
+}
+
+@media (max-width: 700px) {
+  .round-summary {
+    gap: 6px 10px;
+  }
+  .round-metrics {
+    order: 3;
+    flex-basis: 100%;
+  }
+  .tool-io {
+    grid-template-columns: 1fr;
+  }
+  .tool-duration {
+    display: none;
+  }
+  .round-route button {
+    max-width: 140px;
+  }
+  .round-detail-scroll {
+    max-height: 300px;
+  }
+}

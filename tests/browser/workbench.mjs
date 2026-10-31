@@ -40,6 +40,16 @@ const phase = async (name) => {
     fullPage: true,
   });
 };
+// Match the compact UI through visible controls; do not force open DOM state.
+const fillExecutionOption = async (label, value) => {
+  const input = page.getByLabel(label, { exact: true });
+  if (!(await input.isVisible())) await page.locator(".composer-options > summary").click();
+  await input.fill(value);
+};
+const openInspector = async () => {
+  const toggle = page.locator(".inspector-toggle");
+  if ((await toggle.getAttribute("aria-expanded")) !== "true") await toggle.click();
+};
 try {
   await page.goto(readFileSync(join(root, "url.txt"), "utf8"));
   await page.getByRole("heading", { name: "今天，想一起做点什么？", exact: true }).waitFor();
@@ -72,8 +82,8 @@ try {
   );
   await phase("project-and-executors");
   await page.getByRole("textbox", { name: "任务需求", exact: true }).fill("EDIT 修复加法");
-  await page.getByLabel("模型", { exact: true }).fill("alternate-model");
-  await page.getByLabel("推理强度", { exact: true }).fill("high");
+  await fillExecutionOption("模型", "alternate-model");
+  await fillExecutionOption("推理强度", "high");
   await page.getByRole("button", { name: "开始任务 ↗", exact: true }).click();
   await page.getByRole("heading", { name: "需要你的处理", exact: true }).waitFor();
   await phase("task-permission");
@@ -82,6 +92,7 @@ try {
   assert.match(await page.locator(".conversation-thread").innerText(), /alternate-model.*high/);
   assert.match(readFileSync(join(fixture.project, "math.mjs"), "utf8"), /a-b/);
   await phase("task-completed");
+  await openInspector();
   await page.getByRole("button", { name: "M math.mjs", exact: true }).click();
   await page.locator(".diff .before").waitFor();
   assert.match(await page.locator(".diff .before").innerText(), /a-b/);
@@ -145,7 +156,7 @@ try {
   await phase("deny-permission");
   await page.getByRole("button", { name: "＋ 新任务", exact: true }).click();
   await page.getByRole("textbox", { name: "任务需求", exact: true }).fill("EDIT 测试非法模型");
-  await page.getByLabel("模型", { exact: true }).fill("not-a-configured-model");
+  await fillExecutionOption("模型", "not-a-configured-model");
   await page.getByRole("button", { name: "开始任务 ↗", exact: true }).click();
   await page.getByRole("alert").filter({ hasText: "所选模型不在执行器配置中" }).waitFor();
   assert.equal(
@@ -153,13 +164,15 @@ try {
     0,
   );
   await phase("invalid-model-no-retry");
-  await page.getByLabel("模型", { exact: true }).fill("fixture-model");
+  await fillExecutionOption("模型", "fixture-model");
   await page
     .getByRole("textbox", { name: "任务需求", exact: true })
     .fill("BUGGY 检查失败不会允许应用");
   await page.getByRole("button", { name: "开始任务 ↗", exact: true }).click();
   await page.getByRole("button", { name: "允许修改", exact: true }).click();
   await page.getByText("自动检查失败", { exact: true }).waitFor();
+  await openInspector();
+  await page.getByRole("button", { name: "变更", exact: true }).click();
   assert.equal(await page.getByRole("button", { name: "应用到原项目", exact: true }).count(), 0);
   await phase("failed-check-no-apply");
 
@@ -168,6 +181,7 @@ try {
   await page.getByRole("button", { name: "开始任务 ↗", exact: true }).click();
   await page.getByRole("button", { name: "允许修改", exact: true }).click();
   await page.getByText("自动检查通过", { exact: true }).waitFor();
+  await openInspector();
   await page.getByRole("button", { name: "M asset.bin", exact: true }).click();
   assert.match(await page.locator(".diff .before").innerText(), /文件：4 bytes.*SHA-256/);
   assert.match(await page.locator(".diff .after").innerText(), /文件：4 bytes.*SHA-256/);
@@ -177,7 +191,7 @@ try {
   assert.deepEqual([...readFileSync(join(fixture.project, "asset.bin"))], [0, 4, 5, 6]);
   await phase("binary-diff");
   await page.getByRole("button", { name: "助手与设置", exact: true }).click();
-  await page.getByRole("heading", { name: "运行环境与版本", exact: true }).waitFor();
+  await page.getByRole("heading", { name: "助手与运行环境", exact: true }).waitFor();
   assert.match(await page.locator("main").innerText(), /traex/);
   await phase("settings-page");
   await page.getByRole("button", { name: "经验与行为版本", exact: true }).click();
@@ -193,19 +207,10 @@ try {
   await page.getByRole("combobox", { name: "开发数据集", exact: true }).selectOption({ index: 1 });
   await page.getByRole("button", { name: "提交学习", exact: true }).click();
   await page.getByRole("button", { name: "确认执行", exact: true }).click();
-  const queued = page
-    .locator("summary")
-    .filter({ hasText: / · queued/ })
-    .first();
-  await queued.waitFor();
-  await queued.click();
+  await page.locator(".record-entry .badge").filter({ hasText: "排队中" }).first().waitFor();
   await page.getByRole("button", { name: "取消作业", exact: true }).click();
   await page.getByRole("button", { name: "确认执行", exact: true }).click();
-  await page
-    .locator("summary")
-    .filter({ hasText: / · cancelled/ })
-    .first()
-    .waitFor();
+  await page.locator(".record-entry .badge").filter({ hasText: "已停止" }).first().waitFor();
   await phase("governance-freeze-submit-cancel");
   await page.getByRole("button", { name: "项目与检查配置", exact: true }).click();
   await page.getByLabel("项目名称", { exact: true }).fill("Second project");
@@ -270,6 +275,7 @@ try {
   await page.goto(authenticatedUrl);
   await page.getByText("自动检查通过", { exact: true }).waitFor();
   await page.getByText("● 已连接", { exact: true }).waitFor();
+  await openInspector();
   const original = readFileSync(join(fixture.project, "math.mjs"), "utf8");
   writeFileSync(join(fixture.project, "math.mjs"), "// user changed original\n" + original);
   await page.getByRole("button", { name: "变更", exact: true }).click();

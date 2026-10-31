@@ -1,9 +1,8 @@
+import type { Conversation } from "./models";
+import { EmptyState, EvidenceDetails, StatusBadge } from "./ui";
+import { collectTools, duration, toolStatus } from "./execution-view";
 import type { Activity, Work } from "../../src/app/workbench/contracts";
 
-export type Conversation = {
-  truncated: boolean;
-  turns: { id: string; goal: string; summary: string | null; state?: string; createdAt: number }[];
-};
 export function ConversationHistory({
   conversation,
   currentId,
@@ -27,60 +26,54 @@ export function ConversationHistory({
     </details>
   );
 }
-const statusName: Record<string, string> = {
-  pending: "待处理",
-  in_progress: "执行中",
-  completed: "已完成",
-  failed: "失败",
-};
 export function ToolCalls({
   activities,
   compact = false,
+  selectedId,
 }: {
   activities: Activity[];
   compact?: boolean;
+  selectedId?: string;
 }) {
-  const tools = new Map<
-    string,
-    { title: string; data: NonNullable<Activity["data"]>; start: number; end: number }
-  >();
-  for (const event of activities) {
-    if (event.kind !== "tool" || !event.data?.toolCallId) continue;
-    const existing = tools.get(event.data.toolCallId);
-    const patch = Object.fromEntries(
-      Object.entries(event.data).filter(([, value]) => value !== undefined),
-    );
-    tools.set(event.data.toolCallId, {
-      title: event.text || existing?.title || "工具调用",
-      data: {
-        ...existing?.data,
-        ...patch,
-        truncated: !!(existing?.data.truncated || event.data.truncated),
-      },
-      start: existing?.start ?? event.at,
-      end: event.at,
-    });
-  }
+  const tools = collectTools(activities);
   return (
     <>
-      {!compact && <h3>工具调用 · {tools.size}</h3>}
-      {!tools.size && <p>尚无工具事件。旧任务不会补造缺失的事件。</p>}
-      {[...tools].map(([id, tool]) => (
-        <details className="tool-call" key={id}>
+      {!compact && <h2>工具调用 · {tools.length}</h2>}
+      {!tools.length && (
+        <EmptyState title="尚无工具事件" description="执行器未报告的调用不会补造。" />
+      )}
+      {tools.map((tool) => (
+        <details
+          className="tool-call"
+          key={tool.id}
+          open={selectedId === tool.id ? true : undefined}
+        >
           <summary>
-            <span>{tool.title}</span>
-            <small>{statusName[tool.data.status ?? ""] ?? tool.data.status ?? "状态未知"}</small>
+            <span className={`tool-state ${tool.data.status ?? "unknown"}`} aria-hidden="true">
+              {tool.data.status === "completed" ? "✓" : tool.data.status === "failed" ? "!" : "·"}
+            </span>
+            <span className="tool-title">{tool.title}</span>
+            <small>{toolStatus[tool.data.status ?? ""] ?? tool.data.status ?? "状态未知"}</small>
+            <span className="tool-duration" title="首末工具事件的观测跨度">
+              {duration(tool.end - tool.start)}
+            </span>
           </summary>
-          <p>
-            {tool.data.toolKind ?? "tool"} · 观测跨度 {((tool.end - tool.start) / 1000).toFixed(1)}{" "}
-            秒
-          </p>
-          <code>{id}</code>
-          <h4>输入</h4>
-          <pre>{tool.data.input ?? "执行器未报告"}</pre>
-          <h4>输出</h4>
-          <pre>{tool.data.output ?? "执行器未报告"}</pre>
-          {tool.data.truncated && <p>内容已截断。</p>}
+          <div className="tool-detail">
+            <p className="tool-identity">
+              {tool.data.toolKind ?? "tool"} · {tool.id}
+            </p>
+            <div className="tool-io">
+              <section>
+                <h4>输入</h4>
+                <pre>{tool.data.input ?? "执行器未报告"}</pre>
+              </section>
+              <section>
+                <h4>输出</h4>
+                <pre>{tool.data.output ?? "执行器未报告"}</pre>
+              </section>
+            </div>
+            {tool.data.truncated && <p className="note">内容已截断。</p>}
+          </div>
         </details>
       ))}
       {!compact && (
@@ -97,14 +90,22 @@ export function Usage({ work, activities }: { work: Work; activities: Activity[]
   const context = activities.filter((event) => event.kind === "context").at(-1)?.data;
   return (
     <>
-      <h3>Token 与用量</h3>
-      <span className="badge">
+      <h2>Token 与用量</h2>
+      <StatusBadge
+        tone={
+          accounting?.tokenStatus === "complete"
+            ? "success"
+            : accounting?.tokenStatus === "partial"
+              ? "warning"
+              : "neutral"
+        }
+      >
         {accounting?.tokenStatus === "complete"
           ? "报告完整"
           : accounting?.tokenStatus === "partial"
             ? "部分报告"
             : "尚无可靠报告"}
-      </span>
+      </StatusBadge>
       <dl className="usage-grid">
         {(
           [
@@ -138,19 +139,25 @@ export function Usage({ work, activities }: { work: Work; activities: Activity[]
         上下文占用不是累计消耗；缺失用量不算作零。不同轮次的缓存和上下文不直接相加。
       </p>
       {!!accounting?.issues.length && (
-        <details>
-          <summary>计量说明</summary>
-          <pre>{accounting.issues.join("\n")}</pre>
-        </details>
+        <EvidenceDetails title="计量说明">
+          <pre className="data-block">{accounting.issues.join("\n")}</pre>
+        </EvidenceDetails>
       )}
     </>
   );
 }
 export function Trace({ work, activities }: { work: Work; activities: Activity[] }) {
   const evidence = work.evidence;
+  const events =
+    evidence?.trace.events ??
+    activities.map((event) => ({
+      kind: event.kind,
+      at: event.at,
+      data: { text: event.text, ...event.data },
+    }));
   return (
     <>
-      <h3>执行 Trace</h3>
+      <h2>执行 Trace</h2>
       <p>
         Run <code>{work.id}</code>
       </p>
@@ -168,22 +175,15 @@ export function Trace({ work, activities }: { work: Work; activities: Activity[]
           {work.progress.toolCalls} 次工具调用
         </p>
       )}
+      {!events.length && (
+        <EmptyState title="尚无轨迹事件" description="执行器公开的事件会显示在这里。" />
+      )}
       <ol className="trace-list">
-        {(
-          evidence?.trace.events ??
-          activities.map((event) => ({
-            kind: event.kind,
-            at: event.at,
-            data: { text: event.text, ...event.data },
-          }))
-        ).map((event, index) => (
+        {events.map((event, index) => (
           <li key={index}>
             <time>{new Date(event.at).toLocaleTimeString()}</time>
             <b>{event.kind}</b>
-            <details>
-              <summary>事件详情</summary>
-              <pre>{JSON.stringify(event.data, null, 2)}</pre>
-            </details>
+            <EvidenceDetails title="事件详情" value={event.data} />
           </li>
         ))}
       </ol>

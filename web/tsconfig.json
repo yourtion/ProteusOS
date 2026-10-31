@@ -18,6 +18,8 @@
   },
   "include": [
     "src",
-    "rsbuild.config.ts"
+    "rsbuild.config.ts",
+    "tests",
+    "vitest.config.ts"
   ]
 }

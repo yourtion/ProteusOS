@@ -1,7 +1,7 @@
 import { useLayoutEffect, useEffect, useRef, useState } from "react";
 import type { Activity, Work } from "../../src/app/workbench/contracts";
-import { projectTranscript } from "../../src/app/workbench/transcript";
-import { ToolCalls, type Conversation } from "./RunObservability";
+import { ExecutionRound } from "./ExecutionRound";
+import type { Conversation } from "./models";
 import { Markdown } from "./Markdown";
 const positions = new Map<string, number>();
 export function ConversationThread({
@@ -10,7 +10,11 @@ export function ConversationThread({
   activities,
   running,
   onFile,
+  state,
+  onInspect,
 }: {
+  state: string;
+  onInspect: (tab: "trace" | "usage") => void;
   work: Work;
   conversation: Conversation;
   activities: Activity[];
@@ -20,11 +24,6 @@ export function ConversationThread({
   const end = useRef<HTMLDivElement>(null);
   const follow = useRef(true);
   const [away, setAway] = useState(false);
-  const [expanded, setExpanded] = useState(() => {
-    const saved = sessionStorage.getItem(`proteus-process-${work.id}`);
-    return saved === null ? running : saved === "true";
-  });
-  const nodes = projectTranscript(activities);
   useLayoutEffect(() => {
     const cached = sessionStorage.getItem(`proteus-scroll-${work.id}`);
     const saved = positions.get(work.id) ?? (cached === null ? undefined : Number(cached));
@@ -64,31 +63,13 @@ export function ConversationThread({
       <p className="message-label">你</p>
       <div className="user-turn">{work.goal}</div>
       <p className="message-label">助手{running ? " · 正在执行" : ""}</p>
-      <details
-        className="thread-process"
-        open={expanded}
-        onToggle={(event) => {
-          const open = event.currentTarget.open;
-          setExpanded(open);
-          sessionStorage.setItem(`proteus-process-${work.id}`, String(open));
-        }}
-      >
-        <summary>
-          {running ? "正在处理" : "查看执行过程"} · {nodes.length} 项
-        </summary>
-        {nodes.map((node) => (
-          <div className="thread-node" key={node.id}>
-            {node.kind === "tool" ? (
-              <ToolCalls activities={node.activities} compact />
-            ) : (
-              <>
-                <span className="message-label">{node.kind === "plan" ? "计划" : "进度"}</span>
-                <Markdown text={node.text} onFile={onFile} />
-              </>
-            )}
-          </div>
-        ))}
-      </details>
+      <ExecutionRound
+        work={work}
+        activities={activities}
+        state={state}
+        onFile={onFile}
+        onInspect={onInspect}
+      />
       {work.result && (
         <>
           <Markdown text={work.result.summary || "执行器未提供总结。"} onFile={onFile} />
@@ -101,7 +82,6 @@ export function ConversationThread({
           </p>
         </>
       )}
-      {!!work.activityDropped && <p className="note">公开活动达到保存上限，部分过程未保留。</p>}
       <div ref={end} />
       {away && running && (
         <button
