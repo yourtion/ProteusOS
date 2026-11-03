@@ -2,6 +2,7 @@ import type { Conversation } from "./models";
 import { EmptyState, EvidenceDetails, StatusBadge } from "./ui";
 import { collectTools, duration, toolStatus } from "./execution-view";
 import type { Activity, Work } from "../../src/app/workbench/contracts";
+import { useEffect, useRef } from "react";
 
 export function ConversationHistory({
   conversation,
@@ -36,6 +37,10 @@ export function ToolCalls({
   selectedId?: string;
 }) {
   const tools = collectTools(activities);
+  const selected = useRef<HTMLDetailsElement>(null);
+  useEffect(() => {
+    selected.current?.scrollIntoView({ block: "nearest" });
+  }, [selectedId]);
   return (
     <>
       {!compact && <h2>工具调用 · {tools.length}</h2>}
@@ -46,13 +51,16 @@ export function ToolCalls({
         <details
           className="tool-call"
           key={tool.id}
+          ref={selectedId === tool.id ? selected : undefined}
           open={selectedId === tool.id ? true : undefined}
         >
           <summary>
             <span className={`tool-state ${tool.data.status ?? "unknown"}`} aria-hidden="true">
               {tool.data.status === "completed" ? "✓" : tool.data.status === "failed" ? "!" : "·"}
             </span>
-            <span className="tool-title">{tool.title}</span>
+            <span className="tool-title" title={tool.title}>
+              {tool.title}
+            </span>
             <small>{toolStatus[tool.data.status ?? ""] ?? tool.data.status ?? "状态未知"}</small>
             <span className="tool-duration" title="首末工具事件的观测跨度">
               {duration(tool.end - tool.start)}
@@ -181,9 +189,14 @@ export function Trace({ work, activities }: { work: Work; activities: Activity[]
       <ol className="trace-list">
         {events.map((event, index) => (
           <li key={index}>
-            <time>{new Date(event.at).toLocaleTimeString()}</time>
-            <b>{event.kind}</b>
-            <EvidenceDetails title="事件详情" value={event.data} />
+            <details>
+              <summary>
+                <time>{new Date(event.at).toLocaleTimeString()}</time>
+                <b>{event.kind}</b>
+                <span>详情</span>
+              </summary>
+              <pre className="data-block">{JSON.stringify(event.data, null, 2)}</pre>
+            </details>
           </li>
         ))}
       </ol>

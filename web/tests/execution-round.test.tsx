@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { ExecutionRound } from "../src/ExecutionRound";
 import { ToolCalls } from "../src/RunObservability";
@@ -35,6 +35,7 @@ const activity: Activity[] = [
     data: { toolCallId: "read", status: "completed", output: "ok" },
   },
 ];
+afterEach(() => vi.unstubAllGlobals());
 describe("execution round rendering", () => {
   it("renders one collapsed summary with metrics and accessible inspection controls", () => {
     const html = renderToStaticMarkup(
@@ -50,7 +51,7 @@ describe("execution round rendering", () => {
     expect(html).toContain("1 次工具调用");
     expect(html).toContain("Token 未报告");
     expect(html).toContain('aria-expanded="false"');
-    expect(html).toContain("调用顺序");
+    expect(html).toContain("最近工具调用（最新在前）");
     expect(html).not.toContain("round-detail-scroll");
     expect(html).not.toContain("alert(1)");
   });
@@ -89,10 +90,47 @@ describe("execution round rendering", () => {
         onInspect={() => {}}
       />,
     );
-    expect(html).toContain("+7 次");
+    expect(html).toContain("前 7 次");
     expect(html.match(/class="route-step"/g) ?? []).toHaveLength(5);
     const tools = renderToStaticMarkup(<ToolCalls activities={many} compact />);
     expect(tools.match(/class="tool-call"/g) ?? []).toHaveLength(12);
+  });
+  it("shows live tools automatically and keeps the newest call in a long route", () => {
+    const many = Array.from({ length: 8 }, (_, i) => ({
+      ...activity[0]!,
+      id: i,
+      text: `tool ${i}`,
+      data: { toolCallId: `t-${i}`, status: i === 7 ? "in_progress" : "completed" },
+    }));
+    const html = renderToStaticMarkup(
+      <ExecutionRound
+        work={work}
+        activities={many}
+        state="running"
+        onFile={() => false}
+        onInspect={() => {}}
+      />,
+    );
+    expect(html).toContain('aria-expanded="true"');
+    expect(html).toContain("round-detail-scroll");
+    expect(html).toContain('title="tool 7 · 执行中"');
+    expect(html).not.toContain('title="tool 0 · 完成"');
+    expect(html.match(/class="tool-call"/g) ?? []).toHaveLength(8);
+  });
+  it("honors an explicitly collapsed live panel instead of reopening on activity", () => {
+    vi.stubGlobal("sessionStorage", { getItem: () => "" });
+    const html = renderToStaticMarkup(
+      <ExecutionRound
+        work={work}
+        activities={activity}
+        state="running"
+        onFile={() => false}
+        onInspect={() => {}}
+      />,
+    );
+    expect(html).toContain('aria-expanded="false"');
+    expect(html).not.toContain("round-detail-scroll");
+    expect(html).toContain("Trace 2");
   });
   it("opens the chosen call while retaining the compact list", () => {
     const html = renderToStaticMarkup(

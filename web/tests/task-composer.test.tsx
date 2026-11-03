@@ -38,7 +38,8 @@ it("keeps the reply beside its result and inherits the selected executor options
   expect(html).toContain('aria-label="补充需求"');
   expect(html).toContain("Original repo");
   expect(html).toContain('value="review" selected=""');
-  expect(html).toContain('value="default-model"');
+  expect(html).toContain('title="default-model · high · 300s"');
+  expect(html).toContain('aria-label="执行设置" aria-expanded="false"');
   expect(html).toContain("发送补充需求");
   expect(html).not.toContain("任务示例");
 });

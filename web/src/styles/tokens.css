@@ -32,12 +32,15 @@
   --font-body: 1rem;
   --font-title: 1.5rem;
   --space-1: 4px;
-  --space-2: 8px;
-  --space-3: 12px;
-  --space-4: 16px;
-  --space-5: 24px;
+  --space-2: 6px;
+  --space-3: 8px;
+  --space-4: 12px;
+  --space-5: 16px;
   --radius-sm: 6px;
-  --radius: 10px;
-  --radius-lg: 14px;
+  --radius: 8px;
+  --radius-lg: 10px;
+  --control-height: 30px;
+  --sidebar-width: 216px;
+  --inspector-width: 320px;
   --mono: "SFMono-Regular", Consolas, monospace;
 }

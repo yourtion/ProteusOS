@@ -70,6 +70,47 @@ const app = agent({ name: "browser-fixture" })
       await message("测试 agent 故意失败。\n");
       return { stopReason: "error" };
     }
+    if (goal.includes("DENSE")) {
+      // A longer public tool stream for inspecting overflow, live state and I/O.
+      const steps = [
+        [
+          "读取 math.mjs",
+          "read",
+          { path: "math.mjs" },
+          readFileSync(join(cwd, "math.mjs"), "utf8"),
+        ],
+        [
+          "读取 check.mjs",
+          "read",
+          { path: "check.mjs" },
+          readFileSync(join(cwd, "check.mjs"), "utf8"),
+        ],
+        ["列出项目文件", "search", { pattern: "*.mjs" }, "math.mjs\ncheck.mjs"],
+        ["查找加法调用", "search", { query: "add(2,3)" }, "check.mjs:1"],
+        ["检查旧测试结果", "execute", { command: "node check.mjs" }, "Fixture: add must return 5"],
+        ["定位运算符问题", "read", { path: "math.mjs", line: 1 }, "return a-b; expected a+b"],
+        ["确认修改范围", "search", { pattern: "export const add" }, "1 matching function"],
+      ];
+      for (const [index, [title, kind, rawInput, output]] of steps.entries()) {
+        if (cancelled) return { stopReason: "cancelled" };
+        const toolCall = { toolCallId: `dense-${index}`, title, kind, rawInput };
+        await client.notify(methods.client.session.update, {
+          sessionId,
+          update: { ...toolCall, sessionUpdate: "tool_call", status: "in_progress" },
+        });
+        await new Promise((resolve) => setTimeout(resolve, 800));
+        await client.notify(methods.client.session.update, {
+          sessionId,
+          update: {
+            toolCallId: toolCall.toolCallId,
+            sessionUpdate: "tool_call_update",
+            status: index === 4 ? "failed" : "completed",
+            rawOutput: output,
+          },
+        });
+      }
+      await message("已检查项目和测试，准备修复运算符。\n");
+    }
     if (!goal.includes("READ")) {
       const toolCall = {
         toolCallId: "edit-math",

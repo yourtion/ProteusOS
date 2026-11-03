@@ -1,5 +1,5 @@
 import { browserSession } from "./session";
-import { useLayoutEffect, useEffect, useRef, useState } from "react";
+import { useLayoutEffect, useEffect, useRef, useState, type ReactNode } from "react";
 import type { Activity, Work } from "../../src/app/workbench/contracts";
 import { ExecutionRound } from "./ExecutionRound";
 import type { Conversation } from "./models";
@@ -13,7 +13,11 @@ export function ConversationThread({
   onFile,
   state,
   onInspect,
+  actions,
+  attention,
 }: {
+  actions?: ReactNode;
+  attention?: ReactNode;
   state: string;
   onInspect: (tab: "trace" | "usage") => void;
   work: Work;
@@ -48,41 +52,43 @@ export function ConversationThread({
   useEffect(() => {
     if (follow.current) end.current?.scrollIntoView({ block: "end" });
   }, [activities, running, work.result]);
+  const previous = conversation.turns.filter((turn) => turn.id !== work.id);
   return (
     <div className="conversation-thread">
       {conversation.truncated && (
         <p className="note">显示最近 30 轮历史。当前执行使用有界历史摘要。</p>
       )}
-      {conversation.turns
-        .filter((turn) => turn.id !== work.id)
-        .map((turn) => (
-          <section className="history-turn" key={turn.id}>
-            <p className="message-label">你 · {new Date(turn.createdAt).toLocaleString()}</p>
-            <div className="user-turn">{turn.goal}</div>
-            <p className="message-label">助手 · 历史总结</p>
-            <Markdown text={turn.summary ?? "该轮尚无总结"} />
-          </section>
-        ))}
-      <p className="message-label">你</p>
-      <div className="user-turn">{work.goal}</div>
-      <p className="message-label">助手{running ? " · 正在执行" : ""}</p>
+      {!!previous.length && (
+        <details className="thread-history">
+          <summary>
+            前文 · {previous.length} 轮 <span>{previous.at(-1)?.goal}</span>
+          </summary>
+          {previous.map((turn) => (
+            <section className="history-turn" key={turn.id}>
+              <p className="message-label">你 · {new Date(turn.createdAt).toLocaleString()}</p>
+              <div className="user-turn">{turn.goal}</div>
+              <p className="message-label">助手 · 历史总结</p>
+              <Markdown text={turn.summary ?? "该轮尚无总结"} />
+            </section>
+          ))}
+        </details>
+      )}
+      <div className="current-request">
+        <span className="message-label">你</span>
+        <div className="user-turn">{work.goal}</div>
+      </div>
       <ExecutionRound
         work={work}
         activities={activities}
         state={state}
         onFile={onFile}
         onInspect={onInspect}
+        actions={actions}
+        attention={attention}
       />
       {work.result && (
         <>
           <Markdown text={work.result.summary || "执行器未提供总结。"} onFile={onFile} />
-          <p className="note">
-            {work.result.checks.tested
-              ? work.result.checks.passed
-                ? "自动检查通过"
-                : "自动检查失败"
-              : "本次未运行自动测试；执行完成不代表代码正确。"}
-          </p>
         </>
       )}
       <div ref={end} />

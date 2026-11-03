@@ -130,7 +130,7 @@ export function Governance() {
           description={error ? "可通过右上角刷新重试。" : undefined}
         />
       ) : (
-        <>
+        <div className="panel-grid">
           <Panel
             title="当前行为版本"
             actions={
@@ -294,7 +294,7 @@ export function Governance() {
               </div>
             )}
           </Panel>
-        </>
+        </div>
       )}
       {result !== undefined && <EvidenceDetails title="最近操作回执" value={result} open />}
     </section>

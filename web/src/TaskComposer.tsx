@@ -32,6 +32,7 @@ export function TaskComposer({
   const submitting = useRef(false);
   const [sending, setSending] = useState(false);
   const id = useId();
+  const [optionsOpen, setOptionsOpen] = useState(false);
   const executor = availableExecutor(settings, saved.executor);
   const draft =
     executor === saved.executor ? saved : { ...saved, executor, model: "", reasoningEffort: "" };
@@ -93,8 +94,8 @@ export function TaskComposer({
               rows={followup ? 2 : 3}
             />
           </Field>
-          <div className="form-row">
-            <Field label="任务类型">
+          <div className="composer-controls">
+            <Field label="任务类型" hiddenLabel>
               <select
                 value={draft.mode}
                 onChange={(event) => update({ mode: event.target.value as TaskDraft["mode"] })}
@@ -104,7 +105,7 @@ export function TaskComposer({
                 <option value="review">审查代码</option>
               </select>
             </Field>
-            <Field label="执行器">
+            <Field label="执行器" hiddenLabel>
               <select
                 value={executor}
                 onChange={(event) =>
@@ -119,57 +120,76 @@ export function TaskComposer({
                 ))}
               </select>
             </Field>
-          </div>
-          <details className="composer-options">
-            <summary>
-              更多设置{" "}
+            <Button
+              type="button"
+              variant="ghost"
+              className="composer-settings"
+              aria-label="执行设置"
+              aria-expanded={optionsOpen}
+              aria-controls={optionsOpen ? `${id}-options` : undefined}
+              onClick={() => setOptionsOpen((open) => !open)}
+              title={`${draft.model || "默认模型"} · ${draft.reasoningEffort || "默认强度"} · ${draft.timeoutSeconds}s`}
+            >
               <span>
-                {draft.model || "默认模型"} · {draft.reasoningEffort || "默认强度"} ·{" "}
-                {draft.timeoutSeconds}s
+                {draft.model || "默认模型"} · {draft.reasoningEffort || "默认强度"}
               </span>
-            </summary>
-            <div className="form-row">
-              <Field label="模型">
-                <input
-                  value={draft.model}
-                  onChange={(event) => update({ model: event.target.value })}
-                  placeholder="执行器默认模型"
-                  list={`${id}-models`}
-                  maxLength={256}
-                />
-              </Field>
-              <datalist id={`${id}-models`}>
-                {choices?.models?.map((value) => (
-                  <option key={value} value={value} />
-                ))}
-              </datalist>
-              <Field label="推理强度">
-                <input
-                  value={draft.reasoningEffort}
-                  onChange={(event) => update({ reasoningEffort: event.target.value })}
-                  placeholder="执行器默认强度"
-                  list={`${id}-efforts`}
-                  maxLength={256}
-                />
-              </Field>
-              <datalist id={`${id}-efforts`}>
-                {choices?.reasoningEfforts?.map((value) => (
-                  <option key={value} value={value} />
-                ))}
-              </datalist>
-              <Field label="超时（秒）">
-                <input
-                  required
-                  type="number"
-                  min={10}
-                  max={1800}
-                  step={1}
-                  value={draft.timeoutSeconds || ""}
-                  onChange={(event) => update({ timeoutSeconds: Number(event.target.value) })}
-                />
-              </Field>
+              <span aria-hidden="true">{optionsOpen ? "⌃" : "⌄"}</span>
+            </Button>
+            <Button
+              type="submit"
+              variant="primary"
+              className="composer-send"
+              pending={sending}
+              disabled={busy || blocked || !canStart || !executor || !draft.goal.trim()}
+            >
+              {sending ? "正在提交…" : followup ? "发送补充需求 ↗" : "开始任务 ↗"}
+            </Button>
+          </div>
+          {optionsOpen && (
+            <div className="composer-options" id={`${id}-options`}>
+              <div className="form-row">
+                <Field label="模型">
+                  <input
+                    value={draft.model}
+                    onChange={(event) => update({ model: event.target.value })}
+                    placeholder="执行器默认模型"
+                    list={`${id}-models`}
+                    maxLength={256}
+                  />
+                </Field>
+                <datalist id={`${id}-models`}>
+                  {choices?.models?.map((value) => (
+                    <option key={value} value={value} />
+                  ))}
+                </datalist>
+                <Field label="推理强度">
+                  <input
+                    value={draft.reasoningEffort}
+                    onChange={(event) => update({ reasoningEffort: event.target.value })}
+                    placeholder="执行器默认强度"
+                    list={`${id}-efforts`}
+                    maxLength={256}
+                  />
+                </Field>
+                <datalist id={`${id}-efforts`}>
+                  {choices?.reasoningEfforts?.map((value) => (
+                    <option key={value} value={value} />
+                  ))}
+                </datalist>
+                <Field label="超时（秒）">
+                  <input
+                    required
+                    type="number"
+                    min={10}
+                    max={1800}
+                    step={1}
+                    value={draft.timeoutSeconds || ""}
+                    onChange={(event) => update({ timeoutSeconds: Number(event.target.value) })}
+                  />
+                </Field>
+              </div>
             </div>
-          </details>
+          )}
         </fieldset>
         <div className="composer-footer">
           <p className="note">
@@ -186,14 +206,6 @@ export function TaskComposer({
                       : "在独立副本中执行，修改由你审阅后应用。"}
             <span className="composer-shortcut">⌘ / Ctrl + Enter 发送 · 草稿保留在此标签页</span>
           </p>
-          <Button
-            type="submit"
-            variant="primary"
-            pending={sending}
-            disabled={busy || blocked || !canStart || !executor || !draft.goal.trim()}
-          >
-            {sending ? "正在提交…" : followup ? "发送补充需求 ↗" : "开始任务 ↗"}
-          </Button>
         </div>
       </form>
       {!followup && (

@@ -8,7 +8,7 @@ import { Projects } from "./pages/Projects";
 import { SettingsPage } from "./pages/Settings";
 import { api } from "./api";
 import type { Detail, Row, Settings } from "./models";
-import { Button, EmptyState, Field, Notice, StatusBadge } from "./ui";
+import { Button, EmptyState, Field, Notice } from "./ui";
 import { statusMeta } from "./ui/status";
 import { ConversationThread } from "./ConversationThread";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
@@ -299,17 +299,19 @@ function App() {
         </footer>
       </aside>
       <main>
-        <header className="app-header">
-          {
+        {(page !== "tasks" || !selected) && (
+          <header className="app-header">
             {
-              tasks: "工作台",
-              projects: "项目管理",
-              settings: "助手与设置",
-              governance: "经验与行为版本",
-            }[page]
-          }
-          <span>本地执行 · 结果由你审阅</span>
-        </header>
+              {
+                tasks: "工作台",
+                projects: "项目管理",
+                settings: "助手与设置",
+                governance: "经验与行为版本",
+              }[page]
+            }
+            <span>本地执行 · 结果由你审阅</span>
+          </header>
+        )}
         {error && (
           <div className="page-feedback">
             <Notice tone="danger">
@@ -387,33 +389,9 @@ function App() {
               <>
                 <div className="toolbar task-toolbar">
                   <h1 className="task-context">
-                    对话 <span>/ {selected.slice(0, 8)}</span>
+                    {projects.find((project) => project.id === detail.projectId)?.name ?? "对话"}
+                    <span> / 第 {detail.conversation.turns.length} 轮</span>
                   </h1>
-                  <StatusBadge state={detail.run.state} />
-                  {["pending", "running", "waiting"].includes(detail.run.state) && (
-                    <Button
-                      disabled={busy}
-                      onClick={() =>
-                        void action(async () => {
-                          await api(`runs/${selected}/cancel`, {});
-                        })
-                      }
-                    >
-                      请求停止
-                    </Button>
-                  )}
-                  {detail.run.state === "waiting" && (
-                    <Button
-                      disabled={busy}
-                      onClick={() =>
-                        void action(async () => {
-                          await api(`runs/${selected}/reconcile`, {});
-                        })
-                      }
-                    >
-                      核对执行结果
-                    </Button>
-                  )}
                   {detail.result && (
                     <Button disabled={busy} onClick={focusFollowup}>
                       补充需求
@@ -450,31 +428,67 @@ function App() {
                     </Button>
                   </Notice>
                 )}
-                {detail.interactions
-                  .filter((i) => i.state === "pending")
-                  .map((i) => (
-                    <Notice tone="warning" key={i.id}>
-                      <h3>需要你的处理</h3>
-                      <p>{i.title}</p>
-                      <div className="actions">
-                        {i.options.map((option) => (
-                          <Button
-                            disabled={busy}
-                            key={option.id}
-                            onClick={() =>
-                              void action(async () => {
-                                await api(`interactions/${i.id}/reply`, { choice: option.id });
-                              })
-                            }
-                          >
-                            {option.label}
-                          </Button>
-                        ))}
-                      </div>
-                    </Notice>
-                  ))}
                 <ConversationThread
                   key={selected}
+                  actions={
+                    <>
+                      {["pending", "running", "waiting"].includes(detail.run.state) && (
+                        <Button
+                          disabled={busy}
+                          onClick={() =>
+                            void action(async () => {
+                              await api(`runs/${selected}/cancel`, {});
+                            })
+                          }
+                        >
+                          请求停止
+                        </Button>
+                      )}
+                      {detail.run.state === "waiting" && (
+                        <Button
+                          disabled={busy}
+                          onClick={() =>
+                            void action(async () => {
+                              await api(`runs/${selected}/reconcile`, {});
+                            })
+                          }
+                        >
+                          核对执行结果
+                        </Button>
+                      )}
+                    </>
+                  }
+                  attention={
+                    <>
+                      {detail.interactions
+                        .filter((i) => i.state === "pending")
+                        .map((i) => (
+                          <div className="round-permission" role="status" key={i.id}>
+                            <div>
+                              <strong>需要确认</strong>
+                              <p>{i.title}</p>
+                            </div>
+                            <div className="actions">
+                              {i.options.map((option) => (
+                                <Button
+                                  disabled={busy}
+                                  key={option.id}
+                                  onClick={() =>
+                                    void action(async () => {
+                                      await api(`interactions/${i.id}/reply`, {
+                                        choice: option.id,
+                                      });
+                                    })
+                                  }
+                                >
+                                  {option.label}
+                                </Button>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                    </>
+                  }
                   work={detail}
                   conversation={detail.conversation}
                   activities={detail.activity}
